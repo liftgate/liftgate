@@ -1,2 +1,2 @@
 rootProject.name = "liftgate"
-include("protocol", "protocol-stub", "cli")
+include("protocol", "protocol-stub", "server")

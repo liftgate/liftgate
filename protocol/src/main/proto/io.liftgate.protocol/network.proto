@@ -1,0 +1,53 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "io.liftgate.protocol";
+option java_outer_classname = "NetworkProto";
+
+package io.liftgate.protocol;
+import "io.liftgate.protocol/authentication.proto";
+
+service Network {
+  rpc Register(ServerRegistration) returns (ServerRegistrationResponse);
+  rpc Heartbeat(ServerHeartbeat) returns (ServerHeartbeatResponse);
+}
+
+message ServerRegistration
+{
+  string serverId = 1;
+  int32 port = 2;
+
+  map<string, string> metadata = 3;
+  repeated string classifiers = 4;
+  Authentication authentication = 5;
+}
+
+message ServerRegistrationResponse
+{
+  AuthenticationStatus authentication = 1;
+  ServerRegistrationStatus status = 2;
+}
+
+enum ServerRegistrationStatus
+{
+  DUPLICATE_UID = 0;
+  SERVER_SUCCESS = 1;
+}
+
+message ServerHeartbeat
+{
+  string serverId = 1;
+  int64 timestamp = 2;
+  Authentication authentication = 4;
+}
+
+message ServerHeartbeatResponse
+{
+  AuthenticationStatus authentication = 1;
+}
+
+enum ServerHeartbeatStatus
+{
+  UNREGISTERED_SERVER = 0;
+  HEARTBEAT_SUCCESS = 1;
+}

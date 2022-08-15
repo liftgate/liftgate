@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "io.liftgate.protocol";
+option java_outer_classname = "AuthenticationProto";
+
+package io.liftgate.protocol;
+
+message Authentication
+{
+  string token = 1;
+}
+
+enum AuthenticationStatus
+{
+  SUCCESS = 0;
+  FAILURE = 1;
+}

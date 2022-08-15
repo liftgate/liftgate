@@ -5,6 +5,7 @@ import io.liftgate.server.logger
 import io.liftgate.server.models.server.ServerTemplate
 import io.liftgate.server.resources
 import io.liftgate.server.startup.StartupStep
+import io.liftgate.server.templates
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.decodeFromStream
 import java.io.File
@@ -17,15 +18,15 @@ object ServerTemplateHandler : StartupStep
 {
     override fun perform(context: LiftgateEngine)
     {
-        val templates =
+        val templatesDirectory =
             File("templates")
 
-        if (!templates.exists())
+        if (!templatesDirectory.exists())
         {
-            templates.mkdirs()
+            templatesDirectory.mkdirs()
         }
 
-        templates.walkTopDown()
+        templatesDirectory.walkTopDown()
             .filter { it.isFile && it.name.endsWith(".template.json") }
             .forEach {
                 val template = Json
@@ -50,6 +51,8 @@ object ServerTemplateHandler : StartupStep
                 logger.info(
                     "[Template] Registered template [${template.id}]."
                 )
+
+                templates += template
             }
     }
 }

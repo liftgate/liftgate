@@ -6,6 +6,9 @@
 # Mac
 .DS_Store
 
+# Development environment
+development/
+
 # Maven
 log/
 /target/

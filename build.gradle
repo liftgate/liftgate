@@ -19,15 +19,6 @@ allprojects {
         mavenCentral()
 
         maven { url "https://jitpack.io" }
-
-        maven {
-            url "$artifactory_contextUrl/gradle-release"
-
-            credentials {
-                username "$artifactory_user"
-                password "$artifactory_password"
-            }
-        }
     }
 }
 
@@ -55,8 +46,9 @@ subprojects {
         "io.grpc:grpc-all:$grpcVersion",
         "io.grpc:grpc-protobuf:$grpcVersion",
         "io.grpc:grpc-kotlin-stub:$grpcKotlinVersion",
-        // misc
+        // commons
         "commons-io:commons-io:$commonsIoVersion",
+        "org.apache.commons:commons-lang3:$commonsLangVersion",
         // slf4j
         "org.slf4j:slf4j-api:$slf4jVersion",
         "org.slf4j:slf4j-simple:$slf4jVersion",
@@ -68,9 +60,7 @@ subprojects {
         "com.google.protobuf:protobuf-java:$protobufVersion",
     ]
 
-    def standalone = [
-        "cli"
-    ]
+    def standalone = ["server"]
 
     dependencies {
         if (standalone.contains(project.name)) {
@@ -78,7 +68,7 @@ subprojects {
         }
 
         globalDependencies.forEach {
-            if (project.name == "core")
+            if (project.name == "server")
                 api it else compileOnly it
         }
 
@@ -101,7 +91,7 @@ subprojects {
 
     compileKotlin {
         kotlinOptions.javaParameters = true
-        kotlinOptions.jvmTarget = "11"
+        kotlinOptions.jvmTarget = "1.8"
     }
 
     shadowJar {

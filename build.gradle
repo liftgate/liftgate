@@ -1,0 +1,151 @@
+plugins {
+    id "idea"
+    id "java"
+    id "java-library"
+    id "maven-publish"
+    id "com.google.protobuf" version "$protobufPluginVersion"
+    id "com.github.johnrengelman.shadow" version "$shadowVersion"
+    id "com.google.devtools.ksp" version "$kspVersion"
+    id "org.jetbrains.kotlin.jvm" version "$kotlinVersion"
+    id "org.jetbrains.kotlin.plugin.serialization" version "$kotlinVersion"
+}
+
+allprojects {
+    group "io.liftgate.game"
+    version "$projectVersion"
+
+    repositories {
+        mavenLocal()
+        mavenCentral()
+
+        maven { url "https://jitpack.io" }
+
+        maven {
+            url "$artifactory_contextUrl/gradle-release"
+
+            credentials {
+                username "$artifactory_user"
+                password "$artifactory_password"
+            }
+        }
+    }
+}
+
+subprojects {
+    apply plugin: "java-library"
+    apply plugin: "maven-publish"
+    apply plugin: "idea"
+
+    apply plugin: "com.google.protobuf"
+    apply plugin: "com.google.devtools.ksp"
+
+    apply plugin: "org.jetbrains.kotlin.jvm"
+    apply plugin: "org.jetbrains.kotlin.plugin.serialization"
+
+    apply plugin: "com.github.johnrengelman.shadow"
+
+    def globalDependencies = [
+        // kotlin
+        "org.jetbrains.kotlin:kotlin-reflect:$kotlinVersion",
+        "org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion",
+        "org.jetbrains.kotlinx:kotlinx-serialization-json-jvm:$kotlinSerializationVersion",
+        // grpc
+        "io.grpc:grpc-netty:$grpcVersion",
+        "io.grpc:grpc-stub:$grpcVersion",
+        "io.grpc:grpc-all:$grpcVersion",
+        "io.grpc:grpc-protobuf:$grpcVersion",
+        "io.grpc:grpc-kotlin-stub:$grpcKotlinVersion",
+        // misc
+        "io.lettuce:lettuce-core:$lettuceVersion",
+        "com.google.guava:guava:$guavaVersion",
+        "commons-io:commons-io:$commonsIoVersion",
+        "com.orbitz.consul:consul-client:$consulVersion",
+        // slf4j
+        "org.slf4j:slf4j-api:$slf4jVersion",
+        "org.slf4j:slf4j-simple:$slf4jVersion",
+        // koin
+        "io.insert-koin:koin-core:$koinVersion",
+        "io.insert-koin:koin-annotations:$kspKoinVersion",
+        // protobuf
+        "com.google.protobuf:protobuf-kotlin:$protobufVersion",
+        "com.google.protobuf:protobuf-java:$protobufVersion",
+    ]
+
+    def standalone = [
+        "cli"
+    ]
+
+    dependencies {
+        if (standalone.contains(project.name)) {
+            api "org.jetbrains.kotlin:kotlin-stdlib:$kotlinVersion"
+        }
+
+        globalDependencies.forEach {
+            if (project.name == "core")
+                api it else compileOnly it
+        }
+
+        testApi "io.insert-koin:koin-test:$koinVersion"
+        ksp "io.insert-koin:koin-ksp-compiler:$kspKoinVersion"
+    }
+
+    shadowJar {
+        if (!standalone.contains(project.name)) {
+            exclude "**/kotlin/**"
+        }
+    }
+
+    idea {
+        module {
+            setDownloadJavadoc(true)
+            setDownloadSources(true)
+        }
+    }
+
+    compileKotlin {
+        kotlinOptions.javaParameters = true
+        kotlinOptions.jvmTarget = "11"
+    }
+
+    shadowJar {
+        archiveClassifier.set("")
+        archiveFileName.set("lg-${project.name}.jar")
+
+        mergeServiceFiles()
+    }
+
+    tasks.withType(Copy) {
+        filesMatching("**/*.proto") {
+            duplicatesStrategy = DuplicatesStrategy.INCLUDE
+        }
+    }
+
+    sourceSets.main {
+        java.srcDirs("build/generated/ksp/main/kotlin")
+    }
+
+    publishing {
+        publications {
+            shadow(MavenPublication) { publication ->
+                project.shadow.component(publication)
+            }
+        }
+
+        repositories {
+            maven {
+                name "liftgate"
+                url "$artifactory_contextUrl/gradle-release"
+
+                credentials {
+                    username "$artifactory_user"
+                    password "$artifactory_password"
+                }
+            }
+        }
+    }
+
+    tasks.build.dependsOn(
+        shadowJar,
+        publishShadowPublicationToLiftgateRepository
+    )
+}

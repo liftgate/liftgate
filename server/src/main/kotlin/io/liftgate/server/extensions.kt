@@ -2,6 +2,7 @@ package io.liftgate.server
 
 import io.liftgate.server.models.Resource
 import io.liftgate.server.models.server.ServerTemplate
+import java.util.concurrent.Executors
 import java.util.logging.Logger
 
 /**
@@ -14,3 +15,5 @@ val logger = Logger.getGlobal()!!
 
 val resources = mutableListOf<Resource>()
 val templates = mutableListOf<ServerTemplate>()
+
+val pool = Executors.newScheduledThreadPool(3)

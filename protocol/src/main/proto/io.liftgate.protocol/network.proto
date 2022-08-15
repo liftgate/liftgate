@@ -21,6 +21,8 @@ message ServerRegistration
   map<string, string> metadata = 3;
   repeated string classifiers = 4;
   Authentication authentication = 5;
+
+  int64 timestamp = 7;
 }
 
 message ServerRegistrationResponse
@@ -45,6 +47,7 @@ message ServerHeartbeat
 message ServerHeartbeatResponse
 {
   AuthenticationStatus authentication = 1;
+  ServerHeartbeatStatus status = 2;
 }
 
 enum ServerHeartbeatStatus

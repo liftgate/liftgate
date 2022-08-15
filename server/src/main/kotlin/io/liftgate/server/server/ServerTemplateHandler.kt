@@ -3,6 +3,7 @@ package io.liftgate.server.server
 import io.liftgate.server.LiftgateEngine
 import io.liftgate.server.logger
 import io.liftgate.server.models.server.ServerTemplate
+import io.liftgate.server.resource.ResourceHandler
 import io.liftgate.server.resources
 import io.liftgate.server.startup.StartupStep
 import io.liftgate.server.templates
@@ -36,17 +37,15 @@ object ServerTemplateHandler : StartupStep
 
                 for (dependency in template.dependencies)
                 {
-                    // TODO: write boilerplate to find a resource by its reference
-                    resources
-                        .firstOrNull { resource ->
-                            resource.id == dependency.id &&
-                                    resource.version == dependency.version
-                        }
-                        ?: return@forEach kotlin.run {
-                            logger.info("[Template] Invalid template detected: dependency ${dependency.id} does not exist.")
-                        }
-                }
+                    val existing = ResourceHandler
+                        .findResourceByReference(dependency)
 
+                    if (existing == null)
+                    {
+                        logger.info("[Template] Invalid template detected: dependency ${dependency.id} does not exist.")
+                        return@forEach
+                    }
+                }
 
                 logger.info(
                     "[Template] Registered template [${template.id}]."

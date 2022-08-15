@@ -1,6 +1,5 @@
 package io.liftgate.server
 
-import io.grpc.BindableService
 import io.grpc.netty.NettyServerBuilder
 import io.grpc.protobuf.services.HealthStatusManager
 import io.liftgate.server.network.NetworkRpcService
@@ -30,10 +29,10 @@ class LiftgateEngine
     fun start()
     {
         this.server.start()
-    }
 
-    fun close()
-    {
-        this.server.shutdownNow()
+        Runtime.getRuntime()
+            .addShutdownHook(Thread {
+                this.server.shutdownNow()
+            })
     }
 }

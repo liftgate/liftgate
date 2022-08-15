@@ -1,5 +1,6 @@
 package io.liftgate.server
 
+import io.liftgate.server.models.Resource
 import java.util.logging.Logger
 
 /**
@@ -8,4 +9,5 @@ import java.util.logging.Logger
  */
 lateinit var config: LiftgateConfig
 
-val logger = Logger.getGlobal()
+val logger = Logger.getGlobal()!!
+val resources = mutableListOf<Resource>()

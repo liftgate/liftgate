@@ -57,8 +57,6 @@ object LiftgateServer
             logger.info("[Startup] Completed setup step #${index + 1} in $measured ms (${step.javaClass.name})")
         }
 
-
-
         logger.info("[Startup] Starting RPC server...")
         engine.start()
 

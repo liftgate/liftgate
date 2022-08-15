@@ -7,6 +7,7 @@ import io.liftgate.server.resource.ResourceHandler
 import io.liftgate.server.resources
 import io.liftgate.server.startup.StartupStep
 import io.liftgate.server.templates
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.decodeFromStream
 import java.io.File
@@ -17,6 +18,7 @@ import java.io.File
  */
 object ServerTemplateHandler : StartupStep
 {
+    @OptIn(ExperimentalSerializationApi::class)
     override fun perform(context: LiftgateEngine)
     {
         val templatesDirectory =

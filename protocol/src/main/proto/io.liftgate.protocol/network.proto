@@ -25,29 +25,31 @@ message ServerRegistration
   int64 timestamp = 7;
 }
 
+message ServerHeartbeat
+{
+  string serverId = 1;
+  int64 timestamp = 2;
+  map<string, string> metadata = 3;
+
+  Authentication authentication = 4;
+}
+
 message ServerRegistrationResponse
 {
   AuthenticationStatus authentication = 1;
   ServerRegistrationStatus status = 2;
 }
 
-enum ServerRegistrationStatus
-{
-  DUPLICATE_UID = 0;
-  SERVER_SUCCESS = 1;
-}
-
-message ServerHeartbeat
-{
-  string serverId = 1;
-  int64 timestamp = 2;
-  Authentication authentication = 4;
-}
-
 message ServerHeartbeatResponse
 {
   AuthenticationStatus authentication = 1;
   ServerHeartbeatStatus status = 2;
+}
+
+enum ServerRegistrationStatus
+{
+  DUPLICATE_UID = 0;
+  SERVER_SUCCESS = 1;
 }
 
 enum ServerHeartbeatStatus

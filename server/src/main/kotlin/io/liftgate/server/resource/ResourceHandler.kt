@@ -6,6 +6,7 @@ import io.liftgate.server.models.Resource
 import io.liftgate.server.models.ResourceReference
 import io.liftgate.server.resources
 import io.liftgate.server.startup.StartupStep
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.decodeFromStream
 import java.io.File
@@ -21,6 +22,7 @@ object ResourceHandler : StartupStep
             it.id == reference.id && it.version == reference.version
         }
 
+    @OptIn(ExperimentalSerializationApi::class)
     override fun perform(context: LiftgateEngine)
     {
         val resourcesDirectory =

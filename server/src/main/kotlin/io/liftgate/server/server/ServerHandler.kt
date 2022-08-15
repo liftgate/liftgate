@@ -40,7 +40,7 @@ object ServerHandler : StartupStep
         logger.info("[Server] Received server registration with ID: ${registration.serverId}")
     }
 
-    fun findAllServers() =
+    private fun findAllServers() =
         this.servers.values.toList()
 
     fun findCriticalServers() =

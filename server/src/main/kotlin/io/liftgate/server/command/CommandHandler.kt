@@ -15,7 +15,7 @@ import kotlin.system.exitProcess
  * @since 8/15/2022
  */
 @Command("liftgate")
-object CommandHandlerStep : StartupStep
+object CommandHandler : StartupStep
 {
     override fun perform(context: LiftgateEngine)
     {

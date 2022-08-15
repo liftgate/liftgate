@@ -8,7 +8,7 @@ import kotlinx.serialization.Serializable
  * @since 8/15/2022
  */
 @Serializable
-data class ServerComposite(
+data class ServerTemplate(
     val id: String,
     val dependencies: List<ResourceReference>,
     val resources: ServerResources,

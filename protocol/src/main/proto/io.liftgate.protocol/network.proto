@@ -15,6 +15,7 @@ service Network {
 message ServerRegistration
 {
   string serverId = 1;
+  string datacenter = 6;
   int32 port = 2;
 
   map<string, string> metadata = 3;

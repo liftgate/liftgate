@@ -10,5 +10,5 @@ import kotlinx.serialization.Serializable
 data class ServerStartStop(
     val shutdown: String,
     val startCommand: String,
-    val startArguments: String
+    val startArguments: List<String>
 )

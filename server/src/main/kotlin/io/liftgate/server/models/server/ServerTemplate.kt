@@ -10,9 +10,9 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class ServerTemplate(
     val id: String,
+    val autoScalePropertyChoiceScheme: String,
     val dependencies: List<ResourceReference>,
     val resources: ServerResources,
     val replacements: Map<String, String>,
-    val shutdown: String,
     val executions: ServerStartStop
 )

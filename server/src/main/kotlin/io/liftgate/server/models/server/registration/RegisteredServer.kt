@@ -8,7 +8,7 @@ data class RegisteredServer(
     val serverId: String,
     val datacenter: String,
     val port: Int,
-    val metadata: Map<String, String>,
+    val metadata: MutableMap<String, String>,
     val classifiers: List<String>,
     var timestamp: Long = System.currentTimeMillis()
 )

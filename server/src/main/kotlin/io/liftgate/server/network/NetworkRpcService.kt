@@ -71,6 +71,7 @@ object NetworkRpcService : NetworkGrpcKt.NetworkCoroutineImplBase()
                 .build()
 
         existing.timestamp = System.currentTimeMillis()
+        existing.metadata.putAll(request.metadataMap)
 
         return response.build()
     }

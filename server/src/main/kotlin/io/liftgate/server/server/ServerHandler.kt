@@ -33,7 +33,7 @@ object ServerHandler : StartupStep
                 registration.serverId,
                 registration.datacenter,
                 registration.port,
-                registration.metadataMap,
+                registration.metadataMap.toMutableMap(),
                 registration.classifiersList.toMutableList()
             )
 

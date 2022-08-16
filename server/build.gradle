@@ -7,8 +7,6 @@ dependencies {
 
     api "com.github.Revxrsal.Lamp:cli:$lampVersion"
     api "com.github.Revxrsal.Lamp:common:$lampVersion"
-
-    api "com.zaxxer:nuprocess:2.0.3"
 }
 
 application {

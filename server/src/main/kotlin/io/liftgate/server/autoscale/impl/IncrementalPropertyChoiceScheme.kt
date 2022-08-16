@@ -23,7 +23,7 @@ object IncrementalPropertyChoiceScheme : AutoScalePropertyChoiceScheme
 
         while (!found)
         {
-            current++
+            current += 1
             found = servers
                 .none {
                     current.toString() in it.serverId

@@ -3,6 +3,7 @@ package io.liftgate.server.command
 import io.liftgate.server.LiftgateEngine
 import io.liftgate.server.startup.StartupStep
 import io.liftgate.server.logger
+import io.liftgate.server.server.ServerHandler
 import revxrsal.commands.annotation.Command
 import revxrsal.commands.annotation.Subcommand
 import revxrsal.commands.cli.ConsoleActor
@@ -30,10 +31,15 @@ object CommandHandler : StartupStep
         }
     }
 
-    @Subcommand("asdf")
-    fun test(actor: ConsoleActor)
+    @Subcommand("servers")
+    fun onServers(actor: ConsoleActor)
     {
-        actor.reply("asdf")
+        actor.reply("Servers:")
+
+        ServerHandler.findAllServers()
+            .forEach {
+                actor.reply(" - ${it.serverId}: ${it.datacenter}")
+            }
     }
 
     @Subcommand("stop")

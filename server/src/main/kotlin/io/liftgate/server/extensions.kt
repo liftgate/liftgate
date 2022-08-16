@@ -13,7 +13,7 @@ import java.util.logging.Logger
  * @author GrowlyX
  * @since 8/15/2022
  */
-lateinit var config: LiftgateConfig
+lateinit var config: LiftgateServerConfig
 
 val logger = Logger.getGlobal()!!
 

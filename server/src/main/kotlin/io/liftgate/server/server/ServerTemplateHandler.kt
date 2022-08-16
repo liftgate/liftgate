@@ -18,6 +18,14 @@ import java.io.File
  */
 object ServerTemplateHandler : StartupStep
 {
+    fun create(
+        template: ServerTemplate,
+        uid: String? = null,
+        port: Int? = null
+    )
+    {
+    }
+
     @OptIn(ExperimentalSerializationApi::class)
     override fun perform(context: LiftgateEngine)
     {

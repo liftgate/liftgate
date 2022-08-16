@@ -26,7 +26,7 @@ object LiftgateServer
 
         config = if (!configuration.exists())
         {
-            LiftgateConfig()
+            LiftgateServerConfig()
         } else
         {
             Json.decodeFromStream(

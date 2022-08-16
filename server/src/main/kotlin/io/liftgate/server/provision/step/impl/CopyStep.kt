@@ -34,7 +34,7 @@ object CopyStep : ServerProvisionStep
         if (uid == null || port == null)
         {
             val scheme = Class
-                .forName(template.autoScalePropertyChoiceScheme)
+                .forName(temporaryMeta["propertyScheme"])
                 .kotlin.objectInstance as AutoScalePropertyChoiceScheme
 
             if (uid == null)

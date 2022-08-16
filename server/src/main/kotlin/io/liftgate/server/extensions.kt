@@ -20,8 +20,9 @@ val logger = Logger.getGlobal()!!
 val resources = mutableListOf<Resource>()
 val templates = mutableListOf<ServerTemplate>()
 
-val pool: ScheduledExecutorService = Executors
-    .newScheduledThreadPool(3)
+val pool: ScheduledExecutorService by lazy {
+    Executors.newScheduledThreadPool(config.poolThreads)
+}
 
 fun listening(
     serverHost: String, serverPort: Int, timeoutMs: Int

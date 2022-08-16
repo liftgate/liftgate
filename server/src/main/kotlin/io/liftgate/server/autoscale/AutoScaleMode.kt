@@ -4,7 +4,7 @@ package io.liftgate.server.autoscale
  * @author GrowlyX
  * @since 8/16/2022
  */
-enum class AutoScaleResult
+enum class AutoScaleMode
 {
-    ScaleDown, ScaleUp, Maintain
+    Local, Network
 }

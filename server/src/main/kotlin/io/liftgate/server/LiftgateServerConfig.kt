@@ -10,5 +10,6 @@ import kotlinx.serialization.Serializable
 data class LiftgateServerConfig(
     val hostname: String = "0.0.0.0",
     val port: Int = 8360,
+    val poolThreads: Int = 3,
     val autoProvisionedServerDirectory: String = "/var/lib/liftgate/autoProvisioned"
 )

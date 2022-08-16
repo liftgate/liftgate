@@ -1,6 +1,7 @@
 package io.liftgate.server.autoscale.availability
 
 import io.liftgate.server.autoscale.AutoScaleResult
+import io.liftgate.server.models.server.registration.RegisteredServer
 import io.liftgate.server.provision.ProvisionedServer
 
 /**
@@ -9,5 +10,5 @@ import io.liftgate.server.provision.ProvisionedServer
  */
 interface AutoScaleAvailabilityStrategy
 {
-    fun scale(servers: List<ProvisionedServer>): Pair<AutoScaleResult, Int>
+    fun scale(servers: List<RegisteredServer>): Pair<AutoScaleResult, Int>
 }

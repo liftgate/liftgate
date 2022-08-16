@@ -12,7 +12,6 @@ import kotlinx.serialization.Serializable
 data class ServerTemplate(
     val id: String,
     val autoScalePortStart: Int,
-    val autoScalePropertyChoiceScheme: String,
     val dependencies: List<ResourceReference>,
     val replacementFiles: List<String>,
     val resources: ServerResources,

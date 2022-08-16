@@ -65,22 +65,19 @@ object ProvisionHandler : Runnable, StartupStep
     }
 
     fun provision(
-        template: ServerTemplate,
-        uid: String? = null,
-        port: Int? = null
+        template: ServerTemplate, uid: String? = null, port: Int? = null,
+        defaultMeta: MutableMap<String, String> = mutableMapOf()
     )
     {
-        val metadata = mutableMapOf<String, String>()
-
         for (step in orderedProvisionSteps)
         {
             val milliseconds = measureTimeMillis {
                 kotlin.runCatching {
-                    step.runStep(template, uid, port, metadata)
+                    step.runStep(template, uid, port, defaultMeta)
                 }.onFailure { throwable ->
                     logger.log(Level.SEVERE, "Failed provision step (${step.javaClass.name})", throwable)
 
-                    metadata["directory"]?.apply {
+                    defaultMeta["directory"]?.apply {
                         val directory = File(this)
                         directory.deleteRecursively()
                     }
@@ -93,8 +90,8 @@ object ProvisionHandler : Runnable, StartupStep
 
         ProvisionedServers.servers.add(
             ProvisionedServer(
-                template.id, metadata["uid"] ?: uid!!,
-                metadata["port"]?.toInt() ?: port!!
+                template.id, defaultMeta["uid"] ?: uid!!,
+                defaultMeta["port"]?.toInt() ?: port!!
             )
         )
     }

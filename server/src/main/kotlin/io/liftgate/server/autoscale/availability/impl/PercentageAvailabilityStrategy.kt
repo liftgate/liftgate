@@ -2,6 +2,7 @@ package io.liftgate.server.autoscale.availability.impl
 
 import io.liftgate.server.autoscale.AutoScaleResult
 import io.liftgate.server.autoscale.availability.AutoScaleAvailabilityStrategy
+import io.liftgate.server.models.server.registration.RegisteredServer
 import io.liftgate.server.provision.ProvisionedServer
 import io.liftgate.server.server.ServerHandler
 
@@ -9,29 +10,21 @@ import io.liftgate.server.server.ServerHandler
  * @author GrowlyX
  * @since 8/16/2022
  */
-object PercentageAvailabilityStrategy : AutoScaleAvailabilityStrategy
+class PercentageAvailabilityStrategy : AutoScaleAvailabilityStrategy
 {
-    @JvmStatic
-    val REQUIRED = 50.0F
-
-    @JvmStatic
-    val THRESHOLD = 5.0F
+    private val required = 50.0F
+    private val threshold = 5.0F
 
     override fun scale(
-        servers: List<ProvisionedServer>
+        servers: List<RegisteredServer>
     ): Pair<AutoScaleResult, Int>
     {
-        val mappings = servers
-            .mapNotNull {
-                ServerHandler.findServerByServerId(it.id)
-            }
-
-        val onlinePlayers = mappings
+        val onlinePlayers = servers
             .sumOf {
                 it.metadata["players"]?.toInt() ?: 0
             }
 
-        val maxPlayersMappings = mappings
+        val maxPlayersMappings = servers
             .map {
                 it.metadata["max-players"]?.toInt() ?: 0
             }
@@ -40,7 +33,7 @@ object PercentageAvailabilityStrategy : AutoScaleAvailabilityStrategy
 
         if (onlinePlayers <= 0 || maxPlayers <= 0)
         {
-            return Pair(AutoScaleResult.MAINTAIN, 0)
+            return Pair(AutoScaleResult.ScaleUp, 1)
         }
 
         val maxPlayersAvg = maxPlayersMappings.average().toFloat()
@@ -49,45 +42,50 @@ object PercentageAvailabilityStrategy : AutoScaleAvailabilityStrategy
 
         if (
             // ensure ratio is within threshold to maintain system
-            ratio <= REQUIRED + THRESHOLD ||
-            ratio >= REQUIRED - THRESHOLD
+            ratio <= required + threshold ||
+            ratio >= required - threshold
         )
         {
-            return Pair(AutoScaleResult.MAINTAIN, 0)
+            return Pair(AutoScaleResult.Maintain, 0)
         }
 
-        if (ratio >= REQUIRED + THRESHOLD)
+        if (ratio >= required + threshold)
         {
             var requiredRatio = -1.0F
             var serversToProvision = 0
 
-            while (requiredRatio <= REQUIRED)
+            while (requiredRatio <= required)
             {
                 serversToProvision += 1
                 requiredRatio = (onlinePlayers / (maxPlayersAvg * serversToProvision)) * 100.0F
             }
 
             return Pair(
-                AutoScaleResult.SCALE_UP, serversToProvision
+                AutoScaleResult.ScaleUp, serversToProvision
             )
         }
 
-        if (ratio <= REQUIRED - THRESHOLD)
+        if (ratio <= required - threshold)
         {
             var requiredRatio = -1.0F
             var serversToDeProvision = 0
 
-            while (requiredRatio >= REQUIRED)
+            while (requiredRatio >= required)
             {
                 serversToDeProvision += 1
                 requiredRatio = (onlinePlayers / (maxPlayers - (maxPlayersAvg * serversToDeProvision))) * 100.0F
             }
 
+            if (requiredRatio <= required - threshold)
+            {
+                return Pair(AutoScaleResult.Maintain, 0)
+            }
+
             return Pair(
-                AutoScaleResult.SCALE_DOWN, serversToDeProvision
+                AutoScaleResult.ScaleDown, serversToDeProvision
             )
         }
 
-        return Pair(AutoScaleResult.MAINTAIN, 0)
+        return Pair(AutoScaleResult.Maintain, 0)
     }
 }

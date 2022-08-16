@@ -37,6 +37,12 @@ object PercentageAvailabilityStrategy : AutoScaleAvailabilityStrategy
             }
 
         val maxPlayers = maxPlayersMappings.sum()
+
+        if (onlinePlayers <= 0 || maxPlayers <= 0)
+        {
+            return Pair(AutoScaleResult.MAINTAIN, 0)
+        }
+
         val maxPlayersAvg = maxPlayersMappings.average().toFloat()
 
         val ratio = (onlinePlayers / maxPlayers) * 100.0F

@@ -3,7 +3,7 @@ package io.liftgate.server.provision.impl
 import io.liftgate.server.models.server.ServerTemplate
 import io.liftgate.server.provision.ServerProvisionStep
 import java.io.File
-import kotlin.concurrent.thread
+import java.util.*
 
 /**
  * @author GrowlyX
@@ -27,21 +27,29 @@ object ExecutionStep : ServerProvisionStep
                 template.handleReplacements(it)
             }
 
-        val arguments = arrayOf(
-            "-dmS", containerUid, "bash", "-c",
-            "'${
-                template.executions.startCommand + " " + replacedArguments.joinToString(" ")
-            }; exec bash'"
-        )
+        val command = "${template.executions.startCommand} ${replacedArguments.joinToString(" ")}"
+        val tempFile = "temp-${UUID.randomUUID()}.sh"
 
-        val process = ProcessBuilder("screen", *arguments)
-            .directory(containerDirectory)
-            .start()
+        val temporary = File(tempFile)
+            .apply {
+                createNewFile()
+                writeBytes(
+                    """
+                        #!/bin/bash
+                        cd ${containerDirectory.absolutePath}
+                        screen -dmS $containerUid bash -l -c '$command; exec bash'
+                    """.trimIndent().encodeToByteArray()
+                )
+            }
 
-        process.waitFor()
+        Runtime.getRuntime()
+            .exec("chmod -R 777 $tempFile")
+            .waitFor()
 
-        println(
-            process.inputStream.reader().readLines()
-        )
+        Runtime.getRuntime()
+            .exec("./$tempFile")
+            .waitFor()
+
+        temporary.delete()
     }
 }

@@ -2,6 +2,7 @@ package io.liftgate.server.provision.impl
 
 import io.liftgate.server.models.server.ServerTemplate
 import io.liftgate.server.provision.ServerProvisionStep
+import java.io.File
 
 /**
  * @author GrowlyX
@@ -14,6 +15,26 @@ object ExecutionStep : ServerProvisionStep
         temporaryMeta: MutableMap<String, String>
     )
     {
+        val containerUid = temporaryMeta["uid"] ?: uid
 
+        val containerDirectory =
+            File(temporaryMeta["directory"]!!)
+
+        val replacedArguments = template
+            .executions.startArguments
+            .map {
+                template.handleReplacements(it)
+            }
+
+        val arguments = arrayOf(
+            "-dmS", containerUid, "bash", "-c",
+            "'${
+                template.executions.startCommand + " " + replacedArguments.joinToString(" ")
+            }; exec bash'"
+        )
+
+        Runtime.getRuntime().exec(
+            "screen", arguments, containerDirectory
+        )
     }
 }

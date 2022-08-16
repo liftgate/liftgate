@@ -3,14 +3,17 @@ package io.liftgate.server.server
 import io.liftgate.server.LiftgateEngine
 import io.liftgate.server.logger
 import io.liftgate.server.models.server.ServerTemplate
+import io.liftgate.server.provision.orderedProvisionSteps
 import io.liftgate.server.resource.ResourceHandler
-import io.liftgate.server.resources
 import io.liftgate.server.startup.StartupStep
 import io.liftgate.server.templates
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.decodeFromStream
 import java.io.File
+import java.util.concurrent.CompletableFuture
+import java.util.logging.Level
+import kotlin.system.measureTimeMillis
 
 /**
  * @author GrowlyX
@@ -18,12 +21,28 @@ import java.io.File
  */
 object ServerTemplateHandler : StartupStep
 {
-    fun create(
+    fun provision(
         template: ServerTemplate,
         uid: String? = null,
         port: Int? = null
-    )
+    ): CompletableFuture<Void>
     {
+        return CompletableFuture
+            .runAsync {
+                val metadata = mutableMapOf<String, String>()
+
+                orderedProvisionSteps.forEach {
+                    val milliseconds = measureTimeMillis {
+                        kotlin.runCatching {
+                            it.runStep(template, uid, port, metadata)
+                        }.onFailure { throwable ->
+                            logger.log(Level.SEVERE, "Failed provision step (${it.javaClass.name})", throwable)
+                        }
+                    }
+
+                    logger.info("[Provision] Completed step in $milliseconds ms. (${it.javaClass.name})")
+                }
+            }
     }
 
     @OptIn(ExperimentalSerializationApi::class)

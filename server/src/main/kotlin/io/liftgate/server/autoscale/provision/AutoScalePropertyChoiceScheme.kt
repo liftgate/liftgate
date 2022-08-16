@@ -1,4 +1,4 @@
-package io.liftgate.server.autoscale
+package io.liftgate.server.autoscale.provision
 
 import io.liftgate.server.models.server.ServerTemplate
 

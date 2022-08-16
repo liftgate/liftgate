@@ -1,7 +1,7 @@
-package io.liftgate.server.provision.impl
+package io.liftgate.server.provision.step.impl
 
 import io.liftgate.server.models.server.ServerTemplate
-import io.liftgate.server.provision.ServerProvisionStep
+import io.liftgate.server.provision.step.ServerProvisionStep
 import java.io.File
 import java.util.*
 

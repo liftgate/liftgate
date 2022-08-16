@@ -2,6 +2,7 @@ package io.liftgate.server.command
 
 import io.liftgate.server.LiftgateEngine
 import io.liftgate.server.logger
+import io.liftgate.server.provision.ProvisionHandler
 import io.liftgate.server.server.ServerHandler
 import io.liftgate.server.server.ServerTemplateHandler
 import io.liftgate.server.startup.StartupStep
@@ -12,6 +13,7 @@ import revxrsal.commands.cli.ConsoleActor
 import revxrsal.commands.cli.ConsoleCommandHandler
 import revxrsal.commands.exception.CommandErrorException
 import kotlin.concurrent.thread
+import kotlin.coroutines.Continuation
 import kotlin.system.exitProcess
 
 /**
@@ -35,11 +37,12 @@ object CommandHandler : StartupStep
     }
 
     @Subcommand("provision")
-    fun onProvision(
+    suspend fun onProvision(
         actor: ConsoleActor,
         templateName: String, // TODO: add proper context resolver
         @Optional uid: String?,
-        @Optional port: Int?
+        @Optional port: Int?,
+        continuation: Continuation<Unit>
     )
     {
         val template = ServerTemplateHandler
@@ -50,13 +53,10 @@ object CommandHandler : StartupStep
 
         actor.reply("Provisioning...")
 
-        ServerTemplateHandler
-            .provision(
-                template, uid, port
-            )
-            .join()
+        ProvisionHandler.provision(
+            template, uid, port, continuation
+        )
     }
-
 
     @Subcommand("servers")
     fun onServers(actor: ConsoleActor)

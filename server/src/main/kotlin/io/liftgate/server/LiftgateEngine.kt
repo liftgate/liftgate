@@ -14,8 +14,7 @@ class LiftgateEngine
     val server = NettyServerBuilder
         .forAddress(
             InetSocketAddress(
-                /*config.hostName,*/
-                "0.0.0.0",
+                config.hostname,
                 config.port
             )
         )

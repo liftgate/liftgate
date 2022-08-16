@@ -1,11 +1,11 @@
 package io.liftgate.server.server
 
 import io.liftgate.server.LiftgateEngine
-import io.liftgate.server.autoscale.AutoScaleServer
-import io.liftgate.server.autoscale.AutoScaleServers
+import io.liftgate.server.provision.ProvisionedServer
+import io.liftgate.server.provision.ProvisionedServers
 import io.liftgate.server.logger
 import io.liftgate.server.models.server.ServerTemplate
-import io.liftgate.server.provision.orderedProvisionSteps
+import io.liftgate.server.provision.step.orderedProvisionSteps
 import io.liftgate.server.resource.ResourceHandler
 import io.liftgate.server.startup.StartupStep
 import io.liftgate.server.templates
@@ -27,43 +27,6 @@ object ServerTemplateHandler : StartupStep
         templates.find {
             it.id == id
         }
-
-    fun provision(
-        template: ServerTemplate,
-        uid: String? = null,
-        port: Int? = null
-    ): CompletableFuture<Void>
-    {
-        return CompletableFuture
-            .runAsync {
-                val metadata = mutableMapOf<String, String>()
-
-                orderedProvisionSteps.forEach {
-                    val milliseconds = measureTimeMillis {
-                        kotlin.runCatching {
-                            it.runStep(template, uid, port, metadata)
-                        }.onFailure { throwable ->
-                            logger.log(Level.SEVERE, "Failed provision step (${it.javaClass.name})", throwable)
-
-                            metadata["directory"]?.apply {
-                                val directory = File(this)
-                                directory.deleteRecursively()
-                            }
-                            return@runAsync
-                        }
-                    }
-
-                    logger.info("[Provision] Completed step in $milliseconds ms. (${it.javaClass.name})")
-                }
-
-                AutoScaleServers.servers.add(
-                    AutoScaleServer(
-                        metadata["uid"] ?: uid!!,
-                        metadata["port"]?.toInt() ?: port!!
-                    )
-                )
-            }
-    }
 
     @OptIn(ExperimentalSerializationApi::class)
     override fun perform(context: LiftgateEngine)

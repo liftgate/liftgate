@@ -1,15 +1,13 @@
-package io.liftgate.server.provision.impl
+package io.liftgate.server.provision.step.impl
 
-import io.liftgate.server.autoscale.AutoScalePropertyChoiceScheme
+import io.liftgate.server.autoscale.provision.AutoScalePropertyChoiceScheme
 import io.liftgate.server.config
 import io.liftgate.server.models.server.ServerTemplate
-import io.liftgate.server.provision.ServerProvisionStep
+import io.liftgate.server.provision.step.ServerProvisionStep
 import io.liftgate.server.resource.ResourceHandler
 import org.apache.commons.io.FileUtils
 import org.apache.commons.lang3.RandomStringUtils
 import java.io.File
-import java.nio.file.Files
-import java.nio.file.StandardCopyOption
 
 /**
  * @author GrowlyX
@@ -53,7 +51,7 @@ object CopyStep : ServerProvisionStep
         // provisioned automatically, so we're going to
         // create a random string to prevent conflicts.
         val subDirectory = File(
-            this.autoProvisionedServerDirectory,
+            autoProvisionedServerDirectory,
             "${RandomStringUtils.randomAlphanumeric(5)}-${
                 if (temporaryMeta["uid"] == null) uid else temporaryMeta["uid"]
             }"

@@ -1,6 +1,6 @@
-package io.liftgate.server.autoscale.impl
+package io.liftgate.server.autoscale.provision.impl
 
-import io.liftgate.server.autoscale.AutoScalePropertyChoiceScheme
+import io.liftgate.server.autoscale.provision.AutoScalePropertyChoiceScheme
 import io.liftgate.server.listening
 import io.liftgate.server.models.server.ServerTemplate
 import io.liftgate.server.server.ServerHandler

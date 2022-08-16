@@ -1,4 +1,4 @@
-package io.liftgate.server.provision
+package io.liftgate.server.provision.step
 
 import io.liftgate.server.models.server.ServerTemplate
 

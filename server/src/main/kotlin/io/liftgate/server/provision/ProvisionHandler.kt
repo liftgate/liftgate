@@ -1,0 +1,107 @@
+package io.liftgate.server.provision
+
+import io.liftgate.server.LiftgateEngine
+import io.liftgate.server.logger
+import io.liftgate.server.models.server.ServerTemplate
+import io.liftgate.server.pool
+import io.liftgate.server.provision.step.orderedProvisionSteps
+import io.liftgate.server.server.ServerHandler
+import io.liftgate.server.startup.StartupStep
+import kotlinx.coroutines.coroutineScope
+import java.io.File
+import java.time.Duration
+import java.util.concurrent.TimeUnit
+import java.util.logging.Level
+import kotlin.coroutines.Continuation
+import kotlin.coroutines.resume
+import kotlin.system.measureTimeMillis
+
+/**
+ * @author GrowlyX
+ * @since 8/16/2022
+ */
+object ProvisionHandler : Runnable, StartupStep
+{
+    override fun perform(context: LiftgateEngine)
+    {
+        pool.scheduleAtFixedRate(this, 0L, 1L, TimeUnit.SECONDS)
+    }
+
+    override fun run()
+    {
+        val provisionUnverified = ProvisionedServers
+            .servers.filter {
+                !it.provisionVerified && System.currentTimeMillis() >= it.provisionLatestTimestamp +
+                        Duration.ofSeconds(15L).toMillis()
+            }
+
+        for (provisioned in provisionUnverified)
+        {
+            val alive = ServerHandler
+                .findServerByServerId(provisioned.id)
+
+            if (alive == null)
+            {
+                if (provisioned.provisionChecks == 3)
+                {
+                    logger.info("[Provision] Server ${provisioned.id} failed to send heartbeat within 45 seconds of its startup, shutting down.")
+                    ProvisionedServers.deProvision(provisioned)
+                    continue
+                }
+
+                provisioned.provisionChecks += 1
+                logger.info("[Provision] Server ${provisioned.id} failed check #${provisioned.provisionChecks}/#3.")
+            } else
+            {
+                logger.info("[Provision] Received heartbeat from ${provisioned.id} within ${
+                    provisioned.provisionInitialTimestamp - System.currentTimeMillis()
+                }ms of startup.")
+
+                provisioned.provisionVerified = true
+            }
+
+            provisioned.provisionLatestTimestamp =
+                System.currentTimeMillis()
+        }
+    }
+
+    suspend fun provision(
+        template: ServerTemplate,
+        uid: String? = null,
+        port: Int? = null,
+        continuation: Continuation<Unit>
+    )
+    {
+        coroutineScope {
+            val metadata = mutableMapOf<String, String>()
+
+            for (step in orderedProvisionSteps)
+            {
+                val milliseconds = measureTimeMillis {
+                    kotlin.runCatching {
+                        step.runStep(template, uid, port, metadata)
+                    }.onFailure { throwable ->
+                        logger.log(Level.SEVERE, "Failed provision step (${step.javaClass.name})", throwable)
+
+                        metadata["directory"]?.apply {
+                            val directory = File(this)
+                            directory.deleteRecursively()
+                        }
+                        return@coroutineScope
+                    }
+                }
+
+                logger.info("[Provision] Completed step in $milliseconds ms. (${step.javaClass.name})")
+            }
+
+            ProvisionedServers.servers.add(
+                ProvisionedServer(
+                    template.id, metadata["uid"] ?: uid!!,
+                    metadata["port"]?.toInt() ?: port!!
+                )
+            )
+
+            continuation.resume(Unit)
+        }
+    }
+}

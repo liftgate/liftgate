@@ -2,7 +2,6 @@ package io.liftgate.server.provision.impl
 
 import io.liftgate.server.models.server.ServerTemplate
 import io.liftgate.server.provision.ServerProvisionStep
-import io.liftgate.server.resource.ResourceHandler
 import java.io.File
 import java.nio.file.Files
 
@@ -28,17 +27,20 @@ object ReplacementStep : ServerProvisionStep
                 directory, replacement
             )
 
-            var text = replacementFile.readText()
-            text = template.handleReplacements(text)
+            if (replacementFile.exists())
+            {
+                var text = replacementFile.readText()
+                text = template.handleReplacements(text)
 
-            temporaryMeta.forEach { (key, value) ->
-                text = text.replace("<$key>", value)
+                temporaryMeta.forEach { (key, value) ->
+                    text = text.replace("<$key>", value)
+                }
+
+                Files.write(
+                    replacementFile.toPath(),
+                    text.encodeToByteArray()
+                )
             }
-
-            Files.write(
-                replacementFile.toPath(),
-                text.encodeToByteArray()
-            )
         }
     }
 }

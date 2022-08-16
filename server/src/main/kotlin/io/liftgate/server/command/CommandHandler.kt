@@ -3,9 +3,13 @@ package io.liftgate.server.command
 import io.liftgate.server.LiftgateEngine
 import io.liftgate.server.logger
 import io.liftgate.server.provision.ProvisionHandler
+import io.liftgate.server.provision.ProvisionedServers
 import io.liftgate.server.server.ServerHandler
 import io.liftgate.server.server.ServerTemplateHandler
 import io.liftgate.server.startup.StartupStep
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import revxrsal.commands.annotation.Command
 import revxrsal.commands.annotation.Optional
 import revxrsal.commands.annotation.Subcommand
@@ -24,11 +28,12 @@ import kotlin.system.exitProcess
 @Command("liftgate")
 object CommandHandler : StartupStep
 {
+    private val scope = CoroutineScope(Dispatchers.Default)
+
     override fun perform(context: LiftgateEngine)
     {
         val handler = ConsoleCommandHandler.create()
         handler.register(this)
-        handler.supportSuspendFunctions()
 
         thread {
             while (true)
@@ -39,12 +44,11 @@ object CommandHandler : StartupStep
     }
 
     @Subcommand("provision")
-    suspend fun onProvision(
+    fun onProvision(
         actor: ConsoleActor,
         templateName: String, // TODO: add proper context resolver
         @Optional uid: String?,
-        @Optional port: Int?,
-        continuation: Continuation<Unit>
+        @Optional port: Int?
     )
     {
         val template = ServerTemplateHandler
@@ -55,9 +59,11 @@ object CommandHandler : StartupStep
 
         actor.reply("Provisioning...")
 
-        ProvisionHandler.provision(
-            template, uid, port, continuation
-        )
+        scope.launch {
+            ProvisionHandler.provision(
+                template, uid, port
+            )
+        }
     }
 
     @Subcommand("servers")
@@ -68,6 +74,13 @@ object CommandHandler : StartupStep
         ServerHandler.findAllServers()
             .forEach {
                 actor.reply(" - ${it.serverId}: ${it.datacenter}")
+            }
+
+        actor.reply("Auto-scale provisioned:")
+
+        ProvisionedServers.servers
+            .forEach {
+                actor.reply(" - ${it.id}: ${it.port}")
             }
     }
 

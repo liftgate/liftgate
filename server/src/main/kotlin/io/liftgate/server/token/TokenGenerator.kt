@@ -16,6 +16,6 @@ object TokenGenerator
 
     fun generate(): String =
         DigestUtils.sha256Hex(
-            RandomStringUtils.randomAlphanumeric(20)
+            RandomStringUtils.randomAlphanumeric(40)
         )
 }

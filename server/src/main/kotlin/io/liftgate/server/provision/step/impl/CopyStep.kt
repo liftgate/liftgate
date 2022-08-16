@@ -2,6 +2,7 @@ package io.liftgate.server.provision.step.impl
 
 import io.liftgate.server.autoscale.provision.AutoScalePropertyChoiceScheme
 import io.liftgate.server.config
+import io.liftgate.server.logger
 import io.liftgate.server.models.server.ServerTemplate
 import io.liftgate.server.provision.step.ServerProvisionStep
 import io.liftgate.server.resource.ResourceHandler
@@ -39,11 +40,17 @@ object CopyStep : ServerProvisionStep
             if (uid == null)
             {
                 temporaryMeta["uid"] = scheme.chooseUid(template)
+                    .apply {
+                        logger.info("Chose uid: $this")
+                    }
             }
 
             if (port == null)
             {
                 temporaryMeta["port"] = scheme.choosePort(template).toString()
+                    .apply {
+                        logger.info("Chose port: $this")
+                    }
             }
         }
 

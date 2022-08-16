@@ -12,8 +12,6 @@ import java.io.File
 import java.time.Duration
 import java.util.concurrent.TimeUnit
 import java.util.logging.Level
-import kotlin.coroutines.Continuation
-import kotlin.coroutines.resume
 import kotlin.system.measureTimeMillis
 
 /**
@@ -42,6 +40,8 @@ object ProvisionHandler : Runnable, StartupStep
 
             if (alive == null)
             {
+                provisioned.provisionChecks += 1
+
                 if (provisioned.provisionChecks == 3)
                 {
                     logger.info("[Provision] Server ${provisioned.id} failed to send heartbeat within 45 seconds of its startup, shutting down.")
@@ -49,7 +49,6 @@ object ProvisionHandler : Runnable, StartupStep
                     continue
                 }
 
-                provisioned.provisionChecks += 1
                 logger.info("[Provision] Server ${provisioned.id} failed check #${provisioned.provisionChecks}/#3.")
             } else
             {
@@ -65,43 +64,38 @@ object ProvisionHandler : Runnable, StartupStep
         }
     }
 
-    suspend fun provision(
+    fun provision(
         template: ServerTemplate,
         uid: String? = null,
-        port: Int? = null,
-        continuation: Continuation<Unit>
+        port: Int? = null
     )
     {
-        coroutineScope {
-            val metadata = mutableMapOf<String, String>()
+        val metadata = mutableMapOf<String, String>()
 
-            for (step in orderedProvisionSteps)
-            {
-                val milliseconds = measureTimeMillis {
-                    kotlin.runCatching {
-                        step.runStep(template, uid, port, metadata)
-                    }.onFailure { throwable ->
-                        logger.log(Level.SEVERE, "Failed provision step (${step.javaClass.name})", throwable)
+        for (step in orderedProvisionSteps)
+        {
+            val milliseconds = measureTimeMillis {
+                kotlin.runCatching {
+                    step.runStep(template, uid, port, metadata)
+                }.onFailure { throwable ->
+                    logger.log(Level.SEVERE, "Failed provision step (${step.javaClass.name})", throwable)
 
-                        metadata["directory"]?.apply {
-                            val directory = File(this)
-                            directory.deleteRecursively()
-                        }
-                        return@coroutineScope
+                    metadata["directory"]?.apply {
+                        val directory = File(this)
+                        directory.deleteRecursively()
                     }
+                    return
                 }
-
-                logger.info("[Provision] Completed step in $milliseconds ms. (${step.javaClass.name})")
             }
 
-            ProvisionedServers.servers.add(
-                ProvisionedServer(
-                    template.id, metadata["uid"] ?: uid!!,
-                    metadata["port"]?.toInt() ?: port!!
-                )
-            )
-
-            continuation.resume(Unit)
+            logger.info("[Provision] Completed step in $milliseconds ms. (${step.javaClass.name})")
         }
+
+        ProvisionedServers.servers.add(
+            ProvisionedServer(
+                template.id, metadata["uid"] ?: uid!!,
+                metadata["port"]?.toInt() ?: port!!
+            )
+        )
     }
 }

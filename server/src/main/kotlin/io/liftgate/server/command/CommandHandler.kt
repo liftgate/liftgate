@@ -12,6 +12,7 @@ import revxrsal.commands.annotation.Subcommand
 import revxrsal.commands.cli.ConsoleActor
 import revxrsal.commands.cli.ConsoleCommandHandler
 import revxrsal.commands.exception.CommandErrorException
+import revxrsal.commands.ktx.supportSuspendFunctions
 import kotlin.concurrent.thread
 import kotlin.coroutines.Continuation
 import kotlin.system.exitProcess
@@ -27,6 +28,7 @@ object CommandHandler : StartupStep
     {
         val handler = ConsoleCommandHandler.create()
         handler.register(this)
+        handler.supportSuspendFunctions()
 
         thread {
             while (true)

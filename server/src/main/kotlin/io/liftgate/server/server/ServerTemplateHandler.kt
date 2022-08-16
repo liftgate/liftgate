@@ -21,6 +21,11 @@ import kotlin.system.measureTimeMillis
  */
 object ServerTemplateHandler : StartupStep
 {
+    fun findTemplateById(id: String) =
+        templates.find {
+            it.id == id
+        }
+
     fun provision(
         template: ServerTemplate,
         uid: String? = null,

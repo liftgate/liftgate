@@ -1,13 +1,16 @@
 package io.liftgate.server.command
 
 import io.liftgate.server.LiftgateEngine
-import io.liftgate.server.startup.StartupStep
 import io.liftgate.server.logger
 import io.liftgate.server.server.ServerHandler
+import io.liftgate.server.server.ServerTemplateHandler
+import io.liftgate.server.startup.StartupStep
 import revxrsal.commands.annotation.Command
+import revxrsal.commands.annotation.Optional
 import revxrsal.commands.annotation.Subcommand
 import revxrsal.commands.cli.ConsoleActor
 import revxrsal.commands.cli.ConsoleCommandHandler
+import revxrsal.commands.exception.CommandErrorException
 import kotlin.concurrent.thread
 import kotlin.system.exitProcess
 
@@ -30,6 +33,30 @@ object CommandHandler : StartupStep
             }
         }
     }
+
+    @Subcommand("provision")
+    fun onProvision(
+        actor: ConsoleActor,
+        templateName: String, // TODO: add proper context resolver
+        @Optional uid: String?,
+        @Optional port: Int?
+    )
+    {
+        val template = ServerTemplateHandler
+            .findTemplateById(templateName)
+            ?: throw CommandErrorException(
+                "No template by that name exists."
+            )
+
+        actor.reply("Provisioning...")
+
+        ServerTemplateHandler
+            .provision(
+                template, uid, port
+            )
+            .join()
+    }
+
 
     @Subcommand("servers")
     fun onServers(actor: ConsoleActor)

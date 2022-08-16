@@ -5,6 +5,7 @@ import io.liftgate.server.config
 import io.liftgate.server.models.server.ServerTemplate
 import io.liftgate.server.provision.ServerProvisionStep
 import io.liftgate.server.resource.ResourceHandler
+import org.apache.commons.io.FileUtils
 import org.apache.commons.lang3.RandomStringUtils
 import java.io.File
 import java.nio.file.Files
@@ -58,9 +59,9 @@ object CopyStep : ServerProvisionStep
             }"
         )
 
-        temporaryMeta["directory"] = subDirectory.absolutePath
-
         subDirectory.mkdirs()
+
+        temporaryMeta["directory"] = subDirectory.absolutePath
 
         for (dependency in template.dependencies)
         {
@@ -71,20 +72,12 @@ object CopyStep : ServerProvisionStep
             val assets =
                 File(
                     mapping.templateDirectory
-                ).listFiles()
+                )
 
-            if (assets != null)
-            {
-                for (asset in assets)
-                {
-                    // we'll replace existing just in-case dependency
-                    // assets conflict with each other.
-                    Files.copy(
-                        asset.toPath(), subDirectory.toPath(),
-                        StandardCopyOption.REPLACE_EXISTING
-                    )
-                }
-            }
+            FileUtils
+                .copyDirectory(
+                    assets, subDirectory
+                )
         }
     }
 }

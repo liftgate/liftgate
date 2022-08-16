@@ -3,6 +3,7 @@ package io.liftgate.server.provision.impl
 import io.liftgate.server.models.server.ServerTemplate
 import io.liftgate.server.provision.ServerProvisionStep
 import java.io.File
+import kotlin.concurrent.thread
 
 /**
  * @author GrowlyX
@@ -33,8 +34,14 @@ object ExecutionStep : ServerProvisionStep
             }; exec bash'"
         )
 
-        Runtime.getRuntime().exec(
-            "screen", arguments, containerDirectory
+        val process = ProcessBuilder("screen", *arguments)
+            .directory(containerDirectory)
+            .start()
+
+        process.waitFor()
+
+        println(
+            process.inputStream.reader().readLines()
         )
     }
 }

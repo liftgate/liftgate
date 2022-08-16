@@ -47,7 +47,7 @@ object ExecutionStep : ServerProvisionStep
             .waitFor()
 
         Runtime.getRuntime()
-            .exec("./$tempFile")
+            .exec("sh $tempFile")
             .waitFor()
 
         temporary.delete()

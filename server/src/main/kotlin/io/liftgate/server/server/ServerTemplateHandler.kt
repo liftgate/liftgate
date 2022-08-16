@@ -1,6 +1,8 @@
 package io.liftgate.server.server
 
 import io.liftgate.server.LiftgateEngine
+import io.liftgate.server.autoscale.AutoScaleServer
+import io.liftgate.server.autoscale.AutoScaleServers
 import io.liftgate.server.logger
 import io.liftgate.server.models.server.ServerTemplate
 import io.liftgate.server.provision.orderedProvisionSteps
@@ -42,11 +44,24 @@ object ServerTemplateHandler : StartupStep
                             it.runStep(template, uid, port, metadata)
                         }.onFailure { throwable ->
                             logger.log(Level.SEVERE, "Failed provision step (${it.javaClass.name})", throwable)
+
+                            metadata["directory"]?.apply {
+                                val directory = File(this)
+                                directory.deleteRecursively()
+                            }
+                            return@runAsync
                         }
                     }
 
                     logger.info("[Provision] Completed step in $milliseconds ms. (${it.javaClass.name})")
                 }
+
+                AutoScaleServers.servers.add(
+                    AutoScaleServer(
+                        metadata["uid"] ?: uid!!,
+                        metadata["port"]?.toInt() ?: port!!
+                    )
+                )
             }
     }
 

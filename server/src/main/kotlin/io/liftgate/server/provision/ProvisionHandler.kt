@@ -52,9 +52,11 @@ object ProvisionHandler : Runnable, StartupStep
                 logger.info("[Provision] Server ${provisioned.id} failed check #${provisioned.provisionChecks}/#3.")
             } else
             {
-                logger.info("[Provision] Received heartbeat from ${provisioned.id} within ${
-                    provisioned.provisionInitialTimestamp - System.currentTimeMillis()
-                }ms of startup.")
+                val millis = System.currentTimeMillis() - provisioned.provisionInitialTimestamp
+
+                logger.info(
+                    "[Provision] Received heartbeat from ${provisioned.id} within ${millis}ms (${millis / 1000L}s) of startup."
+                )
 
                 provisioned.provisionVerified = true
             }

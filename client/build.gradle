@@ -1,4 +1,4 @@
 dependencies {
     api project(":protocol-stub")
-    api "io.grpc:grpc-stub:1.48.0"
+    api "io.grpc:grpc-stub:$grpcStubVersion"
 }

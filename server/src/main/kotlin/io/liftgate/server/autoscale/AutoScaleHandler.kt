@@ -54,6 +54,11 @@ object AutoScaleHandler : StartupStep
                 )
 
                 templates += template
+
+                if (template.autoStart)
+                {
+                    this.startAutoScaleService(template)
+                }
             }
     }
 }

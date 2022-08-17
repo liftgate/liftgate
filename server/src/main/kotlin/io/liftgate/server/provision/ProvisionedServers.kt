@@ -20,6 +20,6 @@ object ProvisionedServers
         this.servers.remove(server)
         server.kill()
 
-        logger.info("[Provision] Deprovisioning sevrer ${server.id}")
+        logger.info("[Provision] De-provisioning server ${server.id}")
     }
 }

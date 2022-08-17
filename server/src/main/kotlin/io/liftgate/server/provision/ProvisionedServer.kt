@@ -1,11 +1,13 @@
 package io.liftgate.server.provision
 
+import java.io.File
+
 /**
  * @author GrowlyX
  * @since 8/15/2022
  */
 data class ProvisionedServer(
-    val template: String, val id: String, val port: Int
+    val template: String, val id: String, val port: Int, val directory: File
 )
 {
     var provisionInitialTimestamp = System.currentTimeMillis()
@@ -20,5 +22,7 @@ data class ProvisionedServer(
         Runtime.getRuntime()
             .exec("kill \$(lsof -t -i:$port)")
             .waitFor()
+
+        this.directory.deleteRecursively()
     }
 }

@@ -91,7 +91,8 @@ object ProvisionHandler : Runnable, StartupStep
         ProvisionedServers.servers.add(
             ProvisionedServer(
                 template.id, defaultMeta["uid"] ?: uid!!,
-                defaultMeta["port"]?.toInt() ?: port!!
+                defaultMeta["port"]?.toInt() ?: port!!,
+                File(defaultMeta["directory"]!!)
             )
         )
     }

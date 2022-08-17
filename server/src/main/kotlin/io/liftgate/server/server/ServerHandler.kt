@@ -77,9 +77,10 @@ object ServerHandler : StartupStep
 
     override fun perform(context: LiftgateEngine)
     {
-        pool.scheduleAtFixedRate(
-            ServerHeartbeatMonitor, 0L, 1L, TimeUnit.SECONDS
-        )
+        // TODO: fix heartbeats
+//        pool.scheduleAtFixedRate(
+//            ServerHeartbeatMonitor, 0L, 1L, TimeUnit.SECONDS
+//        )
 
         logger.info("[Monitor] Started server heartbeat monitor.")
     }

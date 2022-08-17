@@ -45,7 +45,9 @@ object NetworkRpcService : NetworkGrpcKt.NetworkCoroutineImplBase()
 
         ServerHandler.register(request)
 
-        return response.build()
+        return response
+            .setStatus(ServerRegistrationStatus.SERVER_SUCCESS)
+            .build()
     }
 
     override suspend fun heartbeat(
@@ -73,6 +75,8 @@ object NetworkRpcService : NetworkGrpcKt.NetworkCoroutineImplBase()
         existing.timestamp = System.currentTimeMillis()
         existing.metadata.putAll(request.metadataMap)
 
-        return response.build()
+        return response
+            .setStatus(ServerHeartbeatStatus.HEARTBEAT_SUCCESS)
+            .build()
     }
 }

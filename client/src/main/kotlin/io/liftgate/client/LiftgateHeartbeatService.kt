@@ -29,9 +29,9 @@ class LiftgateHeartbeatService(
         AuthenticationFailure, RegistrationDuplicate, Success
     }
 
-    fun configure(service: ScheduledExecutorService)
+    fun configure(service: ScheduledExecutorService): CompletableFuture<Void>
     {
-        this.registerAndMap().thenAccept {
+        return this.registerAndMap().thenAccept {
             when (it)
             {
                 RegistrationResult.AuthenticationFailure ->

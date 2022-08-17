@@ -1,2 +1,9 @@
 rootProject.name = "liftgate"
-include("protocol", "protocol-stub", "server", "client")
+include(
+    "protocol", "protocol-stub",
+    "server", "client"
+)
+
+include(
+    "client-platform-spigot"
+)

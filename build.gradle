@@ -5,7 +5,6 @@ plugins {
     id "maven-publish"
     id "com.google.protobuf" version "$protobufPluginVersion"
     id "com.github.johnrengelman.shadow" version "$shadowVersion"
-    id "com.google.devtools.ksp" version "$kspVersion"
     id "org.jetbrains.kotlin.jvm" version "$kotlinVersion"
     id "org.jetbrains.kotlin.plugin.serialization" version "$kotlinVersion"
 }
@@ -28,7 +27,6 @@ subprojects {
     apply plugin: "idea"
 
     apply plugin: "com.google.protobuf"
-    apply plugin: "com.google.devtools.ksp"
 
     apply plugin: "org.jetbrains.kotlin.jvm"
     apply plugin: "org.jetbrains.kotlin.plugin.serialization"
@@ -37,7 +35,6 @@ subprojects {
 
     def globalDependencies = [
         // kotlin
-        "org.jetbrains.kotlin:kotlin-reflect:$kotlinVersion",
         "org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion",
         "org.jetbrains.kotlinx:kotlinx-serialization-json-jvm:$kotlinSerializationVersion",
         // grpc
@@ -52,9 +49,6 @@ subprojects {
         // slf4j
         "org.slf4j:slf4j-api:$slf4jVersion",
         "org.slf4j:slf4j-simple:$slf4jVersion",
-        // koin
-        "io.insert-koin:koin-core:$koinVersion",
-        "io.insert-koin:koin-annotations:$kspKoinVersion",
         // protobuf
         "com.google.protobuf:protobuf-kotlin:$protobufVersion",
         "com.google.protobuf:protobuf-java:$protobufVersion",
@@ -71,9 +65,6 @@ subprojects {
             if (project.name == "server")
                 api it else compileOnly it
         }
-
-        testApi "io.insert-koin:koin-test:$koinVersion"
-        ksp "io.insert-koin:koin-ksp-compiler:$kspKoinVersion"
     }
 
     shadowJar {

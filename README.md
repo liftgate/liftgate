@@ -1,5 +1,5 @@
 # Liftgate
-Game server management, orchestration, and coordination platform.
+Game server management, orchestration, and scaling platform.
 
 ## Project Status
 **This project is a W.I.P.** This README will be updated once we enter a more stable state.

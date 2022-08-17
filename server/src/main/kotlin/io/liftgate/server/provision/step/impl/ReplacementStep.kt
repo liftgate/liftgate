@@ -27,8 +27,6 @@ object ReplacementStep : ServerProvisionStep
                 }"
             )
 
-            println("${replacementFile.absolutePath} | ${replacementFile.exists()}")
-
             if (replacementFile.exists())
             {
                 var text = replacementFile.readText()

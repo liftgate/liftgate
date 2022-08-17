@@ -67,12 +67,6 @@ subprojects {
         }
     }
 
-    shadowJar {
-        if (!standalone.contains(project.name)) {
-            exclude "**/kotlin/**"
-        }
-    }
-
     idea {
         module {
             setDownloadJavadoc(true)

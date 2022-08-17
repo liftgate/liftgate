@@ -28,9 +28,9 @@ object ExecutionStep : ServerProvisionStep
             }
 
         val command = "${template.executions.startCommand} ${replacedArguments.joinToString(" ")}"
-        val tempFile = "temp-${UUID.randomUUID()}.sh"
+        val tempFile = "startup-${UUID.randomUUID()}.sh"
 
-        val temporary = File(tempFile)
+        val startup = File(containerDirectory, tempFile)
             .apply {
                 createNewFile()
                 writeBytes(
@@ -43,13 +43,11 @@ object ExecutionStep : ServerProvisionStep
             }
 
         Runtime.getRuntime()
-            .exec("chmod -R 777 $tempFile")
+            .exec("chmod -R 777 ${startup.absolutePath}")
             .waitFor()
 
         Runtime.getRuntime()
-            .exec("sh $tempFile")
+            .exec("sh ${startup.absolutePath}")
             .waitFor()
-
-        temporary.delete()
     }
 }

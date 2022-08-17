@@ -18,3 +18,8 @@ dependencies {
     api "com.github.shynixn.mccoroutine:mccoroutine-bukkit-api:$mccoroutineVersion"
     api "com.github.shynixn.mccoroutine:mccoroutine-bukkit-core:$mccoroutineVersion"
 }
+
+shadowJar {
+    def internal = "io.liftgate.client.platform.spigot.internal."
+    relocate "io.netty", "${internal}netty"
+}

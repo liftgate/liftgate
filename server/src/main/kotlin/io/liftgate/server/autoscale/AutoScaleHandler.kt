@@ -7,6 +7,7 @@ import io.liftgate.server.pool
 import io.liftgate.server.resource.ResourceHandler
 import io.liftgate.server.startup.StartupStep
 import io.liftgate.server.templates
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.decodeFromStream
 import java.io.File
@@ -36,6 +37,7 @@ object AutoScaleHandler : StartupStep
         template.startedAutoScale = true
     }
 
+    @OptIn(ExperimentalSerializationApi::class)
     override fun perform(context: LiftgateEngine)
     {
         val autoScaleDirectory =

@@ -2,6 +2,8 @@ package io.liftgate.client
 
 import io.grpc.ManagedChannelBuilder
 import io.grpc.stub.AbstractStub
+import io.liftgate.protocol.AllServersResponse
+import io.liftgate.protocol.Authentication
 import io.liftgate.protocol.ServerHeartbeat
 import io.liftgate.protocol.ServerHeartbeatResponse
 import io.liftgate.protocol.ServerRegistration
@@ -32,6 +34,8 @@ abstract class LiftgateClient<T : AbstractStub<*>>(
 
     abstract fun register(registration: ServerRegistration): CompletableFuture<ServerRegistrationResponse>
     abstract fun heartbeat(registration: ServerHeartbeat): CompletableFuture<ServerHeartbeatResponse>
+
+    abstract fun allServers(authentication: Authentication): CompletableFuture<AllServersResponse>
 
     override fun close()
     {

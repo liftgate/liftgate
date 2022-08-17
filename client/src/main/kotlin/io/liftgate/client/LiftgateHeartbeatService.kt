@@ -36,20 +36,26 @@ class LiftgateHeartbeatService(
             {
                 RegistrationResult.AuthenticationFailure ->
                 {
-                    this.client.logger.info("[Liftgate] Failed client <-> server authentication! Are you sure you're using the correct token?")
+                    this.client.logger.info("Failed client <-> server authentication! Are you sure you're using the correct token?")
+                    return@thenAccept
                 }
 
                 RegistrationResult.RegistrationDuplicate ->
                 {
-                    this.client.logger.info("[Liftgate] A server with this server ID is already registered! Are you sure you're using a unique ID?")
+                    this.client.logger.info("A server with this server ID is already registered! Are you sure you're using a unique ID?")
+                    return@thenAccept
                 }
 
                 RegistrationResult.Success ->
                 {
-                    service.scheduleAtFixedRate(this, 0L, 1L, TimeUnit.SECONDS)
+                    this.client.logger.info("Scheduling heartbeat service at a delay of 2 seconds.")
+                    service.scheduleAtFixedRate(this, 0L, 2L, TimeUnit.SECONDS)
                 }
 
-                else -> {}
+                else ->
+                {
+                    return@thenAccept
+                }
             }
         }
     }
@@ -57,6 +63,10 @@ class LiftgateHeartbeatService(
     fun registerAndMap(): CompletableFuture<RegistrationResult>
     {
         return this.register()
+            .exceptionally {
+                it.printStackTrace()
+                return@exceptionally null
+            }
             .thenApply {
                 if (it.authentication == AuthenticationStatus.FAILURE)
                 {
@@ -103,18 +113,25 @@ class LiftgateHeartbeatService(
             .setTimestamp(System.currentTimeMillis())
             .build()
 
-        val heartbeat = this.client
-            .heartbeat(request).join()
+        val heartbeat = kotlin
+            .runCatching {
+                this.client.heartbeat(request).join()
+            }
+            .onFailure {
+                it.printStackTrace()
+            }
+            .getOrNull()
+            ?: return
 
         if (heartbeat.authentication == AuthenticationStatus.FAILURE)
         {
-            this.client.logger.info("[Liftgate] Failed client <-> server authentication! Are you sure you're using the correct token?")
+            this.client.logger.info("Failed client <-> server authentication! Are you sure you're using the correct token?")
             return
         }
 
         if (heartbeat.status == ServerHeartbeatStatus.UNREGISTERED_SERVER)
         {
-            this.client.logger.info("[Liftgate] Passed server heartbeat to unregistered server! Attempting to re-register...")
+            this.client.logger.info("Passed server heartbeat to unregistered server! Attempting to re-register...")
             this.register().join()
         }
     }

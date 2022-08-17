@@ -10,6 +10,14 @@ import "io.liftgate.protocol/authentication.proto";
 service Network {
   rpc Register(ServerRegistration) returns (ServerRegistrationResponse);
   rpc Heartbeat(ServerHeartbeat) returns (ServerHeartbeatResponse);
+
+  rpc AllServers(Authentication) returns (AllServersResponse);
+}
+
+message AllServersResponse
+{
+  AuthenticationStatus authentication = 1;
+  repeated ServerRegistration servers = 2;
 }
 
 message ServerRegistration

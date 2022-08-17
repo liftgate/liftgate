@@ -22,7 +22,8 @@ object ServerHandler : StartupStep
 
     fun unregisterServer(serverId: String)
     {
-        this.servers.remove(serverId)
+        val server = this.servers.remove(serverId)
+            ?: return
 
         val provisioned = ProvisionedServers.servers
             .find { it.id == serverId }
@@ -32,7 +33,7 @@ object ServerHandler : StartupStep
             ProvisionedServers.deProvision(provisioned)
         }
 
-        logger.info("[Server] Unregistered critical server with ID: $serverId")
+        logger.info("[Server] Unregistered critical server with ID: $serverId (${System.currentTimeMillis() - server.timestamp}ms delayed)")
     }
 
     fun register(registration: ServerRegistration)
@@ -43,7 +44,8 @@ object ServerHandler : StartupStep
                 registration.datacenter,
                 registration.port,
                 registration.metadataMap.toMutableMap(),
-                registration.classifiersList.toMutableList()
+                registration.classifiersList.toMutableList(),
+                System.currentTimeMillis(), registration
             )
 
         logger.info("[Server] Received server registration with ID: ${registration.serverId}")

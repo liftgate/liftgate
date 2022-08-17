@@ -2,6 +2,8 @@ package io.liftgate.client.coroutine
 
 import io.liftgate.client.LiftgateClient
 import io.liftgate.client.LiftgateClientConfig
+import io.liftgate.protocol.AllServersResponse
+import io.liftgate.protocol.Authentication
 import io.liftgate.protocol.NetworkGrpc
 import io.liftgate.protocol.NetworkGrpc.NetworkFutureStub
 import io.liftgate.protocol.ServerHeartbeat
@@ -27,6 +29,16 @@ class LiftgateAsyncClient(
     override fun initialize()
     {
         this.stub
+    }
+
+    override fun allServers(
+        authentication: Authentication
+    ): CompletableFuture<AllServersResponse>
+    {
+        return CompletableFuture
+            .supplyAsync {
+                stub.allServers(authentication)
+            }
     }
 
     override fun register(

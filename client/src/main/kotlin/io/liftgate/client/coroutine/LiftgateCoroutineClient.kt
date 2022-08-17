@@ -2,6 +2,8 @@ package io.liftgate.client.coroutine
 
 import io.liftgate.client.LiftgateClient
 import io.liftgate.client.LiftgateClientConfig
+import io.liftgate.protocol.AllServersResponse
+import io.liftgate.protocol.Authentication
 import io.liftgate.protocol.NetworkGrpcKt
 import io.liftgate.protocol.ServerHeartbeat
 import io.liftgate.protocol.ServerHeartbeatResponse
@@ -62,6 +64,26 @@ class LiftgateCoroutineClient(
         this.coroutineScope.launch {
             kotlin.runCatching {
                 stub.heartbeat(registration)
+            }.onFailure {
+                it.printStackTrace()
+            }.apply {
+                completable.complete(this.getOrNull())
+            }
+        }
+
+        return completable
+    }
+
+    override fun allServers(
+        authentication: Authentication
+    ): CompletableFuture<AllServersResponse>
+    {
+        val completable =
+            CompletableFuture<AllServersResponse>()
+
+        this.coroutineScope.launch {
+            kotlin.runCatching {
+                stub.allServers(authentication)
             }.onFailure {
                 it.printStackTrace()
             }.apply {

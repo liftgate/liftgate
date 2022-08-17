@@ -3,5 +3,6 @@ dependencies {
 
     api "io.grpc:grpc-netty:$grpcVersion"
     api "io.grpc:grpc-stub:$grpcVersion"
+    api "io.grpc:grpc-protobuf:$grpcVersion"
     api "io.grpc:grpc-kotlin-stub:$grpcKotlinVersion"
 }

@@ -22,5 +22,5 @@ dependencies {
 shadowJar {
     def internal = "io.liftgate.client.platform.spigot.internal."
     relocate "io.netty", "${internal}netty"
-    relocate "com.google", "${internal}google"
+    relocate "com.google.common", "${internal}google"
 }

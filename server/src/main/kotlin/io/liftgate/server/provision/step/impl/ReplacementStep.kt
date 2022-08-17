@@ -18,7 +18,6 @@ object ReplacementStep : ServerProvisionStep
     )
     {
         val directory = temporaryMeta["directory"]!!
-        println(directory)
 
         for (replacement in template.replacementFiles)
         {
@@ -28,14 +27,16 @@ object ReplacementStep : ServerProvisionStep
                 }"
             )
 
+            println("${replacementFile.absolutePath} | ${replacementFile.exists()}")
+
             if (replacementFile.exists())
             {
                 var text = replacementFile.readText()
                 text = template.handleReplacements(text)
 
-                temporaryMeta.forEach { (key, value) ->
-                    text = text.replace("<$key>", value)
-                }
+                text = text.replace(
+                    "<server-id>", temporaryMeta["uid"] ?: uid!!
+                )
 
                 Files.write(
                     replacementFile.toPath(),

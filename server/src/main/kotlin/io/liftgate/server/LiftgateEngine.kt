@@ -3,6 +3,7 @@ package io.liftgate.server
 import io.grpc.netty.NettyServerBuilder
 import io.grpc.protobuf.services.HealthStatusManager
 import io.liftgate.server.network.NetworkRpcService
+import io.liftgate.server.provision.ProvisionedServers
 import java.net.InetSocketAddress
 
 /**
@@ -19,9 +20,6 @@ class LiftgateEngine
             )
         )
         .maxInboundMessageSize(26214400)
-        .addService(
-            HealthStatusManager().healthService
-        )
         .addService(NetworkRpcService)
         .build()!!
 
@@ -32,6 +30,11 @@ class LiftgateEngine
         Runtime.getRuntime()
             .addShutdownHook(Thread {
                 this.server.shutdownNow()
+
+                ProvisionedServers.servers
+                    .forEach {
+                        it.kill()
+                    }
             })
     }
 }

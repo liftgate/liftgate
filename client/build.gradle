@@ -1,5 +1,7 @@
 dependencies {
     api project(":protocol-stub")
+
+    api "io.grpc:grpc-netty:$grpcVersion"
     api "io.grpc:grpc-stub:$grpcStubVersion"
     api "io.grpc:grpc-kotlin-stub:$grpcKotlinVersion"
 }

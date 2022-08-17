@@ -17,14 +17,15 @@ object ReplacementStep : ServerProvisionStep
         temporaryMeta: MutableMap<String, String>
     )
     {
-        val directory = File(
-            temporaryMeta["directory"]!!
-        )
+        val directory = temporaryMeta["directory"]!!
+        println(directory)
 
         for (replacement in template.replacementFiles)
         {
             val replacementFile = File(
-                directory, replacement
+                "$directory${File.separator}${
+                    replacement.replace("/", File.separator)
+                }"
             )
 
             if (replacementFile.exists())

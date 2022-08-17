@@ -36,9 +36,8 @@ object TokenGeneratorStep : StartupStep
             )
         }
 
-        val decoded = Files
-            .readAllBytes(tokenPath.toPath())
-            .decodeToString()
+        val decoded = tokenPath.readLines()
+            .first { !it.startsWith("#") }
 
         TokenGenerator.cached = decoded
     }

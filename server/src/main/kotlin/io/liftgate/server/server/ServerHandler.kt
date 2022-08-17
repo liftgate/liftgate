@@ -6,6 +6,7 @@ import io.liftgate.server.LiftgateEngine
 import io.liftgate.server.logger
 import io.liftgate.server.models.server.registration.RegisteredServer
 import io.liftgate.server.pool
+import io.liftgate.server.provision.ProvisionedServers
 import io.liftgate.server.startup.StartupStep
 import java.time.Duration
 import java.util.concurrent.TimeUnit
@@ -22,6 +23,14 @@ object ServerHandler : StartupStep
     fun unregisterServer(serverId: String)
     {
         this.servers.remove(serverId)
+
+        val provisioned = ProvisionedServers.servers
+            .find { it.id == serverId }
+
+        if (provisioned != null)
+        {
+            ProvisionedServers.deProvision(provisioned)
+        }
 
         logger.info("[Server] Unregistered critical server with ID: $serverId")
     }
@@ -42,13 +51,6 @@ object ServerHandler : StartupStep
 
     fun findAllServers() =
         this.servers.values.toList()
-
-    fun findCriticalServers() =
-        this.findAllServers()
-            .filter {
-                System.currentTimeMillis() <= it.timestamp + Duration
-                    .ofSeconds(5L).toMillis()
-            }
 
     fun findServerByHeartbeat(heartbeat: ServerHeartbeat) =
         this.servers.values.find {
@@ -77,10 +79,9 @@ object ServerHandler : StartupStep
 
     override fun perform(context: LiftgateEngine)
     {
-        // TODO: fix heartbeats
-//        pool.scheduleAtFixedRate(
-//            ServerHeartbeatMonitor, 0L, 1L, TimeUnit.SECONDS
-//        )
+        pool.scheduleAtFixedRate(
+            ServerHeartbeatMonitor, 0L, 2L, TimeUnit.SECONDS
+        )
 
         logger.info("[Monitor] Started server heartbeat monitor.")
     }

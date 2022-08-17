@@ -2,6 +2,7 @@ package io.liftgate.server.models.server
 
 import io.liftgate.server.models.ResourceReference
 import io.liftgate.server.resource.ResourceHandler
+import io.liftgate.server.token.TokenGenerator
 import kotlinx.serialization.Serializable
 
 /**
@@ -44,6 +45,10 @@ data class ServerTemplate(
         replaced = replaced.replace(
             "<resources.memory>", this
                 .resources.memory.toString()
+        )
+
+        replaced = replaced.replace(
+            "<auth-token>", TokenGenerator.cached
         )
 
         return replaced

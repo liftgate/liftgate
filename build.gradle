@@ -96,6 +96,34 @@ subprojects {
         filesMatching("**/*.proto") {
             duplicatesStrategy = DuplicatesStrategy.INCLUDE
         }
+
+        filesMatching("**/*.yml") {
+            duplicatesStrategy = DuplicatesStrategy.INCLUDE
+        }
+    }
+
+    def getGitHash = { ->
+        def stdout = new ByteArrayOutputStream()
+
+        exec {
+            commandLine 'git', 'rev-parse', '--short', 'HEAD'
+            standardOutput = stdout
+        }
+
+        return stdout.toString().trim()
+    }
+
+    def pluginDescription = "Game server management, orchestration, and scaling platform."
+
+    processResources {
+        from(sourceSets.main.resources.srcDirs) {
+            expand (
+                "pluginVersion": "${getGitHash()}",
+                "pluginDescription": "$pluginDescription"
+            )
+
+            include "plugin.yml"
+        }
     }
 
     sourceSets.main {

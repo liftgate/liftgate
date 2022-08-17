@@ -1,8 +1,8 @@
 name: liftgate-client
 main: io.liftgate.client.platform.spigot.LiftgateSpigotPlatformPlugin
-version: unknown
 
-description: Game server management, orchestration, and scaling platform.
+version: ${pluginVersion}
+description: ${pluginDescription}
 website: https://liftgate.io
 
 api-version: 1.19

@@ -11,3 +11,4 @@ The liftgate server also only works on single-server systems. Compatibility for 
 
 ### TODO
 - [ ] Add full support for scaling with multiple datacenters
+- [ ] Use hoplite for parsing/saving configuration files on the server and other platforms

@@ -23,12 +23,17 @@ object AutoScaleHandler : StartupStep
     fun findAutoScaleTemplateByGroup(group: String) =
         this.templates.find { it.group == group }
 
+    fun findAutoScaleTemplateById(id: String) =
+        this.templates.find { it.template == id }
+
     fun startAutoScaleService(template: AutoScaleTemplate)
     {
         val service = AutoScaleService(template)
         pool.scheduleAtFixedRate(
             service, 0L, 1L, TimeUnit.SECONDS
         )
+
+        template.startedAutoScale = true
     }
 
     override fun perform(context: LiftgateEngine)

@@ -1,6 +1,7 @@
 package io.liftgate.server.command
 
 import io.liftgate.server.LiftgateEngine
+import io.liftgate.server.autoscale.AutoScaleHandler
 import io.liftgate.server.logger
 import io.liftgate.server.provision.ProvisionHandler
 import io.liftgate.server.provision.ProvisionedServers
@@ -64,6 +65,29 @@ object CommandHandler : StartupStep
                 template, uid, port
             )
         }
+    }
+
+    @Subcommand("autoscale")
+    fun onAutoScale(
+        actor: ConsoleActor,
+        templateName: String
+    )
+    {
+        val template = AutoScaleHandler
+            .findAutoScaleTemplateById(templateName)
+            ?: throw CommandErrorException(
+                "No template by that name exists."
+            )
+
+        if (template.startedAutoScale)
+        {
+            throw CommandErrorException("Auto scale has already been started for this template.")
+        }
+
+        AutoScaleHandler
+            .startAutoScaleService(template)
+
+        actor.reply("Started auto scale!")
     }
 
     @Subcommand("servers")

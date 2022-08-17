@@ -15,3 +15,6 @@ data class AutoScaleTemplate(
     val availabilityStrategy: String,
     val propertyChoiceScheme: String
 )
+{
+    var startedAutoScale = false
+}

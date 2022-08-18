@@ -1,5 +1,6 @@
 package io.liftgate.client
 
+import io.grpc.StatusRuntimeException
 import io.liftgate.protocol.Authentication
 import io.liftgate.protocol.AuthenticationStatus
 import io.liftgate.protocol.ServerHeartbeat
@@ -128,6 +129,12 @@ class LiftgateHeartbeatService(
                 this.client.heartbeat(request).join()
             }
             .onFailure {
+                if (it is StatusRuntimeException)
+                {
+                    this.client.logger.severe("It seems like the gRPC server is offline. (${it.status})")
+                    return
+                }
+
                 this.client.logger.log(Level.SEVERE, "An exception was thrown during the heartbeat process", it)
             }
             .getOrNull()

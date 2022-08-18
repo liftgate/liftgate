@@ -37,7 +37,6 @@ class PercentageAvailabilityStrategy : AutoScaleAvailabilityStrategy
         }
 
         val maxPlayersAvg = maxPlayersMappings.average().toFloat()
-
         val ratio = (onlinePlayers / maxPlayers) * 100.0F
 
         if (

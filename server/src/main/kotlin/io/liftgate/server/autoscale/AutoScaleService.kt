@@ -54,6 +54,12 @@ class AutoScaleService(
 
             AutoScaleResult.ScaleUp ->
             {
+                if (template.scaleUpMax == provisioned.size)
+                {
+                    logger.info("Hit scale-up provision limit of ${template.scaleUpMax}, skipping requested scale-up.")
+                    return
+                }
+
                 val template = ServerTemplateHandler
                     .findTemplateById(this.template.template)
                     ?: return run {

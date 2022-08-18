@@ -33,7 +33,7 @@ class PercentageAvailabilityStrategy : AutoScaleAvailabilityStrategy
 
         if (onlinePlayers <= 0 || maxPlayers <= 0)
         {
-            return Pair(AutoScaleResult.ScaleUp, 1)
+            return Pair(AutoScaleResult.Maintain, 0)
         }
 
         val maxPlayersAvg = maxPlayersMappings.average().toFloat()

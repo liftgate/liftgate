@@ -60,10 +60,10 @@ class AutoScaleService(
                         logger.info("[AutoScale] Failed to find template by id: ${template.template}")
                     }
 
+                logger.info("[AutoScale] Provisioning ${strategy.second} new servers for auto-scale")
+
                 for (i in 1..strategy.second)
                 {
-                    logger.info("[AutoScale] Provisioning ${strategy.second} new servers for auto-scale")
-
                     ProvisionHandler.provision(
                         template,
                         defaultMeta = mutableMapOf(

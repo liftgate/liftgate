@@ -51,6 +51,9 @@ class LiftgateSpigotPlatformPlugin : JavaPlugin()
             val metadata = mutableMapOf<String, String>()
             metadata.putAll(defaultMetadata)
 
+            metadata["players"] = server.onlinePlayers.size.toString()
+            metadata["max-players"] = server.maxPlayers.toString()
+
             return@context metadata
         }
 

@@ -30,20 +30,20 @@ object IncrementalPropertyChoiceScheme : AutoScalePropertyChoiceScheme
                 }
         }
 
-        return "$current"
+        return "${template.id}$current"
     }
 
     override fun choosePort(template: ServerTemplate): Int
     {
         var found = false
-        var current = template.autoScalePortStart - 1
+        var current = -1
 
         while (!found)
         {
-            current += 1
+            current = (template.autoScalePortStart..100).random()
             found = !listening(
                 "0.0.0.0",
-                current, 10
+                current, 100
             )
         }
 

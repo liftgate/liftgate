@@ -118,6 +118,11 @@ class LiftgateHeartbeatService(
             .setTimestamp(System.currentTimeMillis())
             .build()
 
+        if (this.client.closed)
+        {
+            return
+        }
+
         val heartbeat = kotlin
             .runCatching {
                 this.client.heartbeat(request).join()

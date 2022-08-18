@@ -37,8 +37,11 @@ abstract class LiftgateClient<T : AbstractStub<*>>(
 
     abstract fun allServers(authentication: Authentication): CompletableFuture<AllServersResponse>
 
+    var closed = false
+
     override fun close()
     {
+        this.closed = true
         this.channel.shutdownNow()
     }
 }

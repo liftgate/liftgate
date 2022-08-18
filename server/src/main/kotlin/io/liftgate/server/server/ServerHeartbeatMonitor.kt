@@ -13,7 +13,7 @@ object ServerHeartbeatMonitor : Runnable
         val servers = ServerHandler
             .findAllServers()
             .filter {
-                it.timestamp + Duration.ofSeconds(10L).toMillis() <= System.currentTimeMillis()
+                it.timestamp + Duration.ofSeconds(5L).toMillis() <= System.currentTimeMillis()
             }
 
         for (server in servers)

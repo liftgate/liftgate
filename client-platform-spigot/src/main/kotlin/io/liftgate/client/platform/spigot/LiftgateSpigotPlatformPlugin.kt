@@ -5,11 +5,10 @@ import com.github.shynixn.mccoroutine.bukkit.launch
 import io.liftgate.client.LiftgateClientConfig
 import io.liftgate.client.LiftgateHeartbeatService
 import io.liftgate.client.RegistrationInfo
-import io.liftgate.client.coroutine.LiftgateCoroutineClient
+import io.liftgate.client.coroutine.LiftgateAsyncClient
 import kotlinx.coroutines.withContext
 import org.bukkit.Bukkit
 import org.bukkit.plugin.java.JavaPlugin
-import java.util.concurrent.Executors
 
 /**
  * @author GrowlyX
@@ -17,7 +16,7 @@ import java.util.concurrent.Executors
  */
 class LiftgateSpigotPlatformPlugin : JavaPlugin()
 {
-    private lateinit var client: LiftgateCoroutineClient
+    private lateinit var client: LiftgateAsyncClient
 
     override fun onEnable()
     {
@@ -57,19 +56,13 @@ class LiftgateSpigotPlatformPlugin : JavaPlugin()
 
         launch {
             withContext(asyncDispatcher) {
-                client = LiftgateCoroutineClient(
-                    liftgateClientConfig, logger,
-                    metadataSupplier, this
+                client = LiftgateAsyncClient(
+                    liftgateClientConfig, logger, metadataSupplier
                 )
                 client.initialize()
 
                 val heartbeat = LiftgateHeartbeatService(client)
-
-                heartbeat
-                    .configure(
-                        Executors.newSingleThreadScheduledExecutor()
-                    )
-                    .join()
+                heartbeat.configure().join()
             }
         }
     }

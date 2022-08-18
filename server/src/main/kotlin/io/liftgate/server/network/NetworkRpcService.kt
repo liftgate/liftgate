@@ -100,8 +100,6 @@ object NetworkRpcService : NetworkGrpcKt.NetworkCoroutineImplBase()
         existing.timestamp = System.currentTimeMillis()
         existing.metadata.putAll(request.metadataMap)
 
-        logger.info("Received heartbeat")
-
         return response
             .setStatus(ServerHeartbeatStatus.HEARTBEAT_SUCCESS)
             .build()

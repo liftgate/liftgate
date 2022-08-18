@@ -8,8 +8,9 @@ import io.liftgate.protocol.ServerRegistration
 import io.liftgate.protocol.ServerRegistrationResponse
 import io.liftgate.protocol.ServerRegistrationStatus
 import java.util.concurrent.CompletableFuture
-import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.logging.Level
 
 /**
  * @author GrowlyX
@@ -29,7 +30,7 @@ class LiftgateHeartbeatService(
         AuthenticationFailure, RegistrationDuplicate, Success
     }
 
-    fun configure(service: ScheduledExecutorService): CompletableFuture<Void>
+    fun configure(): CompletableFuture<Void>
     {
         return this.registerAndMap().thenAccept {
             when (it)
@@ -49,7 +50,11 @@ class LiftgateHeartbeatService(
                 RegistrationResult.Success ->
                 {
                     this.client.logger.info("Scheduling heartbeat service at a delay of 2 seconds.")
-                    service.scheduleAtFixedRate(this, 0L, 2L, TimeUnit.SECONDS)
+
+                    Executors.newSingleThreadScheduledExecutor()
+                        .scheduleAtFixedRate(
+                            this, 0L, 2L, TimeUnit.SECONDS
+                        )
                 }
 
                 else ->
@@ -64,7 +69,7 @@ class LiftgateHeartbeatService(
     {
         return this.register()
             .exceptionally {
-                it.printStackTrace()
+                client.logger.log(Level.SEVERE, "Failed to complete registration process", it)
                 return@exceptionally null
             }
             .thenApply {
@@ -118,10 +123,12 @@ class LiftgateHeartbeatService(
                 this.client.heartbeat(request).join()
             }
             .onFailure {
-                it.printStackTrace()
+                this.client.logger.log(Level.SEVERE, "An exception was thrown during the heartbeat process", it)
             }
             .getOrNull()
-            ?: return
+            ?: return run {
+                client.logger.info("Failed to continue heartbeat process, is there an error above?")
+            }
 
         if (heartbeat.authentication == AuthenticationStatus.FAILURE)
         {

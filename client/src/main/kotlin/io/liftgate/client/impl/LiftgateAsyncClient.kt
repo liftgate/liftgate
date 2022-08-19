@@ -1,4 +1,4 @@
-package io.liftgate.client.coroutine
+package io.liftgate.client.impl
 
 import io.liftgate.client.LiftgateClient
 import io.liftgate.client.LiftgateClientConfig

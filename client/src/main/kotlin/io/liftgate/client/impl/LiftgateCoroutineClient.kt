@@ -1,4 +1,4 @@
-package io.liftgate.client.coroutine
+package io.liftgate.client.impl
 
 import io.liftgate.client.LiftgateClient
 import io.liftgate.client.LiftgateClientConfig
@@ -11,7 +11,6 @@ import io.liftgate.protocol.ServerRegistration
 import io.liftgate.protocol.ServerRegistrationResponse
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.future.future
-import kotlinx.coroutines.launch
 import java.util.concurrent.CompletableFuture
 import java.util.logging.Logger
 

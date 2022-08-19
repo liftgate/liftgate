@@ -10,6 +10,7 @@ import io.liftgate.protocol.ServerHeartbeatResponse
 import io.liftgate.protocol.ServerRegistration
 import io.liftgate.protocol.ServerRegistrationResponse
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.future.future
 import kotlinx.coroutines.launch
 import java.util.concurrent.CompletableFuture
 import java.util.logging.Logger
@@ -38,59 +39,26 @@ class LiftgateCoroutineClient(
         registration: ServerRegistration
     ): CompletableFuture<ServerRegistrationResponse>
     {
-        val completable =
-            CompletableFuture<ServerRegistrationResponse>()
-
-        this.coroutineScope.launch {
-            kotlin.runCatching {
-                stub.register(registration)
-            }.onFailure {
-                it.printStackTrace()
-            }.apply {
-                completable.complete(this.getOrNull())
-            }
+        return this.coroutineScope.future {
+            stub.register(registration)
         }
-
-        return completable
     }
 
     override fun heartbeat(
         registration: ServerHeartbeat
     ): CompletableFuture<ServerHeartbeatResponse>
     {
-        val completable =
-            CompletableFuture<ServerHeartbeatResponse>()
-
-        this.coroutineScope.launch {
-            kotlin.runCatching {
-                stub.heartbeat(registration)
-            }.onFailure {
-                it.printStackTrace()
-            }.apply {
-                completable.complete(this.getOrNull())
-            }
+        return this.coroutineScope.future {
+            stub.heartbeat(registration)
         }
-
-        return completable
     }
 
     override fun allServers(
         authentication: Authentication
     ): CompletableFuture<AllServersResponse>
     {
-        val completable =
-            CompletableFuture<AllServersResponse>()
-
-        this.coroutineScope.launch {
-            kotlin.runCatching {
-                stub.allServers(authentication)
-            }.onFailure {
-                it.printStackTrace()
-            }.apply {
-                completable.complete(this.getOrNull())
-            }
+        return this.coroutineScope.future {
+            stub.allServers(authentication)
         }
-
-        return completable
     }
 }

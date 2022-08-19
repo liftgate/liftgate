@@ -32,7 +32,7 @@ object AutoScaleHandler : StartupStep
         val service = AutoScaleService(template)
         pool.scheduleAtFixedRate(
             service, 0L,
-            15L, TimeUnit.SECONDS
+            5L, TimeUnit.SECONDS
         )
 
         template.startedAutoScale = true

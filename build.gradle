@@ -3,6 +3,7 @@ plugins {
     id "java"
     id "java-library"
     id "maven-publish"
+    id "org.jetbrains.kotlin.kapt" version "1.7.10"
     id "com.google.protobuf" version "$protobufPluginVersion"
     id "com.github.johnrengelman.shadow" version "$shadowVersion"
     id "org.jetbrains.kotlin.jvm" version "$kotlinVersion"
@@ -28,6 +29,7 @@ subprojects {
 
     apply plugin: "com.google.protobuf"
 
+    apply plugin: "org.jetbrains.kotlin.kapt"
     apply plugin: "org.jetbrains.kotlin.jvm"
     apply plugin: "org.jetbrains.kotlin.plugin.serialization"
 
@@ -37,6 +39,7 @@ subprojects {
         // kotlin
         "org.jetbrains.kotlin:kotlin-reflect:$kotlinVersion",
         "org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion",
+        "org.jetbrains.kotlinx:kotlinx-coroutines-jdk8:$coroutinesVersion",
         "org.jetbrains.kotlinx:kotlinx-serialization-json-jvm:$kotlinSerializationVersion",
         // grpc
         "io.grpc:grpc-netty:$grpcVersion",

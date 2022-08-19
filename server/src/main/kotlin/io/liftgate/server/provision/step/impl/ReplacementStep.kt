@@ -36,6 +36,10 @@ object ReplacementStep : ServerProvisionStep
                     "<server-id>", temporaryMeta["uid"] ?: uid!!
                 )
 
+                text = text.replace(
+                    "<server-group>", template.id
+                )
+
                 Files.write(
                     replacementFile.toPath(),
                     text.encodeToByteArray()

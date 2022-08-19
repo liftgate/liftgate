@@ -2,6 +2,7 @@ package io.liftgate.server.autoscale.availability.impl
 
 import io.liftgate.server.autoscale.AutoScaleResult
 import io.liftgate.server.autoscale.availability.AutoScaleAvailabilityStrategy
+import io.liftgate.server.logger
 import io.liftgate.server.models.server.registration.RegisteredServer
 import io.liftgate.server.provision.ProvisionedServer
 import io.liftgate.server.server.ServerHandler
@@ -33,6 +34,7 @@ class PercentageAvailabilityStrategy : AutoScaleAvailabilityStrategy
 
         if (onlinePlayers <= 0 || maxPlayers <= 0)
         {
+            logger.info("maintaining due to 0 players/0 max players")
             return Pair(AutoScaleResult.Maintain, 0)
         }
 
@@ -45,6 +47,7 @@ class PercentageAvailabilityStrategy : AutoScaleAvailabilityStrategy
             ratio >= required - threshold
         )
         {
+            logger.info("maintaining due to ratio within threshold ($ratio)")
             return Pair(AutoScaleResult.Maintain, 0)
         }
 
@@ -58,6 +61,8 @@ class PercentageAvailabilityStrategy : AutoScaleAvailabilityStrategy
                 serversToProvision += 1
                 requiredRatio = (onlinePlayers / (maxPlayersAvg * serversToProvision)) * 100.0F
             }
+
+            logger.info("scaling up to go below threshold ($ratio, $serversToProvision)")
 
             return Pair(
                 AutoScaleResult.ScaleUp, serversToProvision
@@ -77,13 +82,18 @@ class PercentageAvailabilityStrategy : AutoScaleAvailabilityStrategy
 
             if (requiredRatio <= required - threshold)
             {
+                logger.info("maintaining as removing server will cause above threshold")
                 return Pair(AutoScaleResult.Maintain, 0)
             }
+
+            logger.info("scaling down to go above threshold ($ratio, $serversToDeProvision)")
 
             return Pair(
                 AutoScaleResult.ScaleDown, serversToDeProvision
             )
         }
+
+        logger.info("maintaining as no configuration to scale up/down was found")
 
         return Pair(AutoScaleResult.Maintain, 0)
     }

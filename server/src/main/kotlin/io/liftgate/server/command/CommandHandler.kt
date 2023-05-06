@@ -2,6 +2,7 @@ package io.liftgate.server.command
 
 import io.liftgate.server.LiftgateEngine
 import io.liftgate.server.autoscale.AutoScaleHandler
+import io.liftgate.server.autoscale.provision.impl.IncrementalPropertyChoiceScheme
 import io.liftgate.server.logger
 import io.liftgate.server.provision.ProvisionHandler
 import io.liftgate.server.provision.ProvisionedServers
@@ -62,7 +63,10 @@ object CommandHandler : StartupStep
 
         scope.launch {
             ProvisionHandler.provision(
-                template, uid, port
+                template, uid, port,
+                defaultMeta = mutableMapOf(
+                    "propertyScheme" to IncrementalPropertyChoiceScheme::class.java.name
+                )
             )
         }
     }

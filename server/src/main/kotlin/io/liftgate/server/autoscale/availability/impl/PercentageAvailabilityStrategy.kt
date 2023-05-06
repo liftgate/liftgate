@@ -12,6 +12,12 @@ import io.liftgate.server.models.server.registration.RegisteredServer
 class PercentageAvailabilityStrategy : AutoScaleAvailabilityStrategy
 {
     private val desiredCapacityRatio = 50.0F
+
+    /**
+     * Player counts often fluctuate regularly. We have a
+     * 10% threshold to prevent provision/deprovision spams
+     * when the desired ratio isn't EXACTLY [desiredCapacityRatio].
+     */
     private val capacityThreshold = 10.0F
 
     override fun scale(

@@ -4,8 +4,6 @@ import io.liftgate.server.autoscale.AutoScaleResult
 import io.liftgate.server.autoscale.availability.AutoScaleAvailabilityStrategy
 import io.liftgate.server.logger
 import io.liftgate.server.models.server.registration.RegisteredServer
-import io.liftgate.server.provision.ProvisionedServer
-import io.liftgate.server.server.ServerHandler
 
 /**
  * @author GrowlyX
@@ -13,8 +11,8 @@ import io.liftgate.server.server.ServerHandler
  */
 class PercentageAvailabilityStrategy : AutoScaleAvailabilityStrategy
 {
-    private val required = 50.0F
-    private val threshold = 5.0F
+    private val desiredCapacityRatio = 50.0F
+    private val capacityThreshold = 10.0F
 
     override fun scale(
         servers: List<RegisteredServer>
@@ -39,57 +37,57 @@ class PercentageAvailabilityStrategy : AutoScaleAvailabilityStrategy
         }
 
         val maxPlayersAvg = maxPlayersMappings.average().toFloat()
-        val ratio = (onlinePlayers / maxPlayers) * 100.0F
+        val percentageFull = (onlinePlayers / maxPlayers) * 100.0F
 
         if (
             // ensure ratio is within threshold to maintain system
-            ratio <= required + threshold ||
-            ratio >= required - threshold
+            percentageFull <= desiredCapacityRatio + capacityThreshold &&
+            percentageFull >= desiredCapacityRatio - capacityThreshold
         )
         {
-            logger.info("maintaining due to ratio within threshold ($ratio)")
+            logger.info("maintaining due to desired ratio within threshold ($percentageFull)")
             return Pair(AutoScaleResult.Maintain, 0)
         }
 
-        if (ratio >= required + threshold)
+        if (percentageFull <= desiredCapacityRatio - capacityThreshold)
         {
             var requiredRatio = -1.0F
-            var serversToProvision = 0
+            var serversDesired = 0
 
-            while (requiredRatio <= required)
+            while (requiredRatio < desiredCapacityRatio - capacityThreshold)
             {
-                serversToProvision += 1
-                requiredRatio = (onlinePlayers / (maxPlayersAvg * serversToProvision)) * 100.0F
+                serversDesired += 1
+                requiredRatio = (onlinePlayers / (maxPlayers + (maxPlayersAvg * serversDesired))) * 100.0F
             }
 
-            logger.info("scaling up to go below threshold ($ratio, $serversToProvision)")
+            logger.info("scaling up to go above threshold minimum ($percentageFull, $serversDesired)")
 
             return Pair(
-                AutoScaleResult.ScaleUp, serversToProvision
+                AutoScaleResult.ScaleUp, serversDesired
             )
         }
 
-        if (ratio <= required - threshold)
+        if (percentageFull >= desiredCapacityRatio + capacityThreshold)
         {
             var requiredRatio = -1.0F
-            var serversToDeProvision = 0
+            var desiredDeprovisions = 0
 
-            while (requiredRatio >= required)
+            while (requiredRatio > desiredCapacityRatio + capacityThreshold)
             {
-                serversToDeProvision += 1
-                requiredRatio = (onlinePlayers / (maxPlayers - (maxPlayersAvg * serversToDeProvision))) * 100.0F
+                desiredDeprovisions += 1
+                requiredRatio = (onlinePlayers / (maxPlayers - (maxPlayersAvg * desiredDeprovisions))) * 100.0F
             }
 
-            if (requiredRatio <= required - threshold)
+            if (requiredRatio < desiredCapacityRatio - capacityThreshold)
             {
-                logger.info("maintaining as removing server will cause above threshold")
+                logger.info("maintaining as removing server will go below threshold minimu8m")
                 return Pair(AutoScaleResult.Maintain, 0)
             }
 
-            logger.info("scaling down to go above threshold ($ratio, $serversToDeProvision)")
+            logger.info("scaling down to go below threshold maximum ($percentageFull, $desiredDeprovisions)")
 
             return Pair(
-                AutoScaleResult.ScaleDown, serversToDeProvision
+                AutoScaleResult.ScaleDown, desiredDeprovisions
             )
         }
 

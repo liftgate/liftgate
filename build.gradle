@@ -3,7 +3,7 @@ plugins {
     id "java"
     id "java-library"
     id "maven-publish"
-    id "org.jetbrains.kotlin.kapt" version "1.7.10"
+    id "org.jetbrains.kotlin.kapt" version "$kotlinVersion"
     id "com.google.protobuf" version "$protobufPluginVersion"
     id "com.github.johnrengelman.shadow" version "$shadowVersion"
     id "org.jetbrains.kotlin.jvm" version "$kotlinVersion"

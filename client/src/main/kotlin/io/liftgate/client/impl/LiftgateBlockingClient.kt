@@ -36,41 +36,29 @@ class LiftgateBlockingClient(
         authentication: Authentication
     ): CompletableFuture<AllServersResponse>
     {
-        val completable =
-            CompletableFuture<AllServersResponse>()
-
-        stub.allServers(authentication).apply {
-            completable.complete(this)
-        }
-
-        return completable
+        return CompletableFuture
+            .completedFuture(
+                stub.allServers(authentication)
+            )
     }
 
     override fun register(
         registration: ServerRegistration
     ): CompletableFuture<ServerRegistrationResponse>
     {
-        val completable =
-            CompletableFuture<ServerRegistrationResponse>()
-
-        stub.register(registration).apply {
-            completable.complete(this)
-        }
-
-        return completable
+        return CompletableFuture
+            .completedFuture(
+                stub.register(registration)
+            )
     }
 
     override fun heartbeat(
         registration: ServerHeartbeat
     ): CompletableFuture<ServerHeartbeatResponse>
     {
-        val completable =
-            CompletableFuture<ServerHeartbeatResponse>()
-
-        stub.heartbeat(registration).apply {
-            completable.complete(this)
-        }
-
-        return completable
+        return CompletableFuture
+            .completedFuture(
+                stub.heartbeat(registration)
+            )
     }
 }

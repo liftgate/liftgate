@@ -22,7 +22,7 @@ class LiftgateCoroutineClient(
     config: LiftgateClientConfig,
     logger: Logger,
     metadata: () -> Map<String, String>,
-    private val coroutineScope: CoroutineScope
+    private val contextCreator: () -> CoroutineScope
 ) : LiftgateClient<NetworkGrpcKt.NetworkCoroutineStub>(config, logger, metadata)
 {
     private val stub by lazy {
@@ -38,26 +38,29 @@ class LiftgateCoroutineClient(
         registration: ServerRegistration
     ): CompletableFuture<ServerRegistrationResponse>
     {
-        return this.coroutineScope.future {
-            stub.register(registration)
-        }
+        return this.contextCreator()
+            .future {
+                stub.register(registration)
+            }
     }
 
     override fun heartbeat(
         registration: ServerHeartbeat
     ): CompletableFuture<ServerHeartbeatResponse>
     {
-        return this.coroutineScope.future {
-            stub.heartbeat(registration)
-        }
+        return this.contextCreator()
+            .future {
+                stub.heartbeat(registration)
+            }
     }
 
     override fun allServers(
         authentication: Authentication
     ): CompletableFuture<AllServersResponse>
     {
-        return this.coroutineScope.future {
-            stub.allServers(authentication)
-        }
+        return this.contextCreator()
+            .future {
+                stub.allServers(authentication)
+            }
     }
 }

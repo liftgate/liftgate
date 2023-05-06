@@ -90,7 +90,7 @@ object ProvisionHandler : Runnable, StartupStep
             logger.info("[Provision] Completed step in $milliseconds ms. (${step.javaClass.name})")
         }
 
-        ProvisionedServers.servers.add(
+        ProvisionedServers.provision(
             ProvisionedServer(
                 template.id, defaultMeta["uid"] ?: uid!!,
                 defaultMeta["port"]?.toInt() ?: port!!,

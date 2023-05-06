@@ -8,6 +8,7 @@ import io.liftgate.client.LiftgateHeartbeatService
 import io.liftgate.client.RegistrationInfo
 import io.liftgate.client.impl.LiftgateAsyncClient
 import io.liftgate.client.impl.LiftgateCoroutineClient
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.withContext
 import org.bukkit.Bukkit
 import org.bukkit.plugin.java.JavaPlugin
@@ -61,10 +62,10 @@ class LiftgateSpigotPlatformPlugin : JavaPlugin()
 
         launch {
             withContext(asyncDispatcher) {
-                client = LiftgateCoroutineClient(
-                    liftgateClientConfig, logger,
-                    metadataSupplier, this
+                client = LiftgateAsyncClient(
+                    liftgateClientConfig, logger, metadataSupplier
                 )
+
                 client.initialize()
 
                 val heartbeat = LiftgateHeartbeatService(client)

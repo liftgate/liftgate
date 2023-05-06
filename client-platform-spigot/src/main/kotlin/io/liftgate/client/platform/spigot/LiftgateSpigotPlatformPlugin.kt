@@ -60,18 +60,14 @@ class LiftgateSpigotPlatformPlugin : JavaPlugin()
             return@context metadata
         }
 
-        launch {
-            withContext(asyncDispatcher) {
-                client = LiftgateAsyncClient(
-                    liftgateClientConfig, logger, metadataSupplier
-                )
+        client = LiftgateAsyncClient(
+            liftgateClientConfig, logger, metadataSupplier
+        )
 
-                client.initialize()
+        client.initialize()
 
-                val heartbeat = LiftgateHeartbeatService(client)
-                heartbeat.configure().join()
-            }
-        }
+        val heartbeat = LiftgateHeartbeatService(client)
+        heartbeat.configure().join()
     }
 
     override fun onDisable()

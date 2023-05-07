@@ -1,6 +1,5 @@
 <img src=".github/resources/banner.png"
-alt="Banner"
-style="width: 500px; height 166px; display: block; margin-left: auto; margin-right: auto; width: 50%;"/>
+alt="Banner" width="50%" height="50%" align="center"/>
 
 # Liftgate
 All-in-one game server service mesh, autoscaling, and resource management platform.

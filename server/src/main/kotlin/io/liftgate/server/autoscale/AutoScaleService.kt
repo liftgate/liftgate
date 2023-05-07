@@ -4,6 +4,7 @@ import io.liftgate.server.autoscale.availability.AutoScaleAvailabilityStrategy
 import io.liftgate.server.autoscale.provision.AutoScalePropertyChoiceScheme
 import io.liftgate.server.logger
 import io.liftgate.server.provision.ProvisionHandler
+import io.liftgate.server.provision.ProvisionedServer
 import io.liftgate.server.provision.ProvisionedServers
 import io.liftgate.server.server.ServerHandler
 import io.liftgate.server.server.ServerTemplateHandler
@@ -31,6 +32,13 @@ class AutoScaleService(
             it.objectInstance ?: it.java.newInstance()
         } as AutoScaleAvailabilityStrategy
 
+    data class ScaleJob(
+        val result: AutoScaleResult,
+        val monitored: List<String>
+    )
+
+    private var job: ScaleJob? = null
+
     override fun run()
     {
         runCatching(::caughtRun)
@@ -39,8 +47,25 @@ class AutoScaleService(
             }
     }
 
-    fun caughtRun()
+    private fun caughtRun()
     {
+        if (job != null)
+        {
+            when (job!!.result)
+            {
+                AutoScaleResult.ScaleUp ->
+                {
+                    // TODO: determine scale-up progress
+                }
+                AutoScaleResult.ScaleDown ->
+                {
+
+                }
+                else -> {}
+            }
+            return
+        }
+
         val servers = ServerHandler
             .findServersByClassifier(this.template.group)
 
@@ -55,10 +80,16 @@ class AutoScaleService(
         {
             AutoScaleResult.ScaleDown ->
             {
-                provisioned.takeLast(strategy.second)
-                    .forEach {
+                val deProvisioned = provisioned
+                    .takeLast(strategy.second)
+                    .onEach {
                         ProvisionedServers.deProvision(it)
                     }
+
+                job = ScaleJob(
+                    result = AutoScaleResult.ScaleDown,
+                    monitored = deProvisioned.map(ProvisionedServer::id)
+                )
             }
 
             AutoScaleResult.ScaleUp ->
@@ -76,16 +107,26 @@ class AutoScaleService(
                     }
 
                 logger.info("[AutoScale] Provisioning ${strategy.second} new servers for auto-scale")
+                val monitoredReplicas = mutableListOf<String>()
 
                 for (i in 1..strategy.second)
                 {
-                    ProvisionHandler.provision(
+                    val replicaUid = ProvisionHandler.provision(
                         template,
                         defaultMeta = mutableMapOf(
                             "propertyScheme" to this.provisioner.javaClass.name
                         )
                     )
+
+                    replicaUid?.apply {
+                        monitoredReplicas += this
+                    }
                 }
+
+                job = ScaleJob(
+                    result = AutoScaleResult.ScaleUp,
+                    monitored = monitoredReplicas
+                )
             }
 
             else ->

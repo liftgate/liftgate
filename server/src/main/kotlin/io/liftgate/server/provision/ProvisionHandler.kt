@@ -69,7 +69,7 @@ object ProvisionHandler : Runnable, StartupStep
     fun provision(
         template: ServerTemplate, uid: String? = null, port: Int? = null,
         defaultMeta: MutableMap<String, String> = mutableMapOf()
-    )
+    ): String?
     {
         for (step in orderedProvisionSteps)
         {
@@ -83,7 +83,7 @@ object ProvisionHandler : Runnable, StartupStep
                         val directory = File(this)
                         directory.deleteRecursively()
                     }
-                    return
+                    return null
                 }
             }
 
@@ -97,5 +97,7 @@ object ProvisionHandler : Runnable, StartupStep
                 File(defaultMeta["directory"]!!)
             )
         )
+
+        return defaultMeta["uid"]
     }
 }

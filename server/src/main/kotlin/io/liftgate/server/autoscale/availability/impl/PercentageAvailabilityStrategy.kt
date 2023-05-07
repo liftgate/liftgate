@@ -26,21 +26,19 @@ class PercentageAvailabilityStrategy : AutoScaleAvailabilityStrategy
     ): Pair<AutoScaleResult, Int>
     {
         val provisioned = servers
-            .associateBy {  server ->
+            .filterNot {
                 ProvisionedServers.servers
-                    .firstOrNull {
-                        server.serverId == it.id
+                    .none { server ->
+                        server.id == it.serverId
                     }
             }
-            .filterNot { it.key != null }
-            .mapKeys { it.key!! }
 
-        val onlinePlayers = provisioned.values
+        val onlinePlayers = provisioned
             .sumOf {
                 it.metadata["players"]?.toInt() ?: 0
             }
 
-        val maxPlayersMappings = provisioned.values
+        val maxPlayersMappings = provisioned
             .map {
                 it.metadata["max-players"]?.toInt() ?: 0
             }

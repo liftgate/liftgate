@@ -15,11 +15,11 @@ message File {
   bytes content = 1;
 }
 
-enum Status {
-  PENDING = 0;
-  IN_PROGRESS = 1;
-  SUCCESS = 2;
-  FAILED = 3;
+enum TransferStatus {
+  TRANSFER_PENDING = 0;
+  TRANSFER_IN_PROGRESS = 1;
+  TRANSFER_SUCCESS = 2;
+  TRANSFER_FAILED = 3;
 }
 
 message FileUploadRequest {
@@ -31,7 +31,7 @@ message FileUploadRequest {
 
 message FileUploadResponse {
   string name = 1;
-  Status status = 2;
+  TransferStatus status = 2;
 }
 
 service FileService {

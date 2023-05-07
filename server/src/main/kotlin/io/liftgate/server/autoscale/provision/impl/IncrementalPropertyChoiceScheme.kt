@@ -36,15 +36,15 @@ object IncrementalPropertyChoiceScheme : AutoScalePropertyChoiceScheme
     override fun choosePort(template: ServerTemplate): Int
     {
         var found = false
-        var current = template.autoScalePortStart
+        var current = template.autoScalePortStart - 1
 
         while (!found)
         {
+            current += 1
             found = !listening(
                 "0.0.0.0",
                 current, 100
             )
-            current += 1
         }
 
         return current

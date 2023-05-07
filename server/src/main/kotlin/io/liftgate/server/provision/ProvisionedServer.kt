@@ -1,6 +1,7 @@
 package io.liftgate.server.provision
 
 import io.liftgate.server.execution.ExecutionUtilities
+import io.liftgate.server.server.ServerTemplateHandler
 import java.io.File
 
 /**
@@ -19,13 +20,26 @@ data class ProvisionedServer(
 
     fun kill()
     {
-        // TODO: actually use the stop command
+        val shutdown = ServerTemplateHandler
+            .findTemplateById(template)
+            ?.executions?.shutdown
+
         ExecutionUtilities
             .runScript(
-                "kill \$(lsof -t -i:$port)",
+                """
+                    ${
+                        if (shutdown != null)
+                        {
+                            "screen -X -S $id $shutdown"
+                        } else
+                        {
+                            "kill \$(lsof -t -i:$port)"
+                        }
+                    }
+                    rm -rf ${this.directory.absolutePath}
+                    screen -X -S $id exit
+                """.trimIndent(),
                 directory
             )
-
-        this.directory.deleteRecursively()
     }
 }

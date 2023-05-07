@@ -33,7 +33,13 @@ object ReplacementStep : ServerProvisionStep
                 text = template.handleReplacements(text)
 
                 text = text.replace(
-                    "<server-id>", temporaryMeta["uid"] ?: uid!!
+                    "<server-id>",
+                        temporaryMeta["uid"] ?: uid!!
+                )
+
+                text = text.replace(
+                        "<server-port>",
+                        (temporaryMeta["port"] ?: port!!).toString()
                 )
 
                 text = text.replace(

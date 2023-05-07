@@ -7,6 +7,7 @@ import io.liftgate.server.provision.ProvisionHandler
 import io.liftgate.server.provision.ProvisionedServers
 import io.liftgate.server.server.ServerHandler
 import io.liftgate.server.server.ServerTemplateHandler
+import java.util.logging.Level
 
 /**
  * @author GrowlyX
@@ -31,6 +32,14 @@ class AutoScaleService(
         } as AutoScaleAvailabilityStrategy
 
     override fun run()
+    {
+        runCatching(::caughtRun)
+            .onFailure {
+                logger.log(Level.SEVERE, "Could not autoscale", it)
+            }
+    }
+
+    fun caughtRun()
     {
         val servers = ServerHandler
             .findServersByClassifier(this.template.group)

@@ -104,7 +104,7 @@ object CommandHandler : StartupStep
                 actor.reply(" - ${it.serverId}: ${it.datacenter}")
             }
 
-        actor.reply("Auto-scale provisioned:")
+        actor.reply("Auto-scale/liftgate provisioned:")
 
         ProvisionedServers.servers
             .forEach {

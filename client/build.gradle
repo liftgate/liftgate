@@ -1,5 +1,5 @@
 dependencies {
-    api project(":protocol-stub")
+    api project(":protocol:stubs")
 
     api "io.grpc:grpc-netty:$grpcVersion"
     api "io.grpc:grpc-stub:$grpcVersion"

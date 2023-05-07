@@ -3,7 +3,7 @@ plugins {
 }
 
 dependencies {
-    api project(":protocol-stub")
+    api project(":protocol:stubs")
 
     api "com.github.Revxrsal.Lamp:cli:$lampVersion"
     api "com.github.Revxrsal.Lamp:common:$lampVersion"

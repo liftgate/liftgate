@@ -13,7 +13,6 @@ protobuf {
         }
 
         grpckt {
-            // TODO: fix 1.3.0 not working with this?
             artifact = "io.grpc:protoc-gen-grpc-kotlin:1.2.1:jdk7@jar"
         }
     }

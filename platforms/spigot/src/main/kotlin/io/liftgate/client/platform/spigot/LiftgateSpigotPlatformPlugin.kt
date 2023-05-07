@@ -1,15 +1,10 @@
 package io.liftgate.client.platform.spigot
 
-import com.github.shynixn.mccoroutine.bukkit.asyncDispatcher
-import com.github.shynixn.mccoroutine.bukkit.launch
 import io.liftgate.client.LiftgateClient
 import io.liftgate.client.LiftgateClientConfig
 import io.liftgate.client.LiftgateHeartbeatService
 import io.liftgate.client.RegistrationInfo
 import io.liftgate.client.impl.LiftgateAsyncClient
-import io.liftgate.client.impl.LiftgateCoroutineClient
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.withContext
 import org.bukkit.Bukkit
 import org.bukkit.plugin.java.JavaPlugin
 

@@ -1,5 +1,6 @@
 package io.liftgate.server.provision
 
+import io.liftgate.server.execution.ExecutionUtilities
 import java.io.File
 
 /**
@@ -19,9 +20,11 @@ data class ProvisionedServer(
     fun kill()
     {
         // TODO: actually use the stop command
-        Runtime.getRuntime()
-            .exec("kill \$(lsof -t -i:$port)")
-            .waitFor()
+        ExecutionUtilities
+            .runScript(
+                "kill \$(lsof -t -i:$port)",
+                directory
+            )
 
         this.directory.deleteRecursively()
     }

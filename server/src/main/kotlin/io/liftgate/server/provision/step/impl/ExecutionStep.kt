@@ -1,5 +1,6 @@
 package io.liftgate.server.provision.step.impl
 
+import io.liftgate.server.execution.ExecutionUtilities
 import io.liftgate.server.models.server.ServerTemplate
 import io.liftgate.server.provision.step.ServerProvisionStep
 import java.io.File
@@ -28,26 +29,10 @@ object ExecutionStep : ServerProvisionStep
             }
 
         val command = "${template.executions.startCommand} ${replacedArguments.joinToString(" ")}"
-        val tempFile = "startup-${UUID.randomUUID()}.sh"
-
-        val startup = File(containerDirectory, tempFile)
-            .apply {
-                createNewFile()
-                writeBytes(
-                    """
-                        #!/bin/bash
-                        cd ${containerDirectory.absolutePath}
-                        screen -dmS $containerUid bash -l -c '$command; exec bash'
-                    """.trimIndent().encodeToByteArray()
-                )
-            }
-
-        Runtime.getRuntime()
-            .exec("chmod -R 777 ${startup.absolutePath}")
-            .waitFor()
-
-        Runtime.getRuntime()
-            .exec("sh ${startup.absolutePath}")
-            .waitFor()
+        ExecutionUtilities
+            .runScript(
+                "screen -dmS $containerUid bash -l -c '$command; exec bash'",
+                containerDirectory
+            )
     }
 }

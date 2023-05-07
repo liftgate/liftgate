@@ -1,7 +1,6 @@
 package io.liftgate.server.provision
 
 import io.liftgate.server.execution.ExecutionUtilities
-import io.liftgate.server.server.ServerTemplateHandler
 import java.io.File
 
 /**
@@ -20,24 +19,19 @@ data class ProvisionedServer(
 
     fun kill()
     {
-        val shutdown = ServerTemplateHandler
-            .findTemplateById(template)
-            ?.executions?.shutdown
+        val matching = File("/run/screen/S-root")
+            .listFiles { _, name ->
+                name.contains(id)
+            }
+
+        val match = matching?.firstOrNull()?.absolutePath ?: return
 
         ExecutionUtilities
             .runScript(
                 """
-                    ${
-                        if (shutdown != null)
-                        {
-                            "screen -X -S $id $shutdown"
-                        } else
-                        {
-                            "kill \$(lsof -t -i:$port)"
-                        }
-                    }
+                    kill $(lsof -t -i:$port)
                     rm -rf ${this.directory.absolutePath}
-                    screen -X -S $id exit
+                    rm $match
                 """.trimIndent(),
                 directory
             )

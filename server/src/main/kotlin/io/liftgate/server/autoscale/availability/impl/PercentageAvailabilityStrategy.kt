@@ -12,17 +12,15 @@ import io.liftgate.server.provision.ProvisionedServers
  */
 class PercentageAvailabilityStrategy : AutoScaleAvailabilityStrategy
 {
-    private val desiredCapacityRatio = 50.0F
-
     /**
      * Player counts often fluctuate regularly. We have a
      * 10% threshold to prevent provision/deprovision spams
-     * when the desired ratio isn't EXACTLY [desiredCapacityRatio].
+     * when the desired ratio isn't EXACTLY [desiredRatio].
      */
-    private val capacityThreshold = 10.0F
-
     override fun scale(
-        servers: List<RegisteredServer>
+        servers: List<RegisteredServer>,
+        desiredRatio: Double,
+        ratioThreshold: Double
     ): Pair<AutoScaleResult, Int>
     {
         val provisioned = servers
@@ -56,15 +54,15 @@ class PercentageAvailabilityStrategy : AutoScaleAvailabilityStrategy
 
         if (
             // ensure ratio is within threshold to maintain system
-            percentageFull <= desiredCapacityRatio + capacityThreshold &&
-            percentageFull >= desiredCapacityRatio - capacityThreshold
+            percentageFull <= desiredRatio + ratioThreshold &&
+            percentageFull >= desiredRatio - ratioThreshold
         )
         {
             logger.info("maintaining due to desired ratio within threshold ($percentageFull)")
             return Pair(AutoScaleResult.Maintain, 0)
         }
 
-        if (percentageFull > desiredCapacityRatio + capacityThreshold)
+        if (percentageFull > desiredRatio + ratioThreshold)
         {
             var requiredRatio: Float
             var serversDesired = 0
@@ -74,7 +72,7 @@ class PercentageAvailabilityStrategy : AutoScaleAvailabilityStrategy
                 serversDesired += 1
                 requiredRatio = (onlinePlayers / (maxPlayers + (maxPlayersAvg * serversDesired))) * 100.0F
             } while (
-                requiredRatio > desiredCapacityRatio + capacityThreshold
+                requiredRatio > desiredRatio + ratioThreshold
             )
 
             logger.info("scaling up to go below threshold maximum ($percentageFull -> $requiredRatio, $serversDesired)")
@@ -84,7 +82,7 @@ class PercentageAvailabilityStrategy : AutoScaleAvailabilityStrategy
             )
         }
 
-        if (percentageFull < desiredCapacityRatio - capacityThreshold)
+        if (percentageFull < desiredRatio - ratioThreshold)
         {
             var requiredRatio: Float
             var desiredDeProvisions = 0
@@ -94,12 +92,12 @@ class PercentageAvailabilityStrategy : AutoScaleAvailabilityStrategy
                 desiredDeProvisions += 1
                 requiredRatio = (onlinePlayers / (maxPlayers - (maxPlayersAvg * desiredDeProvisions))) * 100.0F
             } while (
-                requiredRatio > desiredCapacityRatio + capacityThreshold
+                requiredRatio > desiredRatio + ratioThreshold
             )
 
-            if (requiredRatio < desiredCapacityRatio - capacityThreshold)
+            if (requiredRatio < desiredRatio - ratioThreshold)
             {
-                logger.info("maintaining as removing server will go below threshold minimum of ${desiredCapacityRatio - capacityThreshold}% when current is $percentageFull% and the desired ratio is $requiredRatio%")
+                logger.info("maintaining as removing server will go below threshold minimum of ${desiredRatio - ratioThreshold}% when current is $percentageFull% and the desired ratio is $requiredRatio%")
                 return Pair(AutoScaleResult.Maintain, 0)
             }
 

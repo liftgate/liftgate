@@ -51,17 +51,29 @@ class AutoScaleService(
     {
         if (job != null)
         {
-            when (job!!.result)
-            {
-                AutoScaleResult.ScaleUp ->
-                {
-                    // TODO: determine scale-up progress
-                }
-                AutoScaleResult.ScaleDown ->
-                {
+            logger.info("${job!!.result.name} job in progress")
+            val remaining = job!!.monitored
+                .count {
+                    val server = ServerHandler
+                        .findServerByServerId(it)
 
+                    if (job!!.result == AutoScaleResult.ScaleUp)
+                        server == null else server != null
                 }
-                else -> {}
+
+            if (remaining <= 0)
+            {
+                logger.info("${job!!.result.name} job completed")
+                job = null
+            } else
+            {
+                logger.info(
+                    "Job progress: ${
+                        "%.2f".format(
+                            ((job!!.monitored.size - remaining) / job!!.monitored.size) * 100.0f
+                        )
+                    }%"
+                )
             }
             return
         }
@@ -74,7 +86,11 @@ class AutoScaleService(
                 ProvisionedServers.servers.find { it.id == registered.serverId }
             }
 
-        val strategy = availability.scale(servers)
+        val strategy = availability.scale(
+            servers,
+            template.desiredMetricRatio,
+            template.metricRatioThreshold
+        )
 
         when (strategy.first)
         {

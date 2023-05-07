@@ -13,7 +13,9 @@ data class AutoScaleTemplate(
     val scaleUpMax: Int,
     val autoStart: Boolean,
     val availabilityStrategy: String,
-    val propertyChoiceScheme: String
+    val propertyChoiceScheme: String,
+    val desiredMetricRatio: Double = 50.0,
+    val metricRatioThreshold: Double = 10.0,
 )
 {
     var startedAutoScale = false

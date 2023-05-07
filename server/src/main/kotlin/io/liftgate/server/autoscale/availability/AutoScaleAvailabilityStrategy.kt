@@ -10,5 +10,9 @@ import io.liftgate.server.provision.ProvisionedServer
  */
 interface AutoScaleAvailabilityStrategy
 {
-    fun scale(servers: List<RegisteredServer>): Pair<AutoScaleResult, Int>
+    fun scale(
+        servers: List<RegisteredServer>,
+        desiredRatio: Double,
+        ratioThreshold: Double
+    ): Pair<AutoScaleResult, Int>
 }

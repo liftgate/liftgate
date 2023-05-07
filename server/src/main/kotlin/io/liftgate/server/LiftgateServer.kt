@@ -47,9 +47,8 @@ object LiftgateServer
                         step.perform(engine)
                     }
                     .onFailure {
-                        logger.log(
-                            Level.SEVERE, "[Startup] Failed on step: ${step.javaClass.name}", it
-                        )
+                        logger.info("[Startup] Failed on step: ${step.javaClass.name}")
+                        it.printStackTrace()
                         exitProcess(0)
                     }
             }

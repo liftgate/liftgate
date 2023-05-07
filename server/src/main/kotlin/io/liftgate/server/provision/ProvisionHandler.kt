@@ -77,7 +77,8 @@ object ProvisionHandler : Runnable, StartupStep
                 kotlin.runCatching {
                     step.runStep(template, uid, port, defaultMeta)
                 }.onFailure { throwable ->
-                    logger.log(Level.SEVERE, "Failed provision step (${step.javaClass.name})", throwable)
+                    logger.info("Failed provision step (${step.javaClass.name})")
+                    throwable.printStackTrace()
 
                     defaultMeta["directory"]?.apply {
                         val directory = File(this)

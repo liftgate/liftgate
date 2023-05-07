@@ -43,7 +43,8 @@ class AutoScaleService(
     {
         runCatching(::caughtRun)
             .onFailure {
-                logger.log(Level.SEVERE, "Could not autoscale", it)
+                logger.info("Could not autoscale")
+                it.printStackTrace()
             }
     }
 

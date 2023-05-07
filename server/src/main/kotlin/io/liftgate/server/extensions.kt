@@ -6,8 +6,6 @@ import java.net.InetSocketAddress
 import java.net.Socket
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
-import java.util.logging.Logger
-
 
 /**
  * @author GrowlyX
@@ -15,7 +13,15 @@ import java.util.logging.Logger
  */
 lateinit var config: LiftgateServerConfig
 
-val logger = Logger.getGlobal()!!
+object LoggerInternal
+{
+    fun info(message: String)
+    {
+        println(message)
+    }
+}
+
+val logger = LoggerInternal
 
 val resources = mutableListOf<Resource>()
 val templates = mutableListOf<ServerTemplate>()

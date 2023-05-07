@@ -97,8 +97,20 @@ class AutoScaleService(
         {
             AutoScaleResult.ScaleDown ->
             {
+                var amount = strategy.second
+
+                if (provisioned.size - amount < template.minimumReplicas)
+                {
+                    amount = provisioned.size - template.minimumReplicas
+
+                    if (amount == 0)
+
+
+                    logger.info("Hit scale-down provision limit of ${template.scaleUpMax}, updating amount to match minimum replica limit.")
+                }
+
                 val deProvisioned = provisioned
-                    .takeLast(strategy.second)
+                    .takeLast(amount)
                     .onEach {
                         ProvisionedServers.deProvision(it)
                     }
@@ -111,10 +123,16 @@ class AutoScaleService(
 
             AutoScaleResult.ScaleUp ->
             {
-                if (template.scaleUpMax == provisioned.size)
+                var amount = strategy.second
+
+                if (provisioned.size + amount > template.scaleUpMax)
                 {
-                    logger.info("Hit scale-up provision limit of ${template.scaleUpMax}, skipping requested scale-up.")
-                    return
+                    amount = template.scaleUpMax - provisioned.size
+
+                    if (amount == 0)
+                        return
+
+                    logger.info("Hit scale-up provision limit of ${template.scaleUpMax}, updating amount to match provision limit.")
                 }
 
                 val template = ServerTemplateHandler
@@ -126,7 +144,7 @@ class AutoScaleService(
                 logger.info("[AutoScale] Provisioning ${strategy.second} new servers for auto-scale")
                 val monitoredReplicas = mutableListOf<String>()
 
-                for (i in 1..strategy.second)
+                for (i in 1..amount)
                 {
                     val replicaUid = ProvisionHandler.provision(
                         template,

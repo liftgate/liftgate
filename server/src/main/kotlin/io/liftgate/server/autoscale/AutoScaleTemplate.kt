@@ -11,6 +11,7 @@ data class AutoScaleTemplate(
     val group: String,
     val template: String,
     val scaleUpMax: Int,
+    val minimumReplicas: Int,
     val autoStart: Boolean,
     val availabilityStrategy: String,
     val propertyChoiceScheme: String,

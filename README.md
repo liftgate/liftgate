@@ -1,3 +1,5 @@
+<p align="center"><img src=".github/assets/logo.png" alt="Liftgate" width="96" height="96"></p>
+
 # Liftgate
 
 Open-source full-stack application hosting. Connect a GitHub repository and Liftgate builds a container image on every push and runs it on Kubernetes, with a hostname on `liftgate.app`, custom domains, environment variables, logs and rollbacks. The same software runs [Liftgate Cloud](https://liftgate.dev) and self-hosted installs.

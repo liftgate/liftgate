@@ -6,6 +6,7 @@ version: 0.1.0
 appVersion: "0.1.0"
 kubeVersion: ">=1.30.0-0"
 home: https://liftgate.dev
+icon: https://raw.githubusercontent.com/liftgate/liftgate/main/.github/assets/logo.png
 sources:
   - https://github.com/liftgate/liftgate
 maintainers:

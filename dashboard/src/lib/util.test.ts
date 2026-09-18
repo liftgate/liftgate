@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { shortSha, slugify, timeAgo } from "./util.ts";
+import { safeNext, shortSha, slugify, timeAgo } from "./util.ts";
 
 test("slugify lowercases and collapses separators", () => {
   assert.equal(slugify("  Acme Web App!  "), "acme-web-app");
@@ -19,4 +19,9 @@ test("timeAgo buckets by age", () => {
 
 test("shortSha keeps seven characters", () => {
   assert.equal(shortSha("0123456789abcdef"), "0123456");
+});
+
+test("safeNext keeps only same-origin relative paths", () => {
+  assert.equal(safeNext("/acme/web?tab=logs"), "/acme/web?tab=logs");
+  for (const value of ["//evil.dev", "/\\evil.dev", "/\t/evil.dev", "/\n/evil.dev", "https://evil.dev", "acme", undefined, ["/a"]]) assert.equal(safeNext(value), "/");
 });

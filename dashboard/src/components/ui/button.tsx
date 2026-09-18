@@ -17,8 +17,10 @@ type Props = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant
 export function Button({ variant, pending = false, className, children, disabled, type = "button", ...rest }: Props) {
   return (
     <button {...rest} type={type} disabled={disabled || pending} className={buttonClasses(variant, className)}>
-      {pending && <span className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" />}
+      {pending && <Spinner />}
       {children}
     </button>
   );
 }
+
+export const Spinner = () => <span aria-hidden className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" />;

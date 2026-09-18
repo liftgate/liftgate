@@ -3,32 +3,45 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { useAction, useApi } from "@/lib/hooks";
-import type { Project } from "@/lib/types";
+import type { GitConnection, Project } from "@/lib/types";
 import { formValues } from "@/lib/util";
 import { Loaded } from "@/components/loaded";
 import { NameSlugFields } from "@/components/name-slug-fields";
 import { PageHeader } from "@/components/page-header";
-import { Button } from "@/components/ui/button";
+import { ProviderLink } from "@/components/provider";
+import { Button, buttonClasses } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Field, FormError, Input } from "@/components/ui/input";
-import { TableSkeleton } from "@/components/ui/skeleton";
+import { Skeleton, TableSkeleton } from "@/components/ui/skeleton";
 import { Cell, Row, Table } from "@/components/ui/table";
 
 export function Projects({ org }: { org: string }) {
   const router = useRouter();
   const [creating, setCreating] = useState(false);
+  const [githubLost, setGithubLost] = useState(false);
   const projects = useApi<Project[]>(`/orgs/${org}/projects`);
+  const connections = useApi<GitConnection[]>(creating && "/me/connections");
+  const needsGithub = githubLost || connections.data?.every((c) => c.provider !== "github");
   const create = useAction(async (form: HTMLFormElement) => {
     const v = formValues(form);
-    const project = await api<Project>(`/orgs/${org}/projects`, {
-      method: "POST",
-      body: { slug: v.slug, name: v.name, repoFullName: v.repoFullName },
-    });
-    router.push(`/${org}/${project.slug}`);
+    try {
+      const project = await api<Project>(`/orgs/${org}/projects`, {
+        method: "POST",
+        body: { slug: v.slug, name: v.name, repoFullName: v.repoFullName },
+      });
+      router.push(`/${org}/${project.slug}`);
+    } catch (e) {
+      if (!(e instanceof ApiError && e.code === "github_not_connected")) throw e;
+      setGithubLost(true);
+    }
   });
+  const close = () => {
+    setCreating(false);
+    setGithubLost(false);
+  };
   const newProject = (
     <Button variant="primary" onClick={() => setCreating(true)}>
       New project
@@ -36,7 +49,18 @@ export function Projects({ org }: { org: string }) {
   );
   return (
     <div className="flex flex-col gap-8">
-      <PageHeader title="Projects" description="Each project tracks one GitHub repository." actions={newProject} />
+      <PageHeader
+        title="Projects"
+        description="Each project tracks one GitHub repository."
+        actions={
+          <>
+            <Link href={`/${org}/settings/sso`} className={buttonClasses("ghost")}>
+              SAML SSO
+            </Link>
+            {newProject}
+          </>
+        }
+      />
       <Loaded query={projects} skeleton={<TableSkeleton />}>
         {(list) =>
           list.length === 0 ? (
@@ -58,7 +82,7 @@ export function Projects({ org }: { org: string }) {
           )
         }
       </Loaded>
-      <Dialog open={creating} title="New project" onClose={() => setCreating(false)}>
+      <Dialog open={creating} title="New project" onClose={close}>
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -67,13 +91,27 @@ export function Projects({ org }: { org: string }) {
           className="flex flex-col gap-4"
         >
           <NameSlugFields />
-          <Field label="GitHub repository" hint="owner/name, with the GitHub App installed and push access on your account">
-            <Input name="repoFullName" required pattern="[^\/\s]+\/[^\/\s]+" placeholder="acme/web" className="font-mono" />
-          </Field>
+          {needsGithub ? (
+            <EmptyState
+              title="Connect GitHub to import a repository"
+              description="Liftgate reads your repositories through your GitHub connection."
+              action={
+                <ProviderLink provider="github" intent="connect" next={`/${org}`}>
+                  Connect GitHub
+                </ProviderLink>
+              }
+            />
+          ) : connections.loading ? (
+            <Skeleton className="h-16" />
+          ) : (
+            <Field label="GitHub repository" hint="owner/name, with the GitHub App installed and push access on your account">
+              <Input name="repoFullName" required pattern="[^\/\s]+\/[^\/\s]+" placeholder="acme/web" className="font-mono" />
+            </Field>
+          )}
           <FormError message={create.error} />
           <div className="flex justify-end gap-2">
-            <Button onClick={() => setCreating(false)}>Cancel</Button>
-            <Button type="submit" variant="primary" pending={create.pending}>
+            <Button onClick={close}>Cancel</Button>
+            <Button type="submit" variant="primary" pending={create.pending} disabled={needsGithub || connections.loading}>
               Create project
             </Button>
           </div>

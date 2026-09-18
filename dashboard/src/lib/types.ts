@@ -1,6 +1,5 @@
 export type User = {
   id: string;
-  githubId: number;
   login: string;
   name: string | null;
   email: string | null;
@@ -92,3 +91,29 @@ export type Domain = {
   verifiedAt: string | null;
   certificateStatus: string;
 };
+
+export type OAuthProvider = "github" | "google" | "gitlab" | "bitbucket";
+
+export type IdentityProvider = OAuthProvider | "email" | "saml";
+
+export type AuthProviders = { oauth: OAuthProvider[]; passkey: boolean; email: boolean; sso: boolean };
+
+export type Identity = { id: string; provider: IdentityProvider; email: string | null; createdAt: string; lastUsedAt: string | null };
+
+export type Passkey = { id: string; name: string; createdAt: string; lastUsedAt: string | null };
+
+export type GitConnection = { provider: "github"; accountLogin: string; connectedAt: string };
+
+export type OrgRole = "owner" | "admin" | "member";
+
+export type SsoConnection = {
+  idpEntityId: string;
+  idpSsoUrl: string;
+  idpCertificate: string;
+  emailDomains: string[];
+  defaultRole: OrgRole;
+  verifiedDomains: string[];
+  verificationToken: string;
+};
+
+export type SsoServiceProvider = { entityId: string; acsUrl: string };

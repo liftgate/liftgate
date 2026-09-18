@@ -10,12 +10,14 @@ export class ApiError extends Error {
 
 export const apiUrl = () => process.env.NEXT_PUBLIC_API_URL ?? "";
 
+export const apiHref = (path: string) => `${apiUrl()}/api/v1${path}`;
+
 type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 export async function api<T>(path: string, init: { method?: Method; body?: unknown } = {}): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(`${apiUrl()}/api/v1${path}`, {
+    res = await fetch(apiHref(path), {
       method: init.method ?? "GET",
       credentials: "include",
       headers: init.body === undefined ? undefined : { "content-type": "application/json" },
@@ -25,7 +27,7 @@ export async function api<T>(path: string, init: { method?: Method; body?: unkno
     throw new ApiError(0, "unreachable", "The Liftgate API is unreachable. Check that the control plane is running.");
   }
   if (res.status === 401 && typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
-    window.location.replace("/login");
+    window.location.replace(`/login?next=${encodeURIComponent(window.location.pathname)}`);
   }
   const text = await res.text();
   if (!res.ok) throw toError(res.status, text);

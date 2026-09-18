@@ -4,7 +4,7 @@ COPY gradlew settings.gradle.kts build.gradle.kts ./
 COPY gradle gradle
 RUN ./gradlew --no-daemon --version
 COPY src src
-RUN ./gradlew --no-daemon installDist
+RUN ./gradlew --no-daemon -Pkotlin.compiler.execution.strategy=in-process installDist
 
 FROM eclipse-temurin:21-jre
 RUN groupadd --system --gid 10001 liftgate && useradd --system --uid 10001 --gid liftgate --shell /usr/sbin/nologin liftgate

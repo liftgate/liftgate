@@ -71,10 +71,16 @@ jobs:
       - name: install liftgate
         run: |
           helm dependency update charts/liftgate
+          openssl genrsa -traditional -out github-app.pem 2048
           helm upgrade --install liftgate charts/liftgate \
             --namespace "$NAMESPACE" --create-namespace \
             --values e2e/values.yaml \
-            --set secrets.masterKey="$(openssl rand -base64 32)"
+            --set secrets.masterKey="$(openssl rand -base64 32)" \
+            --set-file github.privateKey=github-app.pem \
+            --set-string github.appId=1 \
+            --set github.clientId=e2e \
+            --set github.clientSecret=e2e \
+            --set github.webhookSecret=e2e
       - name: control plane is ready
         run: |
           kubectl -n "$NAMESPACE" rollout status deployment/liftgate-control-plane --timeout=15m

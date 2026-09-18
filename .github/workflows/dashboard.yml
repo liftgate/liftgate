@@ -7,9 +7,6 @@ on:
       - dashboard/**
       - .github/workflows/dashboard.yml
   pull_request:
-    paths:
-      - dashboard/**
-      - .github/workflows/dashboard.yml
 
 permissions:
   contents: read

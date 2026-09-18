@@ -7,9 +7,6 @@ on:
       - control-plane/**
       - .github/workflows/control-plane.yml
   pull_request:
-    paths:
-      - control-plane/**
-      - .github/workflows/control-plane.yml
 
 permissions:
   contents: read

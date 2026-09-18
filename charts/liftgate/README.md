@@ -19,6 +19,9 @@ MASTER_KEY=$(openssl rand -base64 32)
 `secrets.masterKey` encrypts every environment variable stored by Liftgate. Losing it makes
 them unrecoverable; back it up.
 
+Google, GitLab, Bitbucket, email codes, passkeys and SAML sign-in are optional; see
+[Sign-in providers](#sign-in-providers).
+
 ## Install
 
 ```sh
@@ -92,6 +95,138 @@ nats:
 
 PostgreSQL 16 or newer; NATS 2.10 or newer with JetStream enabled.
 
+## Sign-in providers
+
+GitHub sign-in always works through the GitHub App above. Every other method is optional and
+turns on when its values are set; the login page shows only the enabled ones. Client IDs go
+to the ConfigMap, client secrets and the SMTP URL to the Secret, and empty values are left
+out. Callback URLs are built from `publicUrl` and must match character for character.
+
+A user who signs in with a new method is linked to an existing account only when the
+provider reports the email address as verified and exactly one account has it. Anyone can add
+or remove methods under Account in the dashboard; the last one cannot be removed.
+
+### Google
+
+1. In the Google Cloud console, open Google Auth Platform and fill in Branding and Audience
+   (External for anyone with a Google account, Internal for a Workspace organisation only).
+2. Under Clients, choose Create client, application type Web application.
+3. Add the authorized redirect URI `<publicUrl>/api/v1/auth/google/callback`.
+4. Copy the client ID and secret; Google shows the secret only once.
+5. For an External app, open Audience and choose Publish app. Google starts new apps in
+   Testing, where only listed test users can sign in and everyone else sees "access blocked".
+   The `openid`, `email` and `profile` scopes need no verification. To stay in Testing, add
+   every account that should sign in as a test user.
+
+```yaml
+google:
+  clientId: 1234567890-abc.apps.googleusercontent.com
+  clientSecret: GOCSPX-...
+```
+
+### GitLab
+
+Create an application under your avatar, Edit profile, Applications (or a group's Settings,
+Applications, or Admin, Applications on a self-managed instance):
+
+- Redirect URI: `<publicUrl>/api/v1/auth/gitlab/callback`
+- Confidential: checked
+- Scopes: `read_user` only
+
+```yaml
+gitlab:
+  url: https://gitlab.example.com
+  clientId: <Application ID>
+  clientSecret: <Secret>
+```
+
+Leave `url` empty for gitlab.com.
+
+### Bitbucket
+
+In Bitbucket Cloud open the workspace, Settings, Workspace settings, OAuth consumers, Add
+consumer:
+
+- Callback URL: `<publicUrl>/api/v1/auth/bitbucket/callback`
+- Permissions: Account, Email and Account, Read
+
+```yaml
+bitbucket:
+  clientId: <Key>
+  clientSecret: <Secret>
+```
+
+### Email codes
+
+Liftgate mails a six-digit code valid for ten minutes. It needs an SMTP server and a sender
+address, and turns on only when both are set. `smtp://` connects with STARTTLS (usually port
+587), `smtps://` with implicit TLS (port 465). Percent-encode reserved characters in the user
+name and password (`@` becomes `%40`).
+
+A self-hosted server such as Postfix, Stalwart or Maddy, with a mailbox for Liftgate:
+
+```yaml
+email:
+  smtpUrl: smtp://liftgate%40example.com:password@mail.example.com:587
+  from: Liftgate <login@example.com>
+```
+
+A hosted provider on its free tier, here Resend. Verify the sending domain in Resend first;
+the user name is `resend` and the password is an API key:
+
+```yaml
+email:
+  smtpUrl: smtps://resend:re_xxxxxxxx@smtp.resend.com:465
+  from: Liftgate <login@example.com>
+```
+
+The control plane pods need outbound access to the SMTP port. Publish SPF and DKIM for the
+sending domain or the codes land in spam.
+
+### Passkeys
+
+Passkeys need no setup and are always on. The relying party ID defaults to the host of
+`dashboardUrl`; `passkeys.rpId` may instead name a parent domain of it (`example.com` for
+`app.example.com`). A passkey is bound to the relying party ID it was created under, so
+changing `rpId` or the dashboard host later strands every existing passkey.
+`passkeys.rpName` is the name the browser shows, `Liftgate` by default.
+
+### SAML single sign-on
+
+SAML is configured per organisation by an owner in the dashboard at
+`/<org>/settings/sso`, not in the chart. The page shows two URLs to give the identity
+provider (Okta, Microsoft Entra ID, Google Workspace, Keycloak and others):
+
+- SP entity ID and metadata URL: `<publicUrl>/api/v1/auth/sso/<org>/metadata`. Providers that
+  import metadata can read everything from it.
+- Assertion Consumer Service URL: `<publicUrl>/api/v1/auth/sso/<org>/acs`, HTTP-POST binding.
+
+Configure the SAML application in the identity provider so that it:
+
+- uses the metadata URL above as the audience (entity ID) and the ACS URL as the recipient;
+- signs the response, the assertion or both;
+- sends the user's email address as the NameID, format `emailAddress`;
+- has clocks within three minutes of the cluster.
+
+Then enter the provider's side in Liftgate: its entity ID (issuer), its single sign-on URL
+for the HTTP-Redirect binding, its X.509 signing certificate in PEM, the email domains the
+organisation owns, and the role new members get (`member` or `admin`). Owners can also use
+`PUT /api/v1/orgs/<org>/sso`.
+
+Each email domain must then be verified. The page lists a TXT record per domain: publish the
+connection's verification token at `_liftgate.<domain>` and choose Verify domains (or
+`POST /api/v1/orgs/<org>/sso/verify`). A domain verified by one organisation cannot be
+verified by another.
+
+Members choose Continue with SAML SSO on the login page and enter their work email;
+Liftgate finds the organisation by a verified email domain. Until a domain is verified, the
+login page cannot find it, and a sign-in started at `<publicUrl>/api/v1/auth/sso/<org>/login`
+creates a separate account instead of joining an existing account with the same email. Sign-in
+must start from Liftgate and finish in the same browser:
+IdP-initiated logins from a provider's app dashboard are rejected because every response has
+to answer a request Liftgate sent. Only emails in the configured domains are accepted, and a
+first sign-in adds the user to the organisation with the default role.
+
 ## Values
 
 | Key | Default | Description |
@@ -102,6 +237,7 @@ PostgreSQL 16 or newer; NATS 2.10 or newer with JetStream enabled.
 | `controlPlane.tag` | `0.1.0` | |
 | `controlPlane.replicas.{api,reconciler,builder,meter}` | `3,2,2,1` | Replicas per role in `ha` |
 | `controlPlane.logLevel` | `INFO` | `LIFTGATE_LOG_LEVEL` |
+| `controlPlane.trustedProxies` | `1` | `LIFTGATE_TRUSTED_PROXIES`: how many proxies append to `X-Forwarded-For` before the API. Rate limits read the client IP this many entries from the right. Count the gateway and every proxy in front of it, each of which must keep the incoming header (Caddy needs `trusted_proxies`); `0` uses the connection address |
 | `controlPlane.javaOpts` | `-XX:MaxRAMPercentage=75.0` | `JAVA_TOOL_OPTIONS` |
 | `controlPlane.resources` | 250m / 768Mi, limit 1536Mi | |
 | `dashboard.image` | `ghcr.io/liftgate/dashboard` | |
@@ -130,6 +266,17 @@ PostgreSQL 16 or newer; NATS 2.10 or newer with JetStream enabled.
 | `github.clientSecret` | `""` | `LIFTGATE_GITHUB_CLIENT_SECRET` |
 | `github.webhookSecret` | `""` | `LIFTGATE_GITHUB_WEBHOOK_SECRET` |
 | `github.privateKey` | `""` | `LIFTGATE_GITHUB_APP_PRIVATE_KEY`, PEM |
+| `google.clientId` | `""` | `LIFTGATE_GOOGLE_CLIENT_ID` |
+| `google.clientSecret` | `""` | `LIFTGATE_GOOGLE_CLIENT_SECRET`, Secret |
+| `gitlab.url` | `""` | `LIFTGATE_GITLAB_URL`; empty means `https://gitlab.com` |
+| `gitlab.clientId` | `""` | `LIFTGATE_GITLAB_CLIENT_ID` |
+| `gitlab.clientSecret` | `""` | `LIFTGATE_GITLAB_CLIENT_SECRET`, Secret |
+| `bitbucket.clientId` | `""` | `LIFTGATE_BITBUCKET_CLIENT_ID` |
+| `bitbucket.clientSecret` | `""` | `LIFTGATE_BITBUCKET_CLIENT_SECRET`, Secret |
+| `email.smtpUrl` | `""` | `LIFTGATE_SMTP_URL`, Secret; `smtp://` for STARTTLS, `smtps://` for implicit TLS |
+| `email.from` | `""` | `LIFTGATE_EMAIL_FROM`, e.g. `Liftgate <login@example.com>` |
+| `passkeys.rpId` | `""` | `LIFTGATE_WEBAUTHN_RP_ID`; empty means the host of `dashboardUrl` |
+| `passkeys.rpName` | `""` | `LIFTGATE_WEBAUTHN_RP_NAME`; empty means `Liftgate` |
 | `secrets.masterKey` | `""` | `LIFTGATE_SECRETS_MASTER_KEY`, base64 of 32 bytes |
 | `registry` | `registry.liftgate.internal` | `LIFTGATE_REGISTRY` |
 | `build.image` | `ghcr.io/liftgate/build-image:latest` | `LIFTGATE_BUILD_IMAGE` |

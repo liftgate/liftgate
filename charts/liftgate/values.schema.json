@@ -13,6 +13,11 @@
     "publicUrl",
     "dashboardUrl",
     "github",
+    "google",
+    "gitlab",
+    "bitbucket",
+    "email",
+    "passkeys",
     "secrets",
     "registry",
     "build",
@@ -32,7 +37,7 @@
     "controlPlane": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["image", "tag", "replicas", "logLevel", "javaOpts", "resources"],
+      "required": ["image", "tag", "replicas", "logLevel", "trustedProxies", "javaOpts", "resources"],
       "properties": {
         "image": { "type": "string", "minLength": 1 },
         "tag": { "type": "string", "minLength": 1 },
@@ -48,6 +53,7 @@
           }
         },
         "logLevel": { "type": "string", "enum": ["TRACE", "DEBUG", "INFO", "WARN", "ERROR"] },
+        "trustedProxies": { "type": "integer", "minimum": 0 },
         "javaOpts": { "type": "string" },
         "resources": { "type": "object" }
       }
@@ -117,6 +123,52 @@
         "clientSecret": { "type": "string" },
         "webhookSecret": { "type": "string" },
         "privateKey": { "type": "string" }
+      }
+    },
+    "google": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["clientId", "clientSecret"],
+      "properties": {
+        "clientId": { "type": "string" },
+        "clientSecret": { "type": "string" }
+      }
+    },
+    "gitlab": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "clientId", "clientSecret"],
+      "properties": {
+        "url": { "type": "string", "pattern": "^(https?://.*)?$" },
+        "clientId": { "type": "string" },
+        "clientSecret": { "type": "string" }
+      }
+    },
+    "bitbucket": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["clientId", "clientSecret"],
+      "properties": {
+        "clientId": { "type": "string" },
+        "clientSecret": { "type": "string" }
+      }
+    },
+    "email": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["smtpUrl", "from"],
+      "properties": {
+        "smtpUrl": { "type": "string", "pattern": "^(smtps?://.*)?$" },
+        "from": { "type": "string" }
+      }
+    },
+    "passkeys": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rpId", "rpName"],
+      "properties": {
+        "rpId": { "type": "string", "pattern": "^[a-z0-9.-]*$" },
+        "rpName": { "type": "string" }
       }
     },
     "secrets": {

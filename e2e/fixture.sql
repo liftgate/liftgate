@@ -1,5 +1,8 @@
-insert into users (id, github_id, login) values
-    ('00000000-0000-4000-8000-000000000001', 1, 'e2e');
+insert into users (id, login) values
+    ('00000000-0000-4000-8000-000000000001', 'e2e');
+
+insert into identities (id, user_id, provider, subject) values
+    ('00000000-0000-4000-8000-000000000009', '00000000-0000-4000-8000-000000000001', 'github', '1');
 
 insert into organizations (id, slug, name) values
     ('00000000-0000-4000-8000-000000000002', 'e2e', 'End to end');

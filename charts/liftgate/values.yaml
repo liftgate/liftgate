@@ -11,6 +11,7 @@ controlPlane:
     builder: 2
     meter: 1
   logLevel: INFO
+  trustedProxies: 1
   javaOpts: -XX:MaxRAMPercentage=75.0
   resources:
     requests:
@@ -69,6 +70,27 @@ github:
   clientSecret: ""
   webhookSecret: ""
   privateKey: ""
+
+google:
+  clientId: ""
+  clientSecret: ""
+
+gitlab:
+  url: ""
+  clientId: ""
+  clientSecret: ""
+
+bitbucket:
+  clientId: ""
+  clientSecret: ""
+
+email:
+  smtpUrl: ""
+  from: ""
+
+passkeys:
+  rpId: ""
+  rpName: ""
 
 secrets:
   masterKey: ""

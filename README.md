@@ -8,6 +8,7 @@ Open-source full-stack application hosting. Connect a GitHub repository and Lift
 
 ## What it does
 
+- Signs users in with GitHub, Google, GitLab, Bitbucket, passkeys, emailed one-time codes or an organisation's SAML identity provider.
 - Builds from GitHub on push with BuildKit, using your Dockerfile or a Railpack build plan when there is none.
 - Runs web services, workers and cron jobs on Kubernetes with a platform hostname, verified custom domains and Let's Encrypt certificates.
 - Keeps environment variables encrypted at rest with AES-256-GCM and injects them as Kubernetes Secrets.
@@ -55,7 +56,7 @@ One Kotlin/JVM artifact runs every role; `LIFTGATE_ROLE` selects `api`, `reconci
 
 | Role | Responsibility |
 |---|---|
-| `api` | REST API under `/api/v1`, GitHub OAuth login and sessions, GitHub webhooks, WebSocket log streams, the outbox relay under leader election. |
+| `api` | REST API under `/api/v1`, sign-in and sessions, GitHub webhooks, WebSocket log streams, the outbox relay under leader election. |
 | `builder` | Turns a queued build into a Kubernetes Job that clones the commit, builds with BuildKit and pushes the image, streaming its logs. |
 | `reconciler` | Server-side applies namespaces, Deployments, CronJobs, Secrets, Services, HTTPRoutes, NetworkPolicies and Certificates, and tracks rollouts. |
 | `meter` | Queries Prometheus every minute and records CPU, memory and network usage per service. |
@@ -121,6 +122,10 @@ Liftgate signs users in and reads repositories through one GitHub App. Create it
 
 Generate a private key, then install the app on the account or organisation whose repositories you want to deploy. The App ID, client ID, client secret, webhook secret and private key go into the chart's `github` values, or into `control-plane/.env` for local development. A new project asks only for the repository name: Liftgate looks up the installation itself and accepts the repository only when the signed-in GitHub account can push to it.
 
+### Other sign-in methods
+
+Google, GitLab, Bitbucket, email codes and passkeys are optional and configured with chart values; SAML single sign-on is set up per organisation by its owner in the dashboard. `charts/liftgate/README.md` under Sign-in providers lists where to create each set of credentials and which callback URL to register. A user who signs in without GitHub connects a GitHub account from Account before importing a repository.
+
 ## Local development
 
 PostgreSQL and NATS come from Compose; the control plane and the dashboard run on the host.
@@ -139,6 +144,8 @@ set -a; . ./.env; set +a
 ```
 
 Fill in the GitHub App values and generate `LIFTGATE_SECRETS_MASTER_KEY` with `openssl rand -base64 32` before starting. The private key is multi-line; because the file is sourced by the shell, `LIFTGATE_GITHUB_APP_PRIVATE_KEY="$(cat path/to/key.pem)"` is the easiest way to set it. Any IDE run configuration that sets the same variables works too.
+
+The other sign-in methods stay off while their variables are empty. Passkeys work on `http://localhost:3000` with no setup. Quote `LIFTGATE_EMAIL_FROM` in `.env` (`LIFTGATE_EMAIL_FROM="Liftgate <login@example.com>"`), because the shell reads `<` as a redirect. OAuth providers need `http://localhost:8080/api/v1/auth/<provider>/callback` registered as an extra redirect URI.
 
 `.env.example` sets `LIFTGATE_ROLE=api` and `LIFTGATE_LEADER_ELECTION=off`, which needs no cluster. The `builder`, `reconciler` and `meter` roles (and `all`) need a kubeconfig for a cluster that has the `infra/` baseline. GitHub cannot deliver webhooks to localhost, so trigger builds with `POST /api/v1/services/{id}/deploy` (`ref` is optional and defaults to the head of the environment branch), or run a tunnel.
 

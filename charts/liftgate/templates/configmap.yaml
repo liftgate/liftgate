@@ -11,12 +11,34 @@ data:
   LIFTGATE_HAZELCAST_KUBERNETES: {{ include "liftgate.ha" . | quote }}
   LIFTGATE_PUBLIC_URL: {{ .Values.publicUrl | quote }}
   LIFTGATE_DASHBOARD_URL: {{ include "liftgate.dashboardUrl" . | quote }}
+  LIFTGATE_TRUSTED_PROXIES: {{ .Values.controlPlane.trustedProxies | quote }}
   LIFTGATE_DEPLOY_DOMAIN: {{ .Values.deployDomain | quote }}
   {{- with .Values.github.appId }}
   LIFTGATE_GITHUB_APP_ID: {{ . | quote }}
   {{- end }}
   {{- with .Values.github.clientId }}
   LIFTGATE_GITHUB_CLIENT_ID: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.google.clientId }}
+  LIFTGATE_GOOGLE_CLIENT_ID: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.gitlab.url }}
+  LIFTGATE_GITLAB_URL: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.gitlab.clientId }}
+  LIFTGATE_GITLAB_CLIENT_ID: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.bitbucket.clientId }}
+  LIFTGATE_BITBUCKET_CLIENT_ID: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.email.from }}
+  LIFTGATE_EMAIL_FROM: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.passkeys.rpId }}
+  LIFTGATE_WEBAUTHN_RP_ID: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.passkeys.rpName }}
+  LIFTGATE_WEBAUTHN_RP_NAME: {{ . | quote }}
   {{- end }}
   LIFTGATE_REGISTRY: {{ .Values.registry | quote }}
   LIFTGATE_BUILD_IMAGE: {{ .Values.build.image | quote }}

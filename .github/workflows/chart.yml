@@ -1,0 +1,38 @@
+name: chart
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - charts/**
+      - .github/workflows/chart.yml
+  pull_request:
+    paths:
+      - charts/**
+      - .github/workflows/chart.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - profile: single
+            args: --set profile=single
+          - profile: ha
+            args: --values charts/liftgate/values-ha.yaml
+    steps:
+      - uses: actions/checkout@v7
+      - uses: azure/setup-helm@v5
+        with:
+          version: v4.3.0
+      - run: helm dependency update charts/liftgate
+      - run: helm lint charts/liftgate ${{ matrix.args }}
+      - run: helm template liftgate charts/liftgate ${{ matrix.args }} > /dev/null

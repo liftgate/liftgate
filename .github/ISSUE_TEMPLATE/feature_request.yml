@@ -1,0 +1,42 @@
+name: Feature request
+description: Propose a change or an addition
+labels: [enhancement]
+body:
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - control plane
+        - dashboard
+        - Helm chart
+        - build image
+        - infra
+        - other
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What you are trying to do and what stands in the way
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What should change, as concretely as you can
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: checkboxes
+    id: roadmap
+    attributes:
+      label: Roadmap
+      options:
+        - label: I checked the roadmap in README.md and the open issues for an existing proposal
+          required: true

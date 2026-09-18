@@ -1,0 +1,56 @@
+name: Bug report
+description: Something does not behave the way the documentation says it should
+labels: [bug]
+body:
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - control plane
+        - dashboard
+        - Helm chart
+        - build image
+        - infra
+        - other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Image tag, chart version or commit sha
+      placeholder: 0.1.0 or a commit sha
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Control plane logs, build logs or browser console output. Remove tokens, secrets and private keys first.
+      render: shell
+  - type: checkboxes
+    id: security
+    attributes:
+      label: Security
+      options:
+        - label: This is not a security vulnerability. Vulnerabilities go through SECURITY.md, never through a public issue.
+          required: true

@@ -1,10 +1,16 @@
-import type { InputHTMLAttributes, ReactNode } from "react";
+import type { InputHTMLAttributes, ReactNode, TextareaHTMLAttributes } from "react";
 
-export const controlClasses =
-  "h-8 rounded-md border border-graphite-600 bg-graphite-950 px-3 text-sm text-white placeholder:text-graphite-400 focus:border-accent focus:outline-none disabled:opacity-50";
+const surfaceClasses =
+  "rounded-md border border-graphite-600 bg-graphite-950 px-3 text-sm text-white placeholder:text-graphite-400 focus:border-accent focus:outline-none disabled:opacity-50";
+
+export const controlClasses = `h-8 ${surfaceClasses}`;
 
 export function Input({ className = "", ...rest }: InputHTMLAttributes<HTMLInputElement>) {
   return <input {...rest} className={`${controlClasses} ${className}`} />;
+}
+
+export function Textarea({ className = "", ...rest }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return <textarea {...rest} className={`${surfaceClasses} py-2 ${className}`} />;
 }
 
 export function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {

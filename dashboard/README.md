@@ -6,9 +6,12 @@ The web UI for the Liftgate control plane: Next.js 16 (App Router), React 19, Ty
 
 | Route | Content |
 |---|---|
-| `/login` | GitHub sign-in |
+| `/login` | Sign in with GitHub, Google, GitLab, Bitbucket, a passkey or an emailed code |
+| `/login/sso` | SAML sign-in: finds the organization by email domain |
+| `/account` | Profile, sign-in methods, passkeys, git connections |
 | `/` | Redirects to the first organization, or creates one |
 | `/[org]` | Projects |
+| `/[org]/settings/sso` | SAML connection, owners only |
 | `/[org]/[project]` | Environments and their services |
 | `/[org]/[project]/[service]` | Deployments, builds with live logs, environment variables, domains, settings |
 

@@ -11,7 +11,7 @@ import { Select } from "./ui/select";
 
 export function Nav() {
   const router = useRouter();
-  const onLogin = usePathname() === "/login";
+  const onLogin = usePathname().startsWith("/login");
   const { org, project, service } = useParams<{ org?: string; project?: string; service?: string }>();
   const me = useApi<User>(onLogin ? null : "/me");
   const orgs = useApi<Organization[]>(onLogin ? null : "/orgs");
@@ -49,7 +49,11 @@ export function Nav() {
                 ))}
               </Select>
             )}
-            {me.data && <span className="text-sm text-graphite-400">{me.data.login}</span>}
+            {me.data && (
+              <Link href="/account" className="text-sm text-graphite-400 hover:text-white">
+                {me.data.login}
+              </Link>
+            )}
             <Button variant="ghost" pending={signOut.pending} onClick={() => signOut.run()}>
               Sign out
             </Button>

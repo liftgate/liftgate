@@ -11,6 +11,7 @@ import io.ktor.client.request.get
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.formUrlEncode
+import io.ktor.http.isSuccess
 import io.ktor.http.parameters
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -49,10 +50,14 @@ class GitHubOAuth(private val config: GitHubConfig, private val client: HttpClie
         }) { accept(ContentType.Application.Json) }.body<AccessToken>().accessToken
             ?: throw LiftgateException(HttpStatusCode.Unauthorized, "oauth_failed", "GitHub did not return an access token")
         val user = client.get("https://api.github.com/user") { bearerAuth(token) }.body<GitHubUser>()
-        val email = user.email
-            ?: client.get("https://api.github.com/user/emails") { bearerAuth(token) }.body<List<Email>>().firstOrNull { it.primary }?.email
-        return user.copy(email = email) to token
+        return user.copy(email = user.email ?: primaryEmail(token)) to token
     }
+
+    private suspend fun primaryEmail(token: String) = client.get("https://api.github.com/user/emails") { bearerAuth(token) }
+        .takeIf { it.status.isSuccess() }
+        ?.body<List<Email>>()
+        ?.firstOrNull { it.primary }
+        ?.email
 
     @Serializable
     private data class AccessToken(@SerialName("access_token") val accessToken: String? = null)

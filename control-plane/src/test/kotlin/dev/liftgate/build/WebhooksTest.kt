@@ -38,7 +38,6 @@ class WebhooksTest {
     private val app = mockk<App> {
         every { config } returns testConfig().copy(github = GitHubConfig("1", "unused", secret, "client", "client-secret"))
         every { metrics } returns PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
-        every { oauth } returns null
         every { this@mockk.builds } returns this@WebhooksTest.builds
         every { projects } returns mockk<Projects> {
             coEvery { environmentsForRepo(any(), any(), any()) } returns emptyList()

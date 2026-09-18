@@ -15,6 +15,8 @@ import io.ktor.server.routing.route
 import kotlinx.serialization.Serializable
 
 private val slugPattern = Regex("[a-z0-9][a-z0-9-]{0,38}[a-z0-9]")
+private val reservedOrgSlugs = setOf("account", "api", "login")
+val reservedProjectSlugs = setOf("settings")
 
 /**
  * @author Dean
@@ -54,7 +56,7 @@ fun Route.orgRoutes(app: App) {
         post {
             if (call.principal.token) forbidden()
             val body = call.receive<CreateOrg>()
-            requireSlug(body.slug)
+            requireSlug(body.slug, reservedOrgSlugs)
             if (body.name.isBlank()) invalid("name is required")
             call.respond(HttpStatusCode.Created, app.orgs.create(body.slug, body.name.trim(), call.principal.user.id))
         }
@@ -72,8 +74,9 @@ fun Route.orgRoutes(app: App) {
     }
 }
 
-fun requireSlug(slug: String) {
+fun requireSlug(slug: String, reserved: Set<String> = emptySet()) {
     if (!slugPattern.matches(slug)) invalid("slug must be 2 to 40 lowercase letters, digits or hyphens")
+    if (slug in reserved) invalid("$slug is reserved, choose another slug")
 }
 
 suspend fun ApplicationCall.org(app: App, min: OrgRole = OrgRole.MEMBER): Organization {

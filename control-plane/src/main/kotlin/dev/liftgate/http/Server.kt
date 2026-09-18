@@ -20,7 +20,7 @@ import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.plugins.cors.routing.CORS
 import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.request.httpMethod
-import io.ktor.server.request.uri
+import io.ktor.server.request.path
 import io.ktor.server.response.respond
 import io.ktor.server.routing.routing
 import io.ktor.server.websocket.WebSockets
@@ -59,6 +59,6 @@ fun Application.liftgate(app: App) {
 fun httpServer(app: App) = embeddedServer(Netty, port = app.config.httpPort, host = "0.0.0.0") { liftgate(app) }
 
 private suspend fun internalError(call: ApplicationCall, e: Throwable) {
-    log.error("unhandled error on {} {}", call.request.httpMethod.value, call.request.uri, e)
+    log.error("unhandled error on {} {}", call.request.httpMethod.value, call.request.path(), e)
     call.respond(HttpStatusCode.InternalServerError, ErrorBody("internal_error", "internal error"))
 }

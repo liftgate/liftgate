@@ -9,6 +9,9 @@ version = "0.1.0"
 
 repositories {
     mavenCentral()
+    maven("https://build.shibboleth.net/maven/releases/") {
+        content { includeGroupByRegex("org\\.opensaml.*|net\\.shibboleth.*") }
+    }
 }
 
 dependencies {
@@ -42,6 +45,10 @@ dependencies {
     implementation(libs.micrometer.prometheus)
     implementation(libs.java.jwt)
     implementation(libs.bcpkix)
+    implementation(libs.webauthn)
+    implementation(libs.angus.mail)
+    implementation(libs.opensaml.saml.impl)
+    implementation(libs.opensaml.xmlsec.impl)
 
     testImplementation(libs.kotlin.test)
     testImplementation(libs.junit.jupiter)

@@ -3,6 +3,7 @@ package dev.liftgate.service
 import dev.liftgate.db.Db
 import dev.liftgate.http.LiftgateException
 import dev.liftgate.org.Orgs
+import dev.liftgate.org.insertUser
 import dev.liftgate.project.Projects
 import dev.liftgate.secret.SecretBox
 import dev.liftgate.testConfig
@@ -41,7 +42,7 @@ class EnvVarsTest {
         db.migrate()
         val orgs = Orgs(db)
         val projects = Projects(db)
-        val org = orgs.create("acme", "Acme", orgs.upsertUser(1, "dean", null, null, null).id)
+        val org = orgs.create("acme", "Acme", db.tx { insertUser("dean", null, null, null) }.id)
         val project = projects.create(org.id, "shop", "Shop", "acme/shop", 42)
         val service = Services(db).create(projects.environments(project.id).single().id, ServiceSpec("api", "API", ServiceKind.WEB))
         val envVars = EnvVars(db, SecretBox(ByteArray(32)))

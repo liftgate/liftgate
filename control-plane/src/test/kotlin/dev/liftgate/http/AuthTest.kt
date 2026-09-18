@@ -34,7 +34,6 @@ class AuthTest {
     private val app = mockk<App>().also {
         every { it.sessions } returns sessions
         every { it.metrics } returns PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
-        every { it.oauth } returns null
         every { it.config } returns testConfig()
     }
 
@@ -48,7 +47,7 @@ class AuthTest {
 
     @Test
     fun `a session cookie resolves the user`() = testApplication {
-        val user = User(UUID.randomUUID(), 42, "dean", "Dean", null, "https://avatars.example/dean")
+        val user = User(UUID.randomUUID(), "dean", "Dean", null, "https://avatars.example/dean")
         coEvery { sessions.resolve("session-1") } returns user
         application { liftgate(app) }
         val response = client.get("/api/v1/me") { cookie(SESSION_COOKIE, "session-1") }
@@ -71,7 +70,7 @@ class AuthTest {
 
     @Test
     fun `api tokens cannot create organizations or mint further tokens`() = testApplication {
-        val user = User(UUID.randomUUID(), 42, "dean", null, null, null)
+        val user = User(UUID.randomUUID(), "dean", null, null, null)
         every { app.apiTokens } returns mockk<ApiTokens> { coEvery { resolve("lg_token") } returns (UUID.randomUUID() to user.id) }
         every { app.orgs } returns mockk<Orgs> { coEvery { user(user.id) } returns user }
         application { liftgate(app) }

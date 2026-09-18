@@ -22,10 +22,10 @@ private fun Table.oneOf(name: String, vararg values: String) = text(name).check 
  */
 object Users : Table("users") {
     val id = javaUUID("id")
-    val githubId = long("github_id").uniqueIndex()
     val login = text("login")
     val name = text("name").nullable()
     val email = text("email").nullable()
+    val emailVerified = bool("email_verified").default(false)
     val avatarUrl = text("avatar_url").nullable()
     val createdAt = createdAtColumn()
     override val primaryKey = PrimaryKey(id)
@@ -63,8 +63,92 @@ object Memberships : Table("memberships") {
 object Sessions : Table("sessions") {
     val id = text("id")
     val userId = reference("user_id", Users.id, onDelete = CASCADE)
-    val githubToken = binary("github_token")
     val expiresAt = timestampWithTimeZone("expires_at")
+    val createdAt = createdAtColumn()
+    override val primaryKey = PrimaryKey(id)
+}
+
+/**
+ * @author Dean
+ * @date 9/18/2026
+ */
+object Identities : Table("identities") {
+    val id = javaUUID("id")
+    val userId = reference("user_id", Users.id, onDelete = CASCADE)
+    val provider = oneOf("provider", "github", "google", "gitlab", "bitbucket", "email", "saml")
+    val subject = text("subject")
+    val email = text("email").nullable()
+    val emailVerified = bool("email_verified").default(false)
+    val createdAt = createdAtColumn()
+    val lastUsedAt = timestampWithTimeZone("last_used_at").nullable()
+    override val primaryKey = PrimaryKey(id)
+
+    init {
+        uniqueIndex(provider, subject)
+    }
+}
+
+/**
+ * @author Dean
+ * @date 9/18/2026
+ */
+object Passkeys : Table("passkeys") {
+    val id = javaUUID("id")
+    val userId = reference("user_id", Users.id, onDelete = CASCADE)
+    val credentialId = binary("credential_id").uniqueIndex()
+    val publicKey = binary("public_key")
+    val signatureCount = long("signature_count")
+    val name = text("name")
+    val createdAt = createdAtColumn()
+    val lastUsedAt = timestampWithTimeZone("last_used_at").nullable()
+    override val primaryKey = PrimaryKey(id)
+
+    init {
+        index("passkeys_user", false, userId)
+    }
+}
+
+/**
+ * @author Dean
+ * @date 9/18/2026
+ */
+object EmailCodes : Table("email_codes") {
+    val email = text("email")
+    val codeHash = binary("code_hash")
+    val attempts = integer("attempts").default(0)
+    val expiresAt = timestampWithTimeZone("expires_at")
+    override val primaryKey = PrimaryKey(email)
+}
+
+/**
+ * @author Dean
+ * @date 9/18/2026
+ */
+object GitConnections : Table("git_connections") {
+    val userId = reference("user_id", Users.id, onDelete = CASCADE)
+    val provider = oneOf("provider", "github")
+    val accountLogin = text("account_login")
+    val accessToken = binary("access_token")
+    val refreshToken = binary("refresh_token").nullable()
+    val expiresAt = timestampWithTimeZone("expires_at").nullable()
+    val createdAt = createdAtColumn()
+    override val primaryKey = PrimaryKey(userId, provider)
+}
+
+/**
+ * @author Dean
+ * @date 9/18/2026
+ */
+object SsoConnections : Table("sso_connections") {
+    val id = javaUUID("id")
+    val orgId = reference("org_id", Organizations.id, onDelete = CASCADE).uniqueIndex()
+    val idpEntityId = text("idp_entity_id")
+    val idpSsoUrl = text("idp_sso_url")
+    val idpCertificate = text("idp_certificate")
+    val emailDomains = array<String>("email_domains")
+    val verifiedDomains = array<String>("verified_domains")
+    val verificationToken = text("verification_token")
+    val defaultRole = oneOf("default_role", "admin", "member").default("member")
     val createdAt = createdAtColumn()
     override val primaryKey = PrimaryKey(id)
 }

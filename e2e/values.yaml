@@ -1,0 +1,28 @@
+profile: single
+
+controlPlane:
+  image: liftgate/control-plane
+  tag: e2e
+  logLevel: DEBUG
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      memory: 1024Mi
+
+dashboard:
+  image: liftgate/dashboard
+  tag: e2e
+
+postgres:
+  storage: 1Gi
+
+nats:
+  config:
+    jetstream:
+      fileStore:
+        pvc:
+          size: 1Gi
+
+publicUrl: http://liftgate.test

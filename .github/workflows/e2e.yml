@@ -1,0 +1,116 @@
+name: e2e
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - control-plane/**
+      - dashboard/**
+      - charts/**
+      - e2e/**
+      - .github/workflows/e2e.yml
+  pull_request:
+    paths:
+      - control-plane/**
+      - dashboard/**
+      - charts/**
+      - e2e/**
+      - .github/workflows/e2e.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NAMESPACE: liftgate-system
+  GATEWAY_API_VERSION: v1.6.1
+  CERT_MANAGER_VERSION: v1.21.2
+  CNPG_VERSION: 0.29.0
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: control-plane
+          load: true
+          tags: liftgate/control-plane:e2e
+          cache-from: type=gha,scope=e2e-control-plane
+          cache-to: type=gha,mode=max,scope=e2e-control-plane
+      - uses: docker/build-push-action@v7
+        with:
+          context: dashboard
+          load: true
+          tags: liftgate/dashboard:e2e
+          cache-from: type=gha,scope=e2e-dashboard
+          cache-to: type=gha,mode=max,scope=e2e-dashboard
+      - uses: azure/setup-helm@v5
+        with:
+          version: v4.3.0
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: liftgate
+      - name: load images
+        run: kind load docker-image --name liftgate liftgate/control-plane:e2e liftgate/dashboard:e2e
+      - name: install operators
+        run: |
+          kubectl apply --server-side -f "https://github.com/kubernetes-sigs/gateway-api/releases/download/${GATEWAY_API_VERSION}/standard-install.yaml"
+          helm repo add jetstack https://charts.jetstack.io
+          helm repo add cnpg https://cloudnative-pg.github.io/charts
+          helm upgrade --install cert-manager jetstack/cert-manager --version "$CERT_MANAGER_VERSION" \
+            --namespace cert-manager --create-namespace --set crds.enabled=true --wait --timeout 10m
+          helm upgrade --install cnpg cnpg/cloudnative-pg --version "$CNPG_VERSION" \
+            --namespace cnpg-system --create-namespace --wait --timeout 10m
+      - name: install liftgate
+        run: |
+          helm dependency update charts/liftgate
+          helm upgrade --install liftgate charts/liftgate \
+            --namespace "$NAMESPACE" --create-namespace \
+            --values e2e/values.yaml \
+            --set secrets.masterKey="$(openssl rand -base64 32)" \
+            --wait --timeout 15m
+      - name: control plane is ready
+        run: |
+          kubectl -n "$NAMESPACE" rollout status deployment/liftgate-control-plane --timeout=15m
+          kubectl -n "$NAMESPACE" rollout status deployment/liftgate-dashboard --timeout=5m
+          kubectl -n "$NAMESPACE" port-forward service/liftgate-control-plane 8080:8080 &
+          sleep 5
+          curl --fail --silent --show-error http://localhost:8080/readyz
+          curl --fail --silent --show-error http://localhost:8080/metrics > /dev/null
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://localhost:8080/api/v1/me)" = 401
+      - name: request a release
+        run: kubectl -n "$NAMESPACE" exec -i liftgate-postgres-1 -c postgres -- psql --username postgres --dbname liftgate --set ON_ERROR_STOP=1 < e2e/fixture.sql
+      - name: workload becomes available
+        run: |
+          for attempt in $(seq 1 60); do
+            kubectl -n env-e2e get deployment web > /dev/null 2>&1 && break
+            sleep 5
+          done
+          kubectl -n env-e2e rollout status deployment/web --timeout=5m
+          kubectl -n env-e2e get service web
+          kubectl -n env-e2e get httproute web
+          kubectl -n env-e2e get networkpolicy
+      - name: deployment is marked running
+        run: |
+          for attempt in $(seq 1 30); do
+            status="$(kubectl -n "$NAMESPACE" exec liftgate-postgres-1 -c postgres -- psql --username postgres --dbname liftgate --tuples-only --no-align --command "select status from deployments where id = '00000000-0000-4000-8000-000000000008'")"
+            echo "deployment status: $status"
+            test "$status" = running && exit 0
+            sleep 5
+          done
+          exit 1
+      - name: diagnostics
+        if: failure()
+        run: |
+          kubectl get pods --all-namespaces
+          kubectl -n "$NAMESPACE" describe pods
+          kubectl -n "$NAMESPACE" logs deployment/liftgate-control-plane --tail=400 || true
+          kubectl -n env-e2e describe pods || true
+          kubectl -n "$NAMESPACE" get events --sort-by=.lastTimestamp | tail -60

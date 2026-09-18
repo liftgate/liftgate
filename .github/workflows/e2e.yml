@@ -74,8 +74,7 @@ jobs:
           helm upgrade --install liftgate charts/liftgate \
             --namespace "$NAMESPACE" --create-namespace \
             --values e2e/values.yaml \
-            --set secrets.masterKey="$(openssl rand -base64 32)" \
-            --wait --timeout 15m
+            --set secrets.masterKey="$(openssl rand -base64 32)"
       - name: control plane is ready
         run: |
           kubectl -n "$NAMESPACE" rollout status deployment/liftgate-control-plane --timeout=15m

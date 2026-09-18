@@ -24,6 +24,16 @@ data:
   {{- with .Values.runtimeClass }}
   LIFTGATE_RUNTIME_CLASS: {{ . | quote }}
   {{- end }}
+  {{- with .Values.nodeSelector }}
+  {{- $pairs := list }}
+  {{- range $key, $value := . }}
+  {{- $pairs = append $pairs (printf "%s=%s" $key $value) }}
+  {{- end }}
+  LIFTGATE_NODE_SELECTOR: {{ join "," $pairs | quote }}
+  {{- end }}
+  {{- if .Values.registryInsecure }}
+  LIFTGATE_REGISTRY_INSECURE: "true"
+  {{- end }}
   LIFTGATE_GATEWAY_NAMESPACE: {{ include "liftgate.gatewayNamespace" . | quote }}
   LIFTGATE_GATEWAY_NAME: {{ .Values.gateway.name | quote }}
   LIFTGATE_PROMETHEUS_URL: {{ .Values.prometheusUrl | quote }}

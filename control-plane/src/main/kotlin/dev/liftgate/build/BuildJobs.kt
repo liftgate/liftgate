@@ -32,6 +32,8 @@ data class BuildJobSpec(
     val cacheRef: String,
     val buildImage: String,
     val namespace: String,
+    val nodeSelector: Map<String, String>,
+    val registryInsecure: Boolean,
 )
 
 /**
@@ -61,6 +63,7 @@ object BuildJobs {
             "IMAGE" to spec.imageRef,
             "CACHE" to spec.cacheRef,
             "DOCKER_CONFIG" to DOCKER_CONFIG,
+            "LIFTGATE_REGISTRY_INSECURE" to spec.registryInsecure.toString(),
         )
         val token = EnvVarBuilder().withName("LIFTGATE_GIT_TOKEN")
             .withNewValueFrom().withNewSecretKeyRef().withName(name(spec.build.id)).withKey(TOKEN_KEY).endSecretKeyRef().endValueFrom()
@@ -75,6 +78,7 @@ object BuildJobs {
             .withNewMetadata().withLabels<String, String>(labels).endMetadata()
             .withNewSpec()
             .withRestartPolicy("Never")
+            .withNodeSelector<String, String>(spec.nodeSelector)
             .withAutomountServiceAccountToken(false)
             .withNewSecurityContext().withRunAsUser(BUILDER_UID).withRunAsGroup(BUILDER_UID).withFsGroup(BUILDER_UID).endSecurityContext()
             .addNewContainer()

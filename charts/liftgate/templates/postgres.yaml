@@ -9,6 +9,11 @@ spec:
   instances: {{ eq (include "liftgate.ha" .) "true" | ternary 3 1 }}
   storage:
     size: {{ .Values.postgres.storage }}
+  {{- with .Values.nodeSelector }}
+  affinity:
+    nodeSelector:
+      {{- toYaml . | nindent 6 }}
+  {{- end }}
   bootstrap:
     initdb:
       database: liftgate

@@ -106,6 +106,14 @@ class ResourcesTest {
     }
 
     @Test
+    fun `node selector pins the deployment and the cron job`() {
+        val selector = mapOf("kubernetes.io/hostname" to "n1")
+        assertTrue(Resources.deployment(release, null).spec.template.spec.nodeSelector.isNullOrEmpty())
+        assertEquals(selector, Resources.deployment(release, null, selector).spec.template.spec.nodeSelector)
+        assertEquals(selector, Resources.cronJob(release, null, selector).spec.jobTemplate.spec.template.spec.nodeSelector)
+    }
+
+    @Test
     fun `service and route expose the web port on every verified hostname`() {
         val service = Resources.service(release)
         val port = service.spec.ports.single()

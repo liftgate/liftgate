@@ -137,6 +137,8 @@ PostgreSQL 16 or newer; NATS 2.10 or newer with JetStream enabled.
 | `build.allowedEgressCidrs` | `[]` | Private CIDRs build jobs may reach, for an in-cluster registry; everything else private is blocked |
 | `build.registryCredentials` | `""` | Docker `config.json` content; rendered as Secret `registry-credentials` in `build.namespace` and mounted by build jobs |
 | `runtimeClass` | `""` | `LIFTGATE_RUNTIME_CLASS`, set `gvisor` on shared clusters |
+| `nodeSelector` | `{}` | Node labels that pin the control plane, dashboard, CloudNativePG cluster, tenant pods and build jobs; rendered into `LIFTGATE_NODE_SELECTOR` as `key=value,key=value`. See [Node pinning](#node-pinning) for NATS |
+| `registryInsecure` | `false` | `LIFTGATE_REGISTRY_INSECURE`; build jobs push to `registry` over plain HTTP |
 | `prometheusUrl` | `http://prometheus.liftgate-system:9090` | `LIFTGATE_PROMETHEUS_URL` |
 
 Derived variables: `LIFTGATE_DATABASE_URL` points at the CloudNativePG `-rw` Service (or
@@ -148,6 +150,23 @@ is the release name when it contains `liftgate`, otherwise `<release>-liftgate`)
 namespace, `LIFTGATE_LEADER_ELECTION` is `kubernetes` and `LIFTGATE_HTTP_PORT` is `8080`.
 Empty optional values are left out of the ConfigMap and Secret so the control plane reports
 missing configuration instead of running with blank secrets.
+
+## Node pinning
+
+`nodeSelector` covers everything this chart renders and everything the control plane
+schedules. The `nats` subchart reads its own values, and Helm cannot template one value from
+another, so repeat the selector under `nats.podTemplate.merge.spec.nodeSelector`:
+
+```yaml
+nodeSelector:
+  kubernetes.io/hostname: node-1
+nats:
+  podTemplate:
+    merge:
+      spec:
+        nodeSelector:
+          kubernetes.io/hostname: node-1
+```
 
 ## Build namespace
 

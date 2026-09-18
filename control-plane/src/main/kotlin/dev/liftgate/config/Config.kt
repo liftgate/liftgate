@@ -42,6 +42,8 @@ data class Config(
     val buildImage: String,
     val buildNamespace: String,
     val runtimeClass: String?,
+    val nodeSelector: Map<String, String>,
+    val registryInsecure: Boolean,
     val gatewayNamespace: String,
     val gatewayName: String,
     val prometheusUrl: String,
@@ -66,6 +68,10 @@ data class Config(
             val encodedKey = required("SECRETS_MASTER_KEY")
             val masterKey = runCatching { Base64.getDecoder().decode(encodedKey) }.getOrNull()?.takeIf { it.size == 32 }
                 ?: error("LIFTGATE_SECRETS_MASTER_KEY must be the base64 of 32 random bytes")
+            val nodeSelector = optional("NODE_SELECTOR")?.split(',')?.associate { pair ->
+                pair.split('=', limit = 2).map(String::trim).takeIf { it.size == 2 && it[0].isNotEmpty() }?.let { (key, value) -> key to value }
+                    ?: error("LIFTGATE_NODE_SELECTOR must be key=value[,key=value]")
+            }.orEmpty()
 
             return Config(
                 role = role,
@@ -85,6 +91,8 @@ data class Config(
                 buildImage = text("BUILD_IMAGE", "ghcr.io/liftgate/build-image:latest"),
                 buildNamespace = text("BUILD_NAMESPACE", "liftgate-build"),
                 runtimeClass = optional("RUNTIME_CLASS"),
+                nodeSelector = nodeSelector,
+                registryInsecure = text("REGISTRY_INSECURE", "false").toBoolean(),
                 gatewayNamespace = text("GATEWAY_NAMESPACE", "liftgate-system"),
                 gatewayName = text("GATEWAY_NAME", "liftgate"),
                 prometheusUrl = text("PROMETHEUS_URL", "http://prometheus.liftgate-system:9090"),

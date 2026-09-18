@@ -21,7 +21,7 @@ class BuildJobsTest {
     private val service = testService.copy(rootDir = "/apps/api", buildStrategy = BuildStrategy.DOCKERFILE, dockerfilePath = "docker/Dockerfile")
     private val image = BuildJobs.imageRef("registry.test", testOrg, testProject, service, testBuild.commitSha)
     private val cache = BuildJobs.imageRef("registry.test", testOrg, testProject, service, "cache")
-    private val spec = BuildJobSpec(testBuild, service, testProject, "ghs_token", image, cache, "ghcr.io/liftgate/build-image:latest", "liftgate-build")
+    private val spec = BuildJobSpec(testBuild, service, testProject, "ghs_token", image, cache, "ghcr.io/liftgate/build-image:latest", "liftgate-build", emptyMap(), false)
     private val job = BuildJobs.job(spec)
     private val pod = job.spec.template.spec
     private val container = pod.containers.single()
@@ -59,6 +59,7 @@ class BuildJobsTest {
                 "IMAGE" to image,
                 "CACHE" to cache,
                 "DOCKER_CONFIG" to "/home/user/.docker",
+                "LIFTGATE_REGISTRY_INSECURE" to "false",
             ),
             container.env.associate { it.name to it.value },
         )
@@ -66,6 +67,14 @@ class BuildJobsTest {
         Regex("""\$\{?([A-Z_]+)""").findAll(script).map { it.groupValues[1] }.filter { it != "HOME" }.forEach {
             assertTrue(container.env.any { env -> env.name == it }, "build.sh reads $it which the job does not set")
         }
+    }
+
+    @Test
+    fun `node selector and insecure registry reach the pod`() {
+        val pinned = BuildJobs.job(spec.copy(nodeSelector = mapOf("kubernetes.io/hostname" to "n1"), registryInsecure = true)).spec.template.spec
+        assertTrue(pod.nodeSelector.isNullOrEmpty())
+        assertEquals(mapOf("kubernetes.io/hostname" to "n1"), pinned.nodeSelector)
+        assertEquals("true", pinned.containers.single().env.single { it.name == "LIFTGATE_REGISTRY_INSECURE" }.value)
     }
 
     @Test

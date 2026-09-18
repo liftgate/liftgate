@@ -111,7 +111,7 @@ object Resources {
         .withData<String, String>(r.envVars.associate { it.name to Base64.getEncoder().encodeToString(it.value.orEmpty().toByteArray()) })
         .build()
 
-    fun deployment(r: Release, runtimeClass: String?): KubeDeployment = DeploymentBuilder()
+    fun deployment(r: Release, runtimeClass: String?, nodeSelector: Map<String, String> = emptyMap()): KubeDeployment = DeploymentBuilder()
         .withMetadata(meta(r.service.slug, r.namespace, r.deploymentLabels()))
         .withNewSpec()
         .withReplicas(r.service.replicas)
@@ -119,11 +119,11 @@ object Resources {
         .withProgressDeadlineSeconds(600)
         .withSelector(r.selector())
         .withNewStrategy().withType("RollingUpdate").endStrategy()
-        .withTemplate(podTemplate(r, runtimeClass, "Always"))
+        .withTemplate(podTemplate(r, runtimeClass, nodeSelector, "Always"))
         .endSpec()
         .build()
 
-    fun cronJob(r: Release, runtimeClass: String?): CronJob = CronJobBuilder()
+    fun cronJob(r: Release, runtimeClass: String?, nodeSelector: Map<String, String> = emptyMap()): CronJob = CronJobBuilder()
         .withMetadata(meta(r.service.slug, r.namespace, r.deploymentLabels()))
         .withNewSpec()
         .withSchedule(r.service.cronSchedule)
@@ -132,7 +132,7 @@ object Resources {
         .withFailedJobsHistoryLimit(3)
         .withNewJobTemplate().withNewSpec()
         .withBackoffLimit(2)
-        .withTemplate(podTemplate(r, runtimeClass, "OnFailure"))
+        .withTemplate(podTemplate(r, runtimeClass, nodeSelector, "OnFailure"))
         .endSpec().endJobTemplate()
         .endSpec()
         .build()
@@ -201,10 +201,11 @@ object Resources {
 
     private fun Domain.tlsSecret() = "$hostname-tls"
 
-    private fun podTemplate(r: Release, runtimeClass: String?, restartPolicy: String): PodTemplateSpec = PodTemplateSpecBuilder()
+    private fun podTemplate(r: Release, runtimeClass: String?, nodeSelector: Map<String, String>, restartPolicy: String): PodTemplateSpec = PodTemplateSpecBuilder()
         .withMetadata(meta(null, null, r.deploymentLabels()))
         .withNewSpec()
         .withRuntimeClassName(runtimeClass)
+        .withNodeSelector<String, String>(nodeSelector)
         .withRestartPolicy(restartPolicy)
         .withAutomountServiceAccountToken(false)
         .withEnableServiceLinks(false)

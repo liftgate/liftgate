@@ -46,7 +46,7 @@ class Builder(private val app: App, private val kube: KubernetesClient) {
         app.builds.markRunning(buildId)
         val failure = try {
             val token = github.installationToken(scope.project.installationId)
-            val spec = BuildJobSpec(build, scope.service, scope.project, token, image, cache, config.buildImage, config.buildNamespace)
+            val spec = BuildJobSpec(build, scope.service, scope.project, token, image, cache, config.buildImage, config.buildNamespace, config.nodeSelector, config.registryInsecure)
             "the build job failed".takeUnless { run(kube.batch().v1().jobs().inNamespace(config.buildNamespace).resource(BuildJobs.job(spec)), spec) }
         } catch (e: Exception) {
             currentCoroutineContext().ensureActive()

@@ -140,6 +140,8 @@
       }
     },
     "runtimeClass": { "type": "string" },
+    "nodeSelector": { "type": "object", "additionalProperties": { "type": "string" } },
+    "registryInsecure": { "type": "boolean" },
     "prometheusUrl": { "type": "string", "pattern": "^https?://" }
   }
 }

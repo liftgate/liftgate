@@ -83,4 +83,8 @@ build:
 
 runtimeClass: ""
 
+nodeSelector: {}
+
+registryInsecure: false
+
 prometheusUrl: http://prometheus.liftgate-system:9090

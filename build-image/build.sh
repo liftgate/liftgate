@@ -35,8 +35,13 @@ else
   set -- --frontend gateway.v0 --opt source=ghcr.io/railwayapp/railpack-frontend --local "dockerfile=$plan"
 fi
 
+insecure=""
+if [ "${LIFTGATE_REGISTRY_INSECURE:-}" = true ]; then
+  insecure=",registry.insecure=true"
+fi
+
 exec buildctl-daemonless.sh build "$@" \
   --local "context=$context" \
-  --output "type=image,name=$IMAGE,push=true" \
-  --export-cache "type=registry,ref=$CACHE,mode=max" \
-  --import-cache "type=registry,ref=$CACHE"
+  --output "type=image,name=$IMAGE,push=true$insecure" \
+  --export-cache "type=registry,ref=$CACHE,mode=max$insecure" \
+  --import-cache "type=registry,ref=$CACHE$insecure"

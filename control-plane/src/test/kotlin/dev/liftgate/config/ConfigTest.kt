@@ -28,6 +28,8 @@ class ConfigTest {
         assertFalse(config.hazelcastKubernetes)
         assertNull(config.github)
         assertNull(config.runtimeClass)
+        assertTrue(config.nodeSelector.isEmpty())
+        assertFalse(config.registryInsecure)
     }
 
     @Test
@@ -46,6 +48,21 @@ class ConfigTest {
     fun `api role requires github credentials`() {
         val error = assertFailsWith<IllegalStateException> { Config.fromEnv(minimalEnv + ("LIFTGATE_ROLE" to "api")) }
         assertTrue("LIFTGATE_GITHUB_APP_ID" in error.message.orEmpty())
+    }
+
+    @Test
+    fun `node selector and insecure registry parse`() {
+        val config = Config.fromEnv(minimalEnv + mapOf("LIFTGATE_NODE_SELECTOR" to "kubernetes.io/hostname=n1, node-role.kubernetes.io/worker=", "LIFTGATE_REGISTRY_INSECURE" to "true"))
+        assertEquals(mapOf("kubernetes.io/hostname" to "n1", "node-role.kubernetes.io/worker" to ""), config.nodeSelector)
+        assertTrue(config.registryInsecure)
+    }
+
+    @Test
+    fun `malformed node selector names the variable`() {
+        listOf("n1", "=n1", "a=b,").forEach {
+            val error = assertFailsWith<IllegalStateException> { Config.fromEnv(minimalEnv + ("LIFTGATE_NODE_SELECTOR" to it)) }
+            assertTrue("LIFTGATE_NODE_SELECTOR" in error.message.orEmpty())
+        }
     }
 
     @Test

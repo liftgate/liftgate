@@ -43,7 +43,7 @@ import kotlin.test.assertEquals
  * @date 9/17/2026
  */
 class ServiceRoutesTest {
-    private val user = User(UUID.randomUUID(), 1, "dean", null, null, null)
+    private val user = User(UUID.randomUUID(), "dean", null, null, null)
     private val org = Organization(UUID.randomUUID(), "acme", "Acme", "free")
     private val project = Project(UUID.randomUUID(), org.id, "shop", "Shop", "acme/shop", "main", 42)
     private val environment = Environment(UUID.randomUUID(), project.id, "production", "Production", EnvironmentKind.PRODUCTION, "main", "env-0123456789ab")
@@ -55,7 +55,6 @@ class ServiceRoutesTest {
         every { it.access } returns access
         every { it.sessions } returns mockk<Sessions> { coEvery { resolve("s") } returns user }
         every { it.metrics } returns PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
-        every { it.oauth } returns null
         every { it.config } returns testConfig()
     }
 

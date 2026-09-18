@@ -2,8 +2,15 @@ package dev.liftgate
 
 import dev.liftgate.auth.Access
 import dev.liftgate.auth.ApiTokens
-import dev.liftgate.auth.GitHubOAuth
+import dev.liftgate.auth.EmailCodes
+import dev.liftgate.auth.GitConnections
+import dev.liftgate.auth.Mailer
+import dev.liftgate.auth.OAuth
+import dev.liftgate.auth.OAuthProviders
+import dev.liftgate.auth.Passkeys
 import dev.liftgate.auth.Sessions
+import dev.liftgate.auth.SignIn
+import dev.liftgate.auth.Sso
 import dev.liftgate.build.Builder
 import dev.liftgate.build.GitHubApp
 import dev.liftgate.cache.Cache
@@ -60,7 +67,7 @@ class App(val config: Config) : AutoCloseable {
     val metrics = PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
     val kube = KubernetesClientBuilder().build()
     val orgs = Orgs(db)
-    val sessions = Sessions(db, cache, orgs, secrets)
+    val sessions = Sessions(db, cache, orgs)
     val apiTokens = ApiTokens(db)
     val access = Access(orgs)
     val projects = Projects(db)
@@ -70,7 +77,12 @@ class App(val config: Config) : AutoCloseable {
     val deployments = Deployments(db)
     val domains = Domains(db, config.deployDomain)
     val github = config.github?.let { GitHubApp(it, http) }
-    val oauth = config.github?.let { GitHubOAuth(it, http, "${config.publicUrl}/api/v1/auth/github/callback") }
+    val oauth = OAuth(http, config.publicUrl, OAuthProviders.enabled(config))
+    val signIn = SignIn(db, sessions)
+    val gitConnections = GitConnections(db, secrets, oauth)
+    val passkeys = Passkeys(config, db, cache, signIn)
+    val emailCodes = config.email?.let { EmailCodes(db, cache, config.secretsMasterKey, Mailer(it), signIn) }
+    val sso = Sso(config.publicUrl, db, cache, signIn)
     private val stopped = CountDownLatch(1)
     private var server: EmbeddedServer<*, *>? = null
 

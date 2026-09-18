@@ -26,7 +26,6 @@ class HealthRoutesTest {
     private val app = mockk<App>().also {
         every { it.db } returns db
         every { it.metrics } returns PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
-        every { it.oauth } returns null
         every { it.config } returns testConfig()
     }
 

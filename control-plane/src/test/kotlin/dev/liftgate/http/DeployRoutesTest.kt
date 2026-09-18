@@ -43,9 +43,8 @@ class DeployRoutesTest {
     private val app = mockk<App> {
         every { services } returns mockk<Services> { coEvery { scope(testService.id) } returns ServiceScope(testService, testEnvironment, testProject, testOrg) }
         every { access } returns mockk<Access>(relaxUnitFun = true)
-        every { sessions } returns mockk<Sessions> { coEvery { resolve("s") } returns User(UUID.randomUUID(), 1, "dean", null, null, null) }
+        every { sessions } returns mockk<Sessions> { coEvery { resolve("s") } returns User(UUID.randomUUID(), "dean", null, null, null) }
         every { metrics } returns PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
-        every { oauth } returns null
         every { config } returns testConfig()
         every { github } returns null
         every { this@mockk.builds } returns this@DeployRoutesTest.builds

@@ -5,6 +5,7 @@ import dev.liftgate.db.Outbox
 import dev.liftgate.events.Subject
 import dev.liftgate.http.LiftgateException
 import dev.liftgate.org.Orgs
+import dev.liftgate.org.insertUser
 import dev.liftgate.project.Projects
 import dev.liftgate.service.ServiceKind
 import dev.liftgate.service.ServiceSpec
@@ -72,7 +73,7 @@ class DeploymentsTest {
         val projects = Projects(db)
         val builds = Builds(db)
         val deployments = Deployments(db)
-        val org = orgs.create("acme", "Acme", orgs.upsertUser(1, "dean", null, null, null).id)
+        val org = orgs.create("acme", "Acme", db.tx { insertUser("dean", null, null, null) }.id)
         val project = projects.create(org.id, "shop", "Shop", "acme/shop", 42)
         val services = Services(db)
         val service = services.create(projects.environments(project.id).single().id, ServiceSpec("api", "API", ServiceKind.WEB))

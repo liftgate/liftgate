@@ -38,10 +38,11 @@ fun Route.projectRoutes(app: App) {
         post {
             val org = call.org(app, OrgRole.ADMIN)
             val body = call.receive<CreateProject>()
-            requireSlug(body.slug)
+            requireSlug(body.slug, reservedProjectSlugs)
             if (body.name.isBlank()) invalid("name is required")
             if (!repoPattern.matches(body.repoFullName)) invalid("repoFullName must be owner/repo")
-            val token = call.request.cookies[SESSION_COOKIE]?.let { app.sessions.githubToken(it) } ?: forbidden()
+            val token = app.gitConnections.githubToken(call.principal.user.id)
+                ?: throw LiftgateException(HttpStatusCode.Conflict, "github_not_connected", "connect GitHub to import a repository")
             val installationId = app.github?.installation(token, body.repoFullName)
                 ?: invalid("install the GitHub App on ${body.repoFullName} from an account that can push to it")
             call.respond(HttpStatusCode.Created, app.projects.create(org.id, body.slug, body.name.trim(), body.repoFullName, installationId))
@@ -58,7 +59,7 @@ fun Route.projectRoutes(app: App) {
             post {
                 val project = call.project(app, OrgRole.ADMIN)
                 val body = call.receive<CreateEnvironment>()
-                requireSlug(body.slug)
+                requireSlug(body.slug, reservedProjectSlugs)
                 if (body.name.isBlank() || body.branch.isBlank()) invalid("name and branch are required")
                 call.respond(HttpStatusCode.Created, app.projects.createEnvironment(project.id, body.slug, body.name.trim(), body.kind, body.branch.trim()))
             }

@@ -1,5 +1,6 @@
 package dev.liftgate.config
 
+import io.ktor.http.Url
 import java.util.Base64
 
 /**
@@ -22,6 +23,18 @@ data class GitHubConfig(
 
 /**
  * @author Dean
+ * @date 9/18/2026
+ */
+data class OAuthClient(val clientId: String, val clientSecret: String)
+
+/**
+ * @author Dean
+ * @date 9/18/2026
+ */
+data class EmailConfig(val host: String, val port: Int, val implicitTls: Boolean, val user: String?, val password: String?, val from: String)
+
+/**
+ * @author Dean
  * @date 9/17/2026
  */
 data class Config(
@@ -35,8 +48,16 @@ data class Config(
     val hazelcastKubernetes: Boolean,
     val publicUrl: String,
     val dashboardUrl: String,
+    val trustedProxies: Int,
     val deployDomain: String,
     val github: GitHubConfig?,
+    val google: OAuthClient?,
+    val gitlab: OAuthClient?,
+    val gitlabUrl: String,
+    val bitbucket: OAuthClient?,
+    val webauthnRpId: String,
+    val webauthnRpName: String,
+    val email: EmailConfig?,
     val secretsMasterKey: ByteArray,
     val registry: String,
     val buildImage: String,
@@ -54,6 +75,7 @@ data class Config(
             fun optional(name: String) = env["LIFTGATE_$name"]?.takeIf { it.isNotBlank() }
             fun required(name: String) = optional(name) ?: error("LIFTGATE_$name is required")
             fun text(name: String, default: String) = optional(name) ?: default
+            fun oauthClient(name: String) = optional("${name}_CLIENT_ID")?.let { OAuthClient(it, required("${name}_CLIENT_SECRET")) }
 
             val roleName = text("ROLE", "all")
             val role = Role.entries.firstOrNull { it.name.equals(roleName, ignoreCase = true) }
@@ -65,6 +87,7 @@ data class Config(
                 clientId = required("GITHUB_CLIENT_ID"),
                 clientSecret = required("GITHUB_CLIENT_SECRET"),
             ) else null
+            val dashboardUrl = text("DASHBOARD_URL", "http://localhost:3000")
             val encodedKey = required("SECRETS_MASTER_KEY")
             val masterKey = runCatching { Base64.getDecoder().decode(encodedKey) }.getOrNull()?.takeIf { it.size == 32 }
                 ?: error("LIFTGATE_SECRETS_MASTER_KEY must be the base64 of 32 random bytes")
@@ -83,9 +106,17 @@ data class Config(
                 hazelcastCluster = text("HAZELCAST_CLUSTER", "liftgate"),
                 hazelcastKubernetes = text("HAZELCAST_KUBERNETES", "false").toBoolean(),
                 publicUrl = text("PUBLIC_URL", "http://localhost:8080"),
-                dashboardUrl = text("DASHBOARD_URL", "http://localhost:3000"),
+                dashboardUrl = dashboardUrl,
+                trustedProxies = text("TRUSTED_PROXIES", "0").toIntOrNull()?.takeIf { it >= 0 } ?: error("LIFTGATE_TRUSTED_PROXIES must be a number of proxy hops"),
                 deployDomain = text("DEPLOY_DOMAIN", "liftgate.app"),
                 github = github,
+                google = oauthClient("GOOGLE"),
+                gitlab = oauthClient("GITLAB"),
+                gitlabUrl = text("GITLAB_URL", "https://gitlab.com").trimEnd('/'),
+                bitbucket = oauthClient("BITBUCKET"),
+                webauthnRpId = text("WEBAUTHN_RP_ID", Url(dashboardUrl).host),
+                webauthnRpName = text("WEBAUTHN_RP_NAME", "Liftgate"),
+                email = optional("SMTP_URL")?.let { url -> optional("EMAIL_FROM")?.let { emailConfig(url, it) } },
                 secretsMasterKey = masterKey,
                 registry = text("REGISTRY", "registry.liftgate.internal"),
                 buildImage = text("BUILD_IMAGE", "ghcr.io/liftgate/build-image:latest"),
@@ -100,4 +131,15 @@ data class Config(
             )
         }
     }
+}
+
+private fun emailConfig(smtpUrl: String, from: String): EmailConfig {
+    val url = Url(smtpUrl)
+    val implicitTls = when (url.protocol.name) {
+        "smtps" -> true
+        "smtp" -> false
+        else -> error("LIFTGATE_SMTP_URL must start with smtp:// or smtps://")
+    }
+    val host = url.host.ifEmpty { error("LIFTGATE_SMTP_URL needs a host") }
+    return EmailConfig(host, url.specifiedPort.takeIf { it != 0 } ?: if (implicitTls) 465 else 587, implicitTls, url.user, url.password, from)
 }

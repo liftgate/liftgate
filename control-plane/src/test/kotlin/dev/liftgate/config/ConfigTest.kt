@@ -84,4 +84,26 @@ class ConfigTest {
         assertFalse(config.leaderElection)
         assertEquals("gvisor", config.runtimeClass)
     }
+
+    @Test
+    fun `oauth providers exist only when their client is configured`() {
+        val none = Config.fromEnv(minimalEnv)
+        assertEquals(listOf(null, null, null), listOf(none.google, none.gitlab, none.bitbucket))
+        assertEquals("https://gitlab.com", none.gitlabUrl)
+        val config = Config.fromEnv(
+            minimalEnv + mapOf(
+                "LIFTGATE_GOOGLE_CLIENT_ID" to "g",
+                "LIFTGATE_GOOGLE_CLIENT_SECRET" to "gs",
+                "LIFTGATE_GITLAB_CLIENT_ID" to "l",
+                "LIFTGATE_GITLAB_CLIENT_SECRET" to "ls",
+                "LIFTGATE_GITLAB_URL" to "https://git.example/",
+            ),
+        )
+        assertEquals(OAuthClient("g", "gs"), config.google)
+        assertEquals(OAuthClient("l", "ls"), config.gitlab)
+        assertEquals("https://git.example", config.gitlabUrl)
+        assertNull(config.bitbucket)
+        val error = assertFailsWith<IllegalStateException> { Config.fromEnv(minimalEnv + ("LIFTGATE_BITBUCKET_CLIENT_ID" to "b")) }
+        assertTrue("LIFTGATE_BITBUCKET_CLIENT_SECRET" in error.message.orEmpty())
+    }
 }

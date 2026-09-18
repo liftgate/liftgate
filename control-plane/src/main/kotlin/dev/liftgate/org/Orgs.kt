@@ -15,31 +15,28 @@ import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.insertReturning
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
-import org.jetbrains.exposed.v1.jdbc.upsertReturning
 import java.util.UUID
 
-fun ResultRow.toUser() = User(this[Users.id], this[Users.githubId], this[Users.login], this[Users.name], this[Users.email], this[Users.avatarUrl])
+fun ResultRow.toUser() = User(this[Users.id], this[Users.login], this[Users.name], this[Users.email], this[Users.avatarUrl])
 
 fun ResultRow.toOrganization() = Organization(this[Organizations.id], this[Organizations.slug], this[Organizations.name], this[Organizations.plan])
 
 fun ResultRow.toRole(): OrgRole = this[Memberships.role].toEnum()
+
+fun insertUser(login: String, name: String?, email: String?, avatarUrl: String?): User = Users.insertReturning {
+    it[id] = UUID.randomUUID()
+    it[Users.login] = login
+    it[Users.name] = name
+    it[Users.email] = email
+    it[emailVerified] = email != null
+    it[Users.avatarUrl] = avatarUrl
+}.single().toUser()
 
 /**
  * @author Dean
  * @date 9/17/2026
  */
 class Orgs(private val db: Db) {
-    suspend fun upsertUser(githubId: Long, login: String, name: String?, email: String?, avatarUrl: String?): User = db.tx {
-        Users.upsertReturning(Users.githubId, onUpdateExclude = listOf(Users.id)) {
-            it[id] = UUID.randomUUID()
-            it[Users.githubId] = githubId
-            it[Users.login] = login
-            it[Users.name] = name
-            it[Users.email] = email
-            it[Users.avatarUrl] = avatarUrl
-        }.single().toUser()
-    }
-
     suspend fun user(id: UUID): User? = db.tx { Users.selectAll().where { Users.id eq id }.singleOrNull()?.toUser() }
 
     suspend fun create(slug: String, name: String, owner: UUID): Organization = db.tx {

@@ -1,0 +1,17 @@
+apiVersion: v2
+name: liftgate
+description: Open-source full-stack application hosting on Kubernetes
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.30.0-0"
+home: https://liftgate.dev
+sources:
+  - https://github.com/liftgate/liftgate
+maintainers:
+  - name: Dean
+dependencies:
+  - name: nats
+    version: 2.14.6
+    repository: https://nats-io.github.io/k8s/helm/charts/
+    condition: nats.managed

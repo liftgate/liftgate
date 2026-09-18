@@ -1,0 +1,86 @@
+profile: single
+
+imagePullSecrets: []
+
+controlPlane:
+  image: ghcr.io/liftgate/control-plane
+  tag: 0.1.0
+  replicas:
+    api: 3
+    reconciler: 2
+    builder: 2
+    meter: 1
+  logLevel: INFO
+  javaOpts: -XX:MaxRAMPercentage=75.0
+  resources:
+    requests:
+      cpu: 250m
+      memory: 768Mi
+    limits:
+      memory: 1536Mi
+
+dashboard:
+  image: ghcr.io/liftgate/dashboard
+  tag: 0.1.0
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      memory: 256Mi
+
+postgres:
+  managed: true
+  externalUrl: ""
+  externalUser: ""
+  externalPassword: ""
+  storage: 10Gi
+
+nats:
+  managed: true
+  externalUrl: ""
+  config:
+    jetstream:
+      enabled: true
+      fileStore:
+        pvc:
+          size: 5Gi
+    cluster:
+      enabled: false
+      replicas: 3
+  natsBox:
+    enabled: false
+
+gateway:
+  create: true
+  name: liftgate
+  className: cilium
+  namespace: ""
+  wildcardSecret: liftgate-wildcard-tls
+  issuer: letsencrypt
+
+deployDomain: liftgate.app
+publicUrl: https://liftgate.dev
+dashboardUrl: ""
+
+github:
+  appId: ""
+  clientId: ""
+  clientSecret: ""
+  webhookSecret: ""
+  privateKey: ""
+
+secrets:
+  masterKey: ""
+
+registry: registry.liftgate.internal
+
+build:
+  image: ghcr.io/liftgate/build-image:latest
+  namespace: liftgate-build
+  registryCredentials: ""
+  allowedEgressCidrs: []
+
+runtimeClass: ""
+
+prometheusUrl: http://prometheus.liftgate-system:9090

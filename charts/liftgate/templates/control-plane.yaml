@@ -1,0 +1,110 @@
+{{- $roles := dict "all" 1 }}
+{{- if eq (include "liftgate.ha" .) "true" }}
+{{- $roles = .Values.controlPlane.replicas }}
+{{- end }}
+{{- range $role, $replicas := $roles }}
+{{- $serving := has $role (list "api" "all") }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "liftgate.fullname" $ }}-{{ eq $role "all" | ternary "control-plane" $role }}
+  labels:
+    {{- include "liftgate.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: control-plane
+    liftgate.dev/role: {{ $role }}
+spec:
+  replicas: {{ $replicas }}
+  selector:
+    matchLabels:
+      {{- include "liftgate.selectorLabels" $ | nindent 6 }}
+      liftgate.dev/role: {{ $role }}
+  template:
+    metadata:
+      labels:
+        {{- include "liftgate.selectorLabels" $ | nindent 8 }}
+        app.kubernetes.io/component: control-plane
+        liftgate.dev/role: {{ $role }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") $ | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") $ | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "liftgate.fullname" $ }}
+      {{- with $.Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      {{- if gt (int $replicas) 1 }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    {{- include "liftgate.selectorLabels" $ | nindent 20 }}
+                    liftgate.dev/role: {{ $role }}
+      {{- end }}
+      containers:
+        - name: control-plane
+          image: "{{ $.Values.controlPlane.image }}:{{ $.Values.controlPlane.tag }}"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: LIFTGATE_ROLE
+              value: {{ $role }}
+            - name: JAVA_TOOL_OPTIONS
+              value: {{ $.Values.controlPlane.javaOpts | quote }}
+            {{- if $.Values.postgres.managed }}
+            - name: LIFTGATE_DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "liftgate.postgresCluster" $ }}-app
+                  key: username
+            - name: LIFTGATE_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "liftgate.postgresCluster" $ }}-app
+                  key: password
+            {{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "liftgate.fullname" $ }}
+            - secretRef:
+                name: {{ include "liftgate.fullname" $ }}
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: hazelcast
+              containerPort: 5701
+          {{- if $serving }}
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 5
+            failureThreshold: 36
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 20
+          {{- end }}
+          resources:
+            {{- toYaml $.Values.controlPlane.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+{{- end }}

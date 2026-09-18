@@ -1,0 +1,60 @@
+{{- if .Values.gateway.create }}
+{{- $hosts := include "liftgate.hosts" . | fromJsonArray }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: {{ .Values.gateway.name }}
+  labels:
+    {{- include "liftgate.labels" . | nindent 4 }}
+spec:
+  gatewayClassName: {{ .Values.gateway.className }}
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: All
+    - name: https-apps
+      protocol: HTTPS
+      port: 443
+      hostname: "*.{{ .Values.deployDomain }}"
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            name: {{ .Values.gateway.wildcardSecret }}
+      allowedRoutes:
+        namespaces:
+          from: All
+    {{- range $hosts }}
+    - name: https-{{ . | replace "." "-" }}
+      protocol: HTTPS
+      port: 443
+      hostname: {{ . | quote }}
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            name: {{ $.Values.gateway.name }}-{{ . | replace "." "-" }}-tls
+      allowedRoutes:
+        namespaces:
+          from: Same
+    {{- end }}
+{{- range $hosts }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ $.Values.gateway.name }}-{{ . | replace "." "-" }}
+  labels:
+    {{- include "liftgate.labels" $ | nindent 4 }}
+spec:
+  secretName: {{ $.Values.gateway.name }}-{{ . | replace "." "-" }}-tls
+  dnsNames:
+    - {{ . | quote }}
+  issuerRef:
+    kind: ClusterIssuer
+    name: {{ $.Values.gateway.issuer }}
+{{- end }}
+{{- end }}

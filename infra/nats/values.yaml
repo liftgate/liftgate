@@ -1,0 +1,9 @@
+config:
+  jetstream:
+    enabled: true
+    fileStore:
+      pvc:
+        size: 5Gi
+  cluster:
+    enabled: true
+    replicas: 3

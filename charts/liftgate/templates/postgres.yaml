@@ -1,0 +1,16 @@
+{{- if .Values.postgres.managed }}
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ include "liftgate.postgresCluster" . }}
+  labels:
+    {{- include "liftgate.labels" . | nindent 4 }}
+spec:
+  instances: {{ eq (include "liftgate.ha" .) "true" | ternary 3 1 }}
+  storage:
+    size: {{ .Values.postgres.storage }}
+  bootstrap:
+    initdb:
+      database: liftgate
+      owner: liftgate
+{{- end }}

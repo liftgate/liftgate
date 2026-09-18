@@ -1,0 +1,15 @@
+server:
+  fullnameOverride: prometheus
+  retention: 7d
+  persistentVolume:
+    size: 8Gi
+  service:
+    servicePort: 9090
+alertmanager:
+  enabled: false
+kube-state-metrics:
+  enabled: false
+prometheus-node-exporter:
+  enabled: false
+prometheus-pushgateway:
+  enabled: false

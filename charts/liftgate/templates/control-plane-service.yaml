@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "liftgate.fullname" . }}-control-plane
+  labels:
+    {{- include "liftgate.labels" . | nindent 4 }}
+    app.kubernetes.io/component: control-plane
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "liftgate.selectorLabels" . | nindent 4 }}
+    liftgate.dev/role: {{ eq (include "liftgate.ha" .) "true" | ternary "api" "all" }}
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "liftgate.fullname" . }}-hazelcast
+  labels:
+    {{- include "liftgate.labels" . | nindent 4 }}
+    app.kubernetes.io/component: control-plane
+spec:
+  clusterIP: None
+  selector:
+    {{- include "liftgate.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: control-plane
+  ports:
+    - name: hazelcast
+      port: 5701
+      targetPort: hazelcast

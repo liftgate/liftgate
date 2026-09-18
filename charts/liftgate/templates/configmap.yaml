@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "liftgate.fullname" . }}
+  labels:
+    {{- include "liftgate.labels" . | nindent 4 }}
+data:
+  LIFTGATE_DATABASE_URL: {{ include "liftgate.databaseUrl" . | quote }}
+  LIFTGATE_NATS_URL: {{ include "liftgate.natsUrl" . | quote }}
+  LIFTGATE_HAZELCAST_CLUSTER: {{ include "liftgate.fullname" . | quote }}
+  LIFTGATE_HAZELCAST_KUBERNETES: {{ include "liftgate.ha" . | quote }}
+  LIFTGATE_PUBLIC_URL: {{ .Values.publicUrl | quote }}
+  LIFTGATE_DASHBOARD_URL: {{ include "liftgate.dashboardUrl" . | quote }}
+  LIFTGATE_DEPLOY_DOMAIN: {{ .Values.deployDomain | quote }}
+  {{- with .Values.github.appId }}
+  LIFTGATE_GITHUB_APP_ID: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.github.clientId }}
+  LIFTGATE_GITHUB_CLIENT_ID: {{ . | quote }}
+  {{- end }}
+  LIFTGATE_REGISTRY: {{ .Values.registry | quote }}
+  LIFTGATE_BUILD_IMAGE: {{ .Values.build.image | quote }}
+  LIFTGATE_BUILD_NAMESPACE: {{ .Values.build.namespace | quote }}
+  {{- with .Values.runtimeClass }}
+  LIFTGATE_RUNTIME_CLASS: {{ . | quote }}
+  {{- end }}
+  LIFTGATE_GATEWAY_NAMESPACE: {{ include "liftgate.gatewayNamespace" . | quote }}
+  LIFTGATE_GATEWAY_NAME: {{ .Values.gateway.name | quote }}
+  LIFTGATE_PROMETHEUS_URL: {{ .Values.prometheusUrl | quote }}
+  LIFTGATE_LEADER_ELECTION: "kubernetes"
+  LIFTGATE_HTTP_PORT: "8080"
+  LIFTGATE_LOG_LEVEL: {{ .Values.controlPlane.logLevel | quote }}

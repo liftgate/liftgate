@@ -1,0 +1,26 @@
+Liftgate {{ .Chart.AppVersion }} is installed as release {{ .Release.Name }} in namespace {{ .Release.Namespace }} (profile: {{ .Values.profile }}).
+
+  Dashboard  {{ include "liftgate.dashboardUrl" . }}
+  API        {{ .Values.publicUrl }}
+{{- if not .Values.secrets.masterKey }}
+
+WARNING: secrets.masterKey is empty. The control plane refuses to start until it is set:
+  --set secrets.masterKey=$(openssl rand -base64 32)
+Keep secrets.masterKey safe: environment variables are encrypted with it and cannot be recovered without it.
+{{- end }}
+{{- if not .Values.github.appId }}
+
+WARNING: GitHub is not configured. The control plane refuses to start until github.appId, github.privateKey, github.webhookSecret, github.clientId and github.clientSecret are all set.
+{{- end }}
+{{- if and (eq .Values.profile "ha") .Values.nats.managed (not .Values.nats.config.cluster.enabled) }}
+
+WARNING: profile ha is running a single NATS server. Install with -f values-ha.yaml, or set nats.config.cluster.enabled=true and nats.config.cluster.replicas=3.
+{{- end }}
+{{- if .Values.gateway.create }}
+
+DNS: point {{ include "liftgate.hosts" . | fromJsonArray | join ", " }} and *.{{ .Values.deployDomain }} at the nodes running the {{ .Values.gateway.className }} gateway.
+TLS: the wildcard listener reads secret {{ .Values.gateway.wildcardSecret }} in {{ .Release.Namespace }}; issue it with a DNS-01 Certificate for *.{{ .Values.deployDomain }}.
+{{- end }}
+
+Pods:  kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/instance={{ .Release.Name }}
+Logs:  kubectl -n {{ .Release.Namespace }} logs -l app.kubernetes.io/component=control-plane -f

@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "profile",
+    "controlPlane",
+    "dashboard",
+    "postgres",
+    "nats",
+    "gateway",
+    "deployDomain",
+    "publicUrl",
+    "dashboardUrl",
+    "github",
+    "secrets",
+    "registry",
+    "build",
+    "prometheusUrl"
+  ],
+  "properties": {
+    "global": { "type": "object" },
+    "profile": { "type": "string", "enum": ["single", "ha"] },
+    "imagePullSecrets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": { "name": { "type": "string" } }
+      }
+    },
+    "controlPlane": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["image", "tag", "replicas", "logLevel", "javaOpts", "resources"],
+      "properties": {
+        "image": { "type": "string", "minLength": 1 },
+        "tag": { "type": "string", "minLength": 1 },
+        "replicas": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["api", "reconciler", "builder", "meter"],
+          "properties": {
+            "api": { "type": "integer", "minimum": 1 },
+            "reconciler": { "type": "integer", "minimum": 1 },
+            "builder": { "type": "integer", "minimum": 1 },
+            "meter": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "logLevel": { "type": "string", "enum": ["TRACE", "DEBUG", "INFO", "WARN", "ERROR"] },
+        "javaOpts": { "type": "string" },
+        "resources": { "type": "object" }
+      }
+    },
+    "dashboard": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["image", "tag", "resources"],
+      "properties": {
+        "image": { "type": "string", "minLength": 1 },
+        "tag": { "type": "string", "minLength": 1 },
+        "resources": { "type": "object" }
+      }
+    },
+    "postgres": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["managed", "externalUrl", "externalUser", "externalPassword", "storage"],
+      "properties": {
+        "managed": { "type": "boolean" },
+        "externalUrl": { "type": "string" },
+        "externalUser": { "type": "string" },
+        "externalPassword": { "type": "string" },
+        "storage": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?(Ki|Mi|Gi|Ti|k|M|G|T)?$" }
+      },
+      "if": { "properties": { "managed": { "const": false } } },
+      "then": {
+        "properties": {
+          "externalUrl": { "pattern": "^jdbc:postgresql://" },
+          "externalUser": { "minLength": 1 }
+        }
+      }
+    },
+    "nats": {
+      "type": "object",
+      "required": ["managed", "externalUrl"],
+      "properties": {
+        "managed": { "type": "boolean" },
+        "externalUrl": { "type": "string" }
+      },
+      "if": { "properties": { "managed": { "const": false } } },
+      "then": { "properties": { "externalUrl": { "pattern": "^(nats|tls)://" } } }
+    },
+    "gateway": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["create", "name", "className", "wildcardSecret", "issuer"],
+      "properties": {
+        "create": { "type": "boolean" },
+        "name": { "type": "string", "minLength": 1 },
+        "namespace": { "type": "string" },
+        "className": { "type": "string", "minLength": 1 },
+        "wildcardSecret": { "type": "string", "minLength": 1 },
+        "issuer": { "type": "string", "minLength": 1 }
+      }
+    },
+    "deployDomain": { "type": "string", "minLength": 1 },
+    "publicUrl": { "type": "string", "pattern": "^https?://" },
+    "dashboardUrl": { "type": "string", "pattern": "^(https?://.*)?$" },
+    "github": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["appId", "clientId", "clientSecret", "webhookSecret", "privateKey"],
+      "properties": {
+        "appId": { "type": ["string", "integer"] },
+        "clientId": { "type": "string" },
+        "clientSecret": { "type": "string" },
+        "webhookSecret": { "type": "string" },
+        "privateKey": { "type": "string" }
+      }
+    },
+    "secrets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["masterKey"],
+      "properties": {
+        "masterKey": { "type": "string" }
+      }
+    },
+    "registry": { "type": "string", "minLength": 1 },
+    "build": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["image", "namespace"],
+      "properties": {
+        "image": { "type": "string", "minLength": 1 },
+        "namespace": { "type": "string", "minLength": 1 },
+        "registryCredentials": { "type": "string" },
+        "allowedEgressCidrs": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "runtimeClass": { "type": "string" },
+    "prometheusUrl": { "type": "string", "pattern": "^https?://" }
+  }
+}

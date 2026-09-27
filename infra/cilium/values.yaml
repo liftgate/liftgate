@@ -15,3 +15,5 @@ envoy:
         - NET_ADMIN
         - SYS_ADMIN
         - NET_BIND_SERVICE
+bandwidthManager:
+  enabled: true

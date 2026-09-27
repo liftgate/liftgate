@@ -12,6 +12,7 @@ import dev.liftgate.events.enqueue
 import dev.liftgate.http.conflict
 import dev.liftgate.http.invalid
 import dev.liftgate.http.notFound
+import dev.liftgate.org.Limits
 import dev.liftgate.service.ServiceScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -45,7 +46,7 @@ fun ResultRow.toDomain() = Domain(
  * @author Dean
  * @date 9/17/2026
  */
-class Domains(private val db: Db, private val deployDomain: String) {
+class Domains(private val db: Db, private val deployDomain: String, private val limits: Limits = Limits()) {
     suspend fun ensurePlatform(scope: ServiceScope): Domain = db.tx {
         val service = scope.service
         ServicesTable.select(ServicesTable.id).where { ServicesTable.id eq service.id }.forUpdate().toList()
@@ -66,6 +67,7 @@ class Domains(private val db: Db, private val deployDomain: String) {
         val host = hostname.trim().lowercase().removeSuffix(".")
         DomainNames.validate(host, deployDomain)
         return db.tx {
+            limits.customDomain(serviceId)
             if (!DomainsTable.selectAll().where { (DomainsTable.hostname eq host) and DomainsTable.verifiedAt.isNotNull() }.empty()) conflict("$host is already verified by a service")
             DomainsTable.insertReturning {
                 it[id] = UUID.randomUUID()

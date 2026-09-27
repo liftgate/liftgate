@@ -29,3 +29,5 @@ fun invalid(message: String): Nothing = throw LiftgateException(HttpStatusCode.U
 fun accountPending(): Nothing = throw LiftgateException(HttpStatusCode.Forbidden, "account_pending", "your account is waiting for approval")
 
 fun orgSuspended(message: String = "this organization is suspended"): Nothing = throw LiftgateException(HttpStatusCode.Forbidden, "org_suspended", message)
+
+fun planLimit(message: String): Nothing = throw LiftgateException(HttpStatusCode.Conflict, "plan_limit", message)

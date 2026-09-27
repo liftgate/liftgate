@@ -8,6 +8,7 @@ import dev.liftgate.db.sql
 import dev.liftgate.db.toEnum
 import dev.liftgate.events.Subject
 import dev.liftgate.events.enqueue
+import dev.liftgate.org.Limits
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.jetbrains.exposed.v1.core.Op
@@ -53,8 +54,9 @@ fun JdbcTransaction.enqueueTeardown(where: () -> Op<Boolean>) = (Environments in
  * @author Dean
  * @date 9/17/2026
  */
-class Projects(private val db: Db) {
+class Projects(private val db: Db, private val limits: Limits = Limits()) {
     suspend fun create(orgId: UUID, slug: String, name: String, repoFullName: String, installationId: Long, importedByLogin: String? = null): Project = db.tx {
+        limits.project(orgId)
         GitHubInstallations.insertIgnore {
             it[id] = installationId
             it[GitHubInstallations.orgId] = orgId
@@ -69,6 +71,7 @@ class Projects(private val db: Db) {
             it[ProjectsTable.installationId] = installationId
             it[ProjectsTable.importedByLogin] = importedByLogin
         }.single().toProject()
+        limits.environment(project.id)
         insertEnvironment(project.id, "production", "Production", EnvironmentKind.PRODUCTION, project.repoDefaultBranch)
         project
     }
@@ -86,8 +89,10 @@ class Projects(private val db: Db) {
         }
     }
 
-    suspend fun createEnvironment(projectId: UUID, slug: String, name: String, kind: EnvironmentKind, branch: String): Environment =
-        db.tx { insertEnvironment(projectId, slug, name, kind, branch) }
+    suspend fun createEnvironment(projectId: UUID, slug: String, name: String, kind: EnvironmentKind, branch: String): Environment = db.tx {
+        limits.environment(projectId)
+        insertEnvironment(projectId, slug, name, kind, branch)
+    }
 
     suspend fun environment(id: UUID): Environment? = db.tx { Environments.selectAll().where { Environments.id eq id }.singleOrNull()?.toEnvironment() }
 

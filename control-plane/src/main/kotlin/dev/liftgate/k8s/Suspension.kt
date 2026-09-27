@@ -18,6 +18,6 @@ class Suspension(private val app: App, kube: KubernetesClient) {
             .reduceOrNull { first, next -> first.apply { addSuppressed(next) } }?.let { throw it }
     }
 
-    fun start() = mapOf(Subject.ORG_SUSPENDED to "reconciler-org-suspended", Subject.ORG_UNSUSPENDED to "reconciler-org-unsuspended")
+    fun start() = mapOf(Subject.ORG_SUSPENDED to "reconciler-org-suspended", Subject.ORG_UNSUSPENDED to "reconciler-org-unsuspended", Subject.ORG_PLAN_CHANGED to "reconciler-org-plan-changed")
         .map { (subject, durable) -> app.nats.consume(subject, durable, app.scope) { reapply(it.uuid("orgId")) } }
 }

@@ -5,13 +5,15 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { useAction, useApi } from "@/lib/hooks";
-import type { GitConnection, Project } from "@/lib/types";
+import type { GitConnection, Project, Usage } from "@/lib/types";
 import { formValues } from "@/lib/util";
 import { Loaded } from "@/components/loaded";
 import { NameSlugFields } from "@/components/name-slug-fields";
 import { PageHeader } from "@/components/page-header";
 import { ProviderLink } from "@/components/provider";
+import { Badge } from "@/components/ui/badge";
 import { Button, buttonClasses } from "@/components/ui/button";
+import { Card, CardHeader } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Field, FormError, Input } from "@/components/ui/input";
@@ -82,6 +84,7 @@ export function Projects({ org }: { org: string }) {
           )
         }
       </Loaded>
+      <UsageCard org={org} />
       <Dialog open={creating} title="New project" onClose={close}>
         <form
           onSubmit={(e) => {
@@ -117,6 +120,58 @@ export function Projects({ org }: { org: string }) {
           </div>
         </form>
       </Dialog>
+    </div>
+  );
+}
+
+function UsageCard({ org }: { org: string }) {
+  const usage = useApi<Usage>(`/orgs/${org}/usage`);
+  return (
+    <Card>
+      <CardHeader
+        title="Usage"
+        description="What this organization uses against its plan"
+        actions={usage.data && <Badge>{usage.data.plan} plan</Badge>}
+      />
+      <div className="p-6">
+        <Loaded query={usage} skeleton={<UsageSkeleton />}>
+          {(u) => (
+            <dl className="grid grid-cols-2 gap-6 sm:grid-cols-3">
+              {(
+                [
+                  ["Projects", u.projects, u.limits.projects, ""],
+                  ["Services", u.services, u.limits.services, ""],
+                  ["Custom domains", u.customDomains, u.limits.customDomains, ""],
+                  ["Replicas", u.replicas, u.limits.replicas, ""],
+                  ["CPU", u.cpuMillis, u.limits.cpuMillis, "m"],
+                  ["Memory", u.memoryMb, u.limits.memoryMb, " MB"],
+                ] as const
+              ).map(([label, used, limit, unit]) => (
+                <div key={label} className="flex flex-col gap-1">
+                  <dt className="text-sm text-graphite-400">{label}</dt>
+                  <dd className="text-sm font-medium">
+                    {used}
+                    {unit} <span className="font-normal text-graphite-400">{limit === null ? "of unlimited" : `of ${limit}${unit}`}</span>
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          )}
+        </Loaded>
+      </div>
+    </Card>
+  );
+}
+
+function UsageSkeleton() {
+  return (
+    <div className="grid grid-cols-2 gap-6 sm:grid-cols-3">
+      {Array.from({ length: 6 }, (_, i) => (
+        <div key={i} className="flex flex-col gap-2">
+          <Skeleton className="h-4 w-20" />
+          <Skeleton className="h-4 w-28" />
+        </div>
+      ))}
     </div>
   );
 }

@@ -82,6 +82,7 @@ class Reconciler(private val app: App, private val kube: KubernetesClient) {
             deployment, build, scope.service, scope.environment, scope.project, scope.org,
             app.envVars.list(scope.service.id, reveal = true),
             app.domains.forService(scope.service.id).filter { it.verifiedAt != null },
+            app.config.plans.of(scope.org.plan),
         )
     }
 

@@ -1,5 +1,6 @@
 package dev.liftgate.k8s
 
+import dev.liftgate.org.Plan
 import dev.liftgate.service.ServiceKind
 import io.fabric8.kubernetes.api.model.PodSpec
 import io.fabric8.kubernetes.api.model.Quantity
@@ -18,6 +19,7 @@ import kotlin.test.assertTrue
  */
 class ResourcesTest {
     private val release = testRelease()
+    private val free = Plan(replicas = 6, cpuMillis = 1000, memoryMb = 1024, cpuRequestRatio = 0.25, ephemeralMb = 1024, egressBandwidth = "20M", udp = false)
     private val environmentLabels = mapOf(
         "liftgate.dev/managed" to "true",
         "liftgate.dev/org" to "acme",
@@ -187,7 +189,7 @@ class ResourcesTest {
         assertEquals("0.0.0.0/0", block.cidr)
         assertTrue(block.except.containsAll(listOf("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16")))
         val tcp = internet.ports.filter { it.protocol == "TCP" }.map { it.port.intVal..it.endPort }
-        listOf(25, 465, 587).forEach { smtp -> assertTrue(tcp.none { smtp in it }, "port $smtp must stay closed") }
+        listOf(25, 465, 587, 2525).forEach { smtp -> assertTrue(tcp.none { smtp in it }, "port $smtp must stay closed") }
         listOf(1, 22, 80, 443, 5432, 65535).forEach { open -> assertTrue(tcp.any { open in it }, "port $open must be open") }
     }
 
@@ -217,10 +219,42 @@ class ResourcesTest {
     }
 
     @Test
-    fun `resource quota caps what one environment can request, disk included`() {
-        val quota = Resources.resourceQuota(release)
+    fun `resource quota is twice the plan's budgets so a rollout can surge, disk included`() {
+        val quota = Resources.resourceQuota(release.copy(plan = free))
         assertEquals(release.namespace, quota.metadata.namespace)
-        assertEquals(setOf("pods", "limits.cpu", "limits.memory", "requests.ephemeral-storage", "limits.ephemeral-storage"), quota.spec.hard.keys)
+        assertEquals(
+            mapOf(
+                "pods" to Quantity("12"), "limits.cpu" to Quantity("2"), "limits.memory" to Quantity("2Gi"),
+                "requests.ephemeral-storage" to Quantity("12Gi"), "limits.ephemeral-storage" to Quantity("12Gi"),
+            ),
+            quota.spec.hard,
+        )
+        assertTrue(Resources.resourceQuota(release).spec.hard.isNullOrEmpty())
+    }
+
+    @Test
+    fun `free plan egress allows udp only for dns while tcp stays open, and every plan blocks smtp`() {
+        fun egress(plan: Plan) = Resources.networkPolicies(release.copy(plan = plan), "liftgate-system").single { it.metadata.name == "allow-egress" }.spec.egress
+        val (dns, internet) = egress(free)
+        assertEquals(setOf("UDP" to 53, "TCP" to 53), dns.ports.map { it.protocol to it.port.intVal }.toSet())
+        assertEquals(setOf("TCP"), internet.ports.map { it.protocol }.toSet())
+        assertEquals(egress(Plan())[1].ports.filter { it.protocol == "TCP" }, internet.ports)
+        assertEquals(listOf(1 to 65535), egress(Plan())[1].ports.filter { it.protocol == "UDP" }.map { it.port.intVal to it.endPort })
+        val tcp = internet.ports.map { it.port.intVal..it.endPort }
+        listOf(25, 465, 587, 2525).forEach { smtp -> assertTrue(tcp.none { smtp in it }, "port $smtp must stay closed") }
+        listOf(22, 443, 3306, 5432, 6379, 27017).forEach { open -> assertTrue(tcp.any { open in it }, "port $open must be open") }
+    }
+
+    @Test
+    fun `free plan pods request a quarter of their cpu, cap their disk and carry the egress bandwidth`() {
+        val limited = release.copy(plan = free)
+        val container = Resources.deployment(limited, null).spec.template.spec.containers.single()
+        assertEquals(mapOf("cpu" to Quantity("63m"), "memory" to Quantity("256Mi"), "ephemeral-storage" to Quantity("1Gi")), container.resources.requests)
+        assertEquals(mapOf("cpu" to Quantity("250m"), "memory" to Quantity("256Mi"), "ephemeral-storage" to Quantity("1Gi")), container.resources.limits)
+        val bandwidth = mapOf("kubernetes.io/egress-bandwidth" to "20M")
+        assertEquals(bandwidth, Resources.deployment(limited, null).spec.template.metadata.annotations)
+        assertEquals(bandwidth, Resources.cronJob(limited, null).spec.jobTemplate.spec.template.metadata.annotations)
+        assertTrue(Resources.deployment(release, null).spec.template.metadata.annotations.isNullOrEmpty())
     }
 
     @Test

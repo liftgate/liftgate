@@ -343,6 +343,7 @@ kubectl -n liftgate-system exec deploy/liftgate-control-plane -- /opt/liftgate/b
 | `unsuspend <org>` | Restores each service's configured replicas and routes |
 | `suspend-user <user> <reason>` | Deletes the account's sessions and API tokens and refuses its sign-ins |
 | `unsuspend-user <user>` | Reactivates a suspended account |
+| `plan <org> <plan>` | Moves the organization onto one of `plans`, or onto `default` to follow `defaultPlan`, and re-renders its apps |
 
 `<user>` is a user id, login or email. Each change is written together with an `audit_log` row
 and an outbox event in one transaction.
@@ -440,6 +441,9 @@ empty, neither appears.
 | `legal.privacyUrl` | `""` | `LIFTGATE_PRIVACY_URL` |
 | `legal.aupUrl` | `""` | `LIFTGATE_AUP_URL`, the acceptable use policy |
 | `customDomains.enabled` | `true` | `LIFTGATE_CUSTOM_DOMAINS_ENABLED`; `false` replaces the dashboard's add-domain form with a notice, for edges that cannot route customer hostnames yet |
+| `customDomains.max` | `null` | `LIFTGATE_CUSTOM_DOMAINS_MAX`; the number of custom domains across every organization, unlimited when `null` |
+| `plans` | `free`, `unlimited` | `LIFTGATE_PLANS`; see [Plans](#plans) |
+| `defaultPlan` | `unlimited` | `LIFTGATE_DEFAULT_PLAN`; the plan of every organization that has not been given one with `admin plan` |
 | `allowSharedSite` | `false` | Render although `deployDomain` ends in the same two labels as `publicUrl` or `dashboardUrl`; see [Separate sites](#separate-sites) |
 
 Derived variables: `LIFTGATE_DATABASE_URL` points at the CloudNativePG `-rw` Service (or
@@ -452,6 +456,30 @@ is the release name when it contains `liftgate`, otherwise `<release>-liftgate`)
 namespace, `LIFTGATE_LEADER_ELECTION` is `kubernetes` and `LIFTGATE_HTTP_PORT` is `8080`.
 Empty optional values are left out of the ConfigMap and Secret so the control plane reports
 missing configuration instead of running with blank secrets.
+
+## Plans
+
+Every organization is on a plan from `plans`: `defaultPlan` unless an operator ran `admin plan`.
+A limit that is left out is unlimited, so `unlimited: {}` limits nothing.
+
+| Field | Limits |
+|---|---|
+| `ownedOrgs` | Organizations one user can own, taken from `defaultPlan` |
+| `projects`, `services`, `customDomains` | Per organization |
+| `environmentsPerProject` | Per project |
+| `replicas`, `cpuMillis`, `memoryMb` | Sums of pods, pods × `cpuMillis` and pods × `memoryMb` over the organization's services, where a service's pods are its `replicas` and a cron service counts as one pod |
+| `concurrentBuilds` | Running builds per organization; further builds wait in the queue. Needs `buildsPerHour` |
+| `buildsPerHour` | Builds per organization started in the last hour or waiting in the queue; further builds fail |
+| `cpuRequestRatio` | CPU request as a share of the limit (default `1`) |
+| `ephemeralMb` | Disk per container (default `2048`) |
+| `egressBandwidth` | `kubernetes.io/egress-bandwidth` of tenant pods, such as `20M`; needs the Cilium bandwidth manager |
+| `udp` | `false` closes UDP to the internet, leaving DNS to `kube-system` and traffic inside the environment (default `true`) |
+
+Creating or resizing past a limit answers `409 plan_limit` naming it, and nothing is written;
+changes that do not add to an organization that is already over a limit still pass. Each
+environment namespace gets a ResourceQuota of twice `replicas`, `cpuMillis`, `memoryMb` and
+`replicas × ephemeralMb`, so a rolling update can surge. SMTP ports 25, 465, 587 and 2525 are
+closed on every plan. `GET /api/v1/orgs/<org>/usage` reports what an organization uses against its plan.
 
 ## Node pools
 

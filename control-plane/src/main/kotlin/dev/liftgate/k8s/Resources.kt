@@ -4,6 +4,7 @@ import dev.liftgate.deploy.Build
 import dev.liftgate.deploy.Deployment
 import dev.liftgate.domain.Domain
 import dev.liftgate.org.Organization
+import dev.liftgate.org.Plan
 import dev.liftgate.project.Environment
 import dev.liftgate.project.Project
 import dev.liftgate.service.EnvVar
@@ -50,6 +51,7 @@ import io.fabric8.kubernetes.api.model.networking.v1.NetworkPolicyPort
 import io.fabric8.kubernetes.api.model.networking.v1.NetworkPolicyPortBuilder
 import io.fabric8.kubernetes.client.dsl.base.ResourceDefinitionContext
 import java.util.Base64
+import kotlin.math.roundToInt
 import io.fabric8.kubernetes.api.model.EnvVar as KubeEnvVar
 import io.fabric8.kubernetes.api.model.Service as KubeService
 import io.fabric8.kubernetes.api.model.apps.Deployment as KubeDeployment
@@ -76,6 +78,7 @@ data class Release(
     val org: Organization,
     val envVars: List<EnvVar>,
     val domains: List<Domain>,
+    val plan: Plan = Plan(),
 ) {
     val namespace get() = environment.namespace
     val hostnames get() = domains.map { it.hostname }
@@ -93,25 +96,29 @@ object Resources {
     private const val HTTPS_PORT = 443
     private const val TENANT_UID = 1000L
     private const val MAX_PORT = 65535
-    private const val EPHEMERAL_STORAGE = "2Gi"
+    private const val ROLLOUT_HEADROOM = 2
     private val privateRanges = listOf("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "169.254.0.0/16")
-    private val tcpWithoutSmtp = listOf(1 to 24, 26 to 464, 466 to 586, 588 to MAX_PORT)
+    private val tcpWithoutSmtp = listOf(1 to 24, 26 to 464, 466 to 586, 588 to 2524, 2526 to MAX_PORT)
 
     fun namespace(r: Release): Namespace = NamespaceBuilder()
         .withMetadata(meta(r.namespace, null, r.environmentLabels() + ("pod-security.kubernetes.io/enforce" to "restricted")))
         .build()
 
-    fun resourceQuota(r: Release): ResourceQuota = ResourceQuotaBuilder()
-        .withMetadata(meta("liftgate", r.namespace, r.environmentLabels()))
-        .withNewSpec()
-        .withHard<String, Quantity>(
-            mapOf(
-                "pods" to Quantity("50"), "limits.cpu" to Quantity("40"), "limits.memory" to Quantity("80Gi"),
-                "requests.ephemeral-storage" to Quantity("100Gi"), "limits.ephemeral-storage" to Quantity("100Gi"),
-            ),
+    fun resourceQuota(r: Release): ResourceQuota {
+        val pods = r.plan.replicas?.let { it * ROLLOUT_HEADROOM }
+        val disk = pods?.let { Quantity("${it * r.plan.ephemeralMb}Mi") }
+        val hard = mapOf(
+            "pods" to pods?.let { Quantity("$it") },
+            "limits.cpu" to r.plan.cpuMillis?.let { Quantity("${it * ROLLOUT_HEADROOM}m") },
+            "limits.memory" to r.plan.memoryMb?.let { Quantity("${it * ROLLOUT_HEADROOM}Mi") },
+            "requests.ephemeral-storage" to disk,
+            "limits.ephemeral-storage" to disk,
         )
-        .endSpec()
-        .build()
+        return ResourceQuotaBuilder()
+            .withMetadata(meta("liftgate", r.namespace, r.environmentLabels()))
+            .withNewSpec().withHard<String, Quantity>(hard.mapNotNull { (key, value) -> value?.let { key to it } }.toMap()).endSpec()
+            .build()
+    }
 
     fun secret(r: Release): Secret = SecretBuilder()
         .withMetadata(meta(r.secretName(), r.namespace, r.serviceLabels()))
@@ -175,7 +182,7 @@ object Resources {
                 .endSpec().build(),
             policy(r, "allow-egress").editSpec()
                 .addNewEgress().withTo(namespacePeer("kube-system")).withPorts(port("UDP", 53), port("TCP", 53)).endEgress()
-                .addNewEgress().withTo(internet).withPorts(tcpWithoutSmtp.map { (from, to) -> port("TCP", from, to) } + port("UDP", 1, MAX_PORT)).endEgress()
+                .addNewEgress().withTo(internet).withPorts(tcpWithoutSmtp.map { (from, to) -> port("TCP", from, to) } + listOfNotNull(port("UDP", 1, MAX_PORT).takeIf { r.plan.udp })).endEgress()
                 .endSpec().build(),
         )
     }
@@ -212,6 +219,7 @@ object Resources {
 
     private fun podTemplate(r: Release, runtimeClass: String?, nodeSelector: Map<String, String>, tolerations: List<Toleration>, restartPolicy: String): PodTemplateSpec = PodTemplateSpecBuilder()
         .withMetadata(meta(null, null, r.deploymentLabels()))
+        .editMetadata().withAnnotations<String, String>(r.plan.egressBandwidth?.let { mapOf("kubernetes.io/egress-bandwidth" to it) }).endMetadata()
         .withNewSpec()
         .withRuntimeClassName(runtimeClass)
         .withNodeSelector<String, String>(nodeSelector)
@@ -228,7 +236,8 @@ object Resources {
         .build()
 
     private fun container(r: Release): Container {
-        val resources = mapOf("cpu" to Quantity("${r.service.cpuMillis}m"), "memory" to Quantity("${r.service.memoryMb}Mi"), "ephemeral-storage" to Quantity(EPHEMERAL_STORAGE))
+        val limits = mapOf("cpu" to Quantity("${r.service.cpuMillis}m"), "memory" to Quantity("${r.service.memoryMb}Mi"), "ephemeral-storage" to Quantity("${r.plan.ephemeralMb}Mi"))
+        val requests = limits + ("cpu" to Quantity("${(r.service.cpuMillis * r.plan.cpuRequestRatio).roundToInt().coerceAtLeast(1)}m"))
         return ContainerBuilder()
             .withName("app")
             .withImage(r.build.imageRef)
@@ -237,7 +246,7 @@ object Resources {
             .withEnv(listOfNotNull(r.port()?.let { KubeEnvVar("PORT", it.toString(), null) }))
             .withPorts(listOfNotNull(r.port()?.let { ContainerPortBuilder().withName("http").withContainerPort(it).build() }))
             .withReadinessProbe(r.readinessProbe())
-            .withResources(ResourceRequirementsBuilder().withRequests<String, Quantity>(resources).withLimits<String, Quantity>(resources).build())
+            .withResources(ResourceRequirementsBuilder().withRequests<String, Quantity>(requests).withLimits<String, Quantity>(limits).build())
             .withNewSecurityContext()
             .withAllowPrivilegeEscalation(false)
             .withNewCapabilities().withDrop("ALL").endCapabilities()

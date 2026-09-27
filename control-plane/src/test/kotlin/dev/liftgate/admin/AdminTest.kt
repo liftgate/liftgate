@@ -9,7 +9,10 @@ import dev.liftgate.db.now
 import dev.liftgate.deploy.BuildStatus
 import dev.liftgate.deploy.Builds
 import dev.liftgate.events.Subject
+import dev.liftgate.org.DEFAULT_PLAN
 import dev.liftgate.org.Orgs
+import dev.liftgate.org.Plan
+import dev.liftgate.org.Plans
 import dev.liftgate.org.UserStatus
 import dev.liftgate.org.insertUser
 import dev.liftgate.project.Projects
@@ -112,6 +115,22 @@ class AdminTest {
         assertEquals(0L, db.tx { Sessions.selectAll().count() })
         assertEquals(listOf(spammer.id.toString() to json("status" to "suspended", "reason" to "spam")), audit("user.suspend"))
         assertEquals("spammer is active", exec("unsuspend-user", spammer.id.toString()))
+    }
+
+    @Test
+    fun `plan moves an org onto a configured plan and back to the default, and re-renders it`() = runBlocking {
+        val org = orgs.create("acme", "Acme", db.tx { insertUser("dean", null, null, null) }.id)
+        val admin = Admin(db, Plans(mapOf("free" to Plan(projects = 1), "unlimited" to Plan()), "free"))
+        assertEquals(DEFAULT_PLAN, org.plan)
+        assertEquals("acme is on the unlimited plan", admin.run(listOf("plan", "acme", "unlimited")))
+        assertEquals("unlimited", orgs.bySlug("acme")?.plan)
+        assertEquals("acme is on the free plan", admin.run(listOf("plan", "acme", "default")))
+        assertEquals(DEFAULT_PLAN, orgs.bySlug("acme")?.plan)
+        val orgId = org.id.toString()
+        assertEquals(setOf(json("plan" to "unlimited", "orgId" to orgId), json("plan" to DEFAULT_PLAN, "orgId" to orgId)), outbox(Subject.ORG_PLAN_CHANGED).toSet())
+        assertEquals(setOf(orgId to json("plan" to "unlimited"), orgId to json("plan" to DEFAULT_PLAN)), audit("org.plan").toSet())
+        assertEquals("pro is not a plan, choose one of free, unlimited, default", assertFailsWith<IllegalStateException> { admin.run(listOf("plan", "acme", "pro")) }.message)
+        assertTrue("usage: admin" in assertFailsWith<IllegalStateException> { admin.run(listOf("plan", "acme")) }.message.orEmpty())
     }
 
     @Test

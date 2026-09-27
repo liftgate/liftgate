@@ -140,3 +140,31 @@ export type ApiToken = {
 };
 
 export type ProjectTree = { project: Project; environments: Environment[]; services: Service[] };
+
+export type Plan = {
+  ownedOrgs: number | null;
+  projects: number | null;
+  environmentsPerProject: number | null;
+  services: number | null;
+  cpuMillis: number | null;
+  memoryMb: number | null;
+  replicas: number | null;
+  cpuRequestRatio: number;
+  ephemeralMb: number;
+  customDomains: number | null;
+  concurrentBuilds: number | null;
+  buildsPerHour: number | null;
+  egressBandwidth: string | null;
+  udp: boolean;
+};
+
+export type Usage = {
+  plan: string;
+  limits: Plan;
+  projects: number;
+  services: number;
+  customDomains: number;
+  replicas: number;
+  cpuMillis: number;
+  memoryMb: number;
+};

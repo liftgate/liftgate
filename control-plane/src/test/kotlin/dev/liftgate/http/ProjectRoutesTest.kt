@@ -6,7 +6,11 @@ import dev.liftgate.auth.Access
 import dev.liftgate.auth.GitConnections
 import dev.liftgate.auth.Sessions
 import dev.liftgate.build.GitHubApp
+import dev.liftgate.db.Projects as ProjectsTable
+import dev.liftgate.org.Limits
 import dev.liftgate.org.Orgs
+import dev.liftgate.org.Plan
+import dev.liftgate.org.Plans
 import dev.liftgate.org.insertUser
 import dev.liftgate.project.Project
 import dev.liftgate.project.Projects
@@ -25,6 +29,7 @@ import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
+import org.jetbrains.exposed.v1.jdbc.selectAll
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -64,5 +69,22 @@ class ProjectRoutesTest {
             val project = json.decodeFromString(Project.serializer(), response.bodyAsText())
             assertEquals(Triple(repo, 42L, "dean"), Triple(project.repoFullName, project.installationId, project.importedByLogin))
         }
+    }
+
+    @Test
+    fun `an import past the plan's project limit answers 409 plan_limit and creates nothing`() = testApplication {
+        every { app.projects } returns Projects(db, Limits(Plans(mapOf("free" to Plan(projects = 1)), "free")))
+        orgs.create("acme", "Acme", user.id)
+        application { liftgate(app) }
+        suspend fun import(slug: String) = client.post("/api/v1/orgs/acme/projects") {
+            session()
+            contentType(ContentType.Application.Json)
+            setBody("""{"slug":"$slug","name":"Shop","repoFullName":"acme/$slug"}""")
+        }
+        assertEquals(HttpStatusCode.Created, import("shop").status)
+        val refused = import("blog")
+        assertEquals(HttpStatusCode.Conflict, refused.status)
+        assertEquals(ErrorBody("plan_limit", "the free plan's projects limit is 1"), json.decodeFromString(ErrorBody.serializer(), refused.bodyAsText()))
+        assertEquals(1L, db.tx { ProjectsTable.selectAll().count() })
     }
 }

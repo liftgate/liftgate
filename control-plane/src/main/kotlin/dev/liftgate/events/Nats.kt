@@ -133,6 +133,7 @@ class Nats(private val config: Config, private val retryDelay: Duration = Durati
                 message.nak()
                 throw e
             }
+            if (e is Redeliver) return message.nakWithDelay(e.delay)
             log.warn("handler failed for {}", message.subject, e)
             val deliveries = message.metaData().deliveredCount()
             message.nakWithDelay(retryDelay.multipliedBy(1L shl (deliveries - 1).coerceAtMost(6).toInt()).coerceAtMost(Duration.ofMinutes(10)))

@@ -62,8 +62,9 @@ volumes are kept until the restored database has been checked.
 
    Go on only when the last command shows `Retain` for the volume of every
    `liftgate-postgres-<n>` claim. Until step 8 these volumes hold the old data directory,
-   including any WAL the archive is missing because step 2 could not run. They are the only way
-   back if the restore fails; without them step 4 is irreversible.
+   including any WAL the archive is missing because step 2 could not run. Without them step 4
+   destroys that data for good. This runbook has no tested procedure for starting the old
+   `Cluster` again from them; if the restore fails, they keep the data for a manual recovery.
 
 4. Delete the `Cluster`. This removes the Postgres pods, their PVCs and the
    `liftgate-postgres-app` Secret; the volumes from step 3 stay `Released` and the object store

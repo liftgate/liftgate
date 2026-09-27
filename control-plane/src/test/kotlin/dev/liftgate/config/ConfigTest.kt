@@ -32,6 +32,7 @@ class ConfigTest {
         assertEquals("jdbc:postgresql://localhost:5432/liftgate", config.databaseUrl)
         assertEquals("liftgate", config.databaseUser)
         assertEquals(8080, config.httpPort)
+        assertEquals("http://localhost:9090", Config.fromEnv(minimalEnv + ("LIFTGATE_HTTP_PORT" to "9090")).internalUrl)
         assertEquals("nats://localhost:4222", config.natsUrl)
         assertEquals("liftgate.app", config.deployDomain)
         assertEquals("liftgate-system", config.gatewayNamespace)

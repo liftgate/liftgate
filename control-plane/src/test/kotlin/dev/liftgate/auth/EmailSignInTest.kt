@@ -1,8 +1,8 @@
 package dev.liftgate.auth
 
+import dev.liftgate.TestDatabase
 import dev.liftgate.cache.Cache
 import dev.liftgate.config.EmailConfig
-import dev.liftgate.db.Db
 import dev.liftgate.db.EmailCodes as EmailCodesTable
 import dev.liftgate.db.Identities
 import dev.liftgate.db.Users
@@ -18,10 +18,6 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.update
 import org.junit.jupiter.api.AfterAll
-import org.testcontainers.containers.PostgreSQLContainer
-import org.testcontainers.junit.jupiter.Container
-import org.testcontainers.junit.jupiter.Testcontainers
-import org.testcontainers.utility.DockerImageName
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -32,13 +28,8 @@ import kotlin.test.assertTrue
  * @author Dean
  * @date 9/18/2026
  */
-@Testcontainers(disabledWithoutDocker = true)
 class EmailSignInTest {
     companion object {
-        @Container
-        @JvmField
-        val postgres = PostgreSQLContainer<Nothing>(DockerImageName.parse("postgres:16-alpine"))
-
         private val cache by lazy { Cache(testConfig()) }
 
         @AfterAll
@@ -46,22 +37,13 @@ class EmailSignInTest {
         fun close() = cache.close()
     }
 
-    private val config by lazy {
-        testConfig(
-            mapOf(
-                "LIFTGATE_DATABASE_URL" to postgres.jdbcUrl,
-                "LIFTGATE_DATABASE_USER" to postgres.username,
-                "LIFTGATE_DATABASE_PASSWORD" to postgres.password,
-            ),
-        )
-    }
-    private val db by lazy { Db(config).also { it.migrate() } }
+    private val db = TestDatabase.clean()
     private val sent = mutableListOf<MimeMessage>()
     private val codes by lazy {
         EmailCodes(
             db,
             cache,
-            config.secretsMasterKey,
+            testConfig().secretsMasterKey,
             Mailer(EmailConfig("mail.example.com", 587, false, null, null, "login@liftgate.dev")) { sent += it },
             SignIn(db, mockk<Sessions> { coEvery { create(any()) } returns "session" }),
         )

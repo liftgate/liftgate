@@ -1,6 +1,6 @@
 package dev.liftgate.deploy
 
-import dev.liftgate.db.Db
+import dev.liftgate.TestDatabase
 import dev.liftgate.db.Outbox
 import dev.liftgate.events.Subject
 import dev.liftgate.http.LiftgateException
@@ -10,14 +10,9 @@ import dev.liftgate.project.Projects
 import dev.liftgate.service.ServiceKind
 import dev.liftgate.service.ServiceSpec
 import dev.liftgate.service.Services
-import dev.liftgate.testConfig
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.selectAll
-import org.testcontainers.containers.PostgreSQLContainer
-import org.testcontainers.junit.jupiter.Container
-import org.testcontainers.junit.jupiter.Testcontainers
-import org.testcontainers.utility.DockerImageName
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -49,26 +44,10 @@ class DeploymentStatusTest {
  * @author Dean
  * @date 9/17/2026
  */
-@Testcontainers(disabledWithoutDocker = true)
 class DeploymentsTest {
-    companion object {
-        @Container
-        @JvmField
-        val postgres = PostgreSQLContainer<Nothing>(DockerImageName.parse("postgres:16-alpine"))
-    }
-
     @Test
     fun `builds release, a running deployment supersedes older ones and rollback re-releases the older build`() = runBlocking {
-        val db = Db(
-            testConfig(
-                mapOf(
-                    "LIFTGATE_DATABASE_URL" to postgres.jdbcUrl,
-                    "LIFTGATE_DATABASE_USER" to postgres.username,
-                    "LIFTGATE_DATABASE_PASSWORD" to postgres.password,
-                ),
-            ),
-        )
-        db.migrate()
+        val db = TestDatabase.clean()
         val orgs = Orgs(db)
         val projects = Projects(db)
         val builds = Builds(db)
@@ -94,6 +73,5 @@ class DeploymentsTest {
         assertEquals(DeploymentStatus.ROLLED_BACK, deployments.byId(second.id)?.status)
         assertFailsWith<LiftgateException> { deployments.transition(second.id, DeploymentStatus.RUNNING) }
         assertEquals(3L, db.tx { Outbox.selectAll().where { Outbox.subject eq Subject.RELEASE_REQUESTED.value }.count() })
-        db.close()
     }
 }

@@ -120,3 +120,6 @@ legal:
   termsUrl: ""
   privacyUrl: ""
   aupUrl: ""
+
+customDomains:
+  enabled: true

@@ -79,3 +79,4 @@ data:
   {{- if .Values.gitlab.trustEmail }}
   LIFTGATE_GITLAB_TRUST_EMAIL: "true"
   {{- end }}
+  LIFTGATE_CUSTOM_DOMAINS_ENABLED: {{ .Values.customDomains.enabled | quote }}

@@ -12,7 +12,7 @@ import { Select } from "./ui/select";
 export function Nav() {
   const router = useRouter();
   const onLogin = usePathname().startsWith("/login");
-  const { org, project, service } = useParams<{ org?: string; project?: string; service?: string }>();
+  const { org, project, environment, service } = useParams<{ org?: string; project?: string; environment?: string; service?: string }>();
   const me = useApi<User>(onLogin ? null : "/me");
   const orgs = useApi<Organization[]>(onLogin ? null : "/orgs");
   const signOut = useAction(async () => {
@@ -20,7 +20,7 @@ export function Nav() {
     window.location.replace("/login");
   });
   const suspended = orgs.data?.find((o) => o.slug === org && o.suspendedAt);
-  const segments = [org, project, service].filter((s): s is string => !!s);
+  const segments = [org, project, service && `${environment}/${service}`].filter((s): s is string => !!s);
   const crumbs = segments.map((label, i) => ({ label, href: `/${segments.slice(0, i + 1).join("/")}` }));
   return (
     <header className="border-b border-graphite-700 bg-graphite-900">

@@ -102,6 +102,7 @@ export type AuthProviders = {
   passkey: boolean;
   email: boolean;
   sso: boolean;
+  customDomains: boolean;
   termsUrl?: string;
   privacyUrl?: string;
   aupUrl?: string;
@@ -137,3 +138,5 @@ export type ApiToken = {
   lastUsedAt: string | null;
   expiresAt: string | null;
 };
+
+export type ProjectTree = { project: Project; environments: Environment[]; services: Service[] };

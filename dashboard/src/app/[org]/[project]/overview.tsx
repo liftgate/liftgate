@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api } from "@/lib/api";
 import { useAction, useApi } from "@/lib/hooks";
-import type { Environment, Project, Service, ServiceSpec } from "@/lib/types";
+import type { Environment, ProjectTree, Service, ServiceSpec } from "@/lib/types";
 import { formValues } from "@/lib/util";
 import { Loaded } from "@/components/loaded";
 import { NameSlugFields } from "@/components/name-slug-fields";
@@ -24,9 +24,9 @@ import { Cell, Row, Table } from "@/components/ui/table";
 export function Overview({ org, projectSlug }: { org: string; projectSlug: string }) {
   const router = useRouter();
   const [dialog, setDialog] = useState<"environment" | "service">();
-  const projects = useApi<Project[]>(`/orgs/${org}/projects`);
-  const project = projects.data?.find((p) => p.slug === projectSlug);
-  const environments = useApi<Environment[]>(project && `/projects/${project.id}/environments`);
+  const tree = useApi<ProjectTree>(`/orgs/${org}/projects/${projectSlug}/tree`);
+  const project = tree.data?.project;
+  const environments = tree.data?.environments;
   const createEnvironment = useAction(async (form: HTMLFormElement) => {
     const v = formValues(form);
     await api(`/projects/${project?.id}/environments`, {
@@ -34,14 +34,13 @@ export function Overview({ org, projectSlug }: { org: string; projectSlug: strin
       body: { slug: v.slug, name: v.name, kind: v.kind, branch: v.branch },
     });
     setDialog(undefined);
-    environments.reload();
+    tree.reload();
   });
   const createService = useAction(async (spec: ServiceSpec, values: Record<string, string>) => {
     const service = await api<Service>(`/environments/${values.environmentId}/services`, { method: "POST", body: spec });
-    router.push(`/${org}/${projectSlug}/${service.slug}`);
+    router.push(`/${org}/${projectSlug}/${environments?.find((e) => e.id === service.environmentId)?.slug}/${service.slug}`);
   });
-  if (projects.error) return <ErrorState error={projects.error} retry={projects.reload} />;
-  if (projects.data && !project) {
+  if (tree.error?.status === 404) {
     return (
       <EmptyState
         title="Project not found"
@@ -54,6 +53,7 @@ export function Overview({ org, projectSlug }: { org: string; projectSlug: strin
       />
     );
   }
+  if (tree.error) return <ErrorState error={tree.error} retry={tree.reload} />;
   const href = `/${org}/${projectSlug}`;
   return (
     <div className="flex flex-col gap-8">
@@ -65,14 +65,14 @@ export function Overview({ org, projectSlug }: { org: string; projectSlug: strin
             <Button onClick={() => setDialog("environment")} disabled={!project}>
               New environment
             </Button>
-            <Button variant="primary" onClick={() => setDialog("service")} disabled={!environments.data?.length}>
+            <Button variant="primary" onClick={() => setDialog("service")} disabled={!environments?.length}>
               New service
             </Button>
           </>
         }
       />
-      <Loaded query={environments} skeleton={<TableSkeleton />}>
-        {(list) =>
+      <Loaded query={tree} skeleton={<TableSkeleton />}>
+        {({ environments: list, services }) =>
           list.length === 0 ? (
             <EmptyState
               title="No environments yet"
@@ -80,7 +80,14 @@ export function Overview({ org, projectSlug }: { org: string; projectSlug: strin
               action={<Button onClick={() => setDialog("environment")}>New environment</Button>}
             />
           ) : (
-            list.map((environment) => <EnvironmentCard key={environment.id} environment={environment} href={href} />)
+            list.map((environment) => (
+              <EnvironmentCard
+                key={environment.id}
+                environment={environment}
+                services={services.filter((s) => s.environmentId === environment.id)}
+                href={`${href}/${environment.slug}`}
+              />
+            ))
           )
         }
       </Loaded>
@@ -118,7 +125,7 @@ export function Overview({ org, projectSlug }: { org: string; projectSlug: strin
           before={
             <Field label="Environment">
               <Select name="environmentId" required>
-                {environments.data?.map((environment) => (
+                {environments?.map((environment) => (
                   <option key={environment.id} value={environment.id}>
                     {environment.name}
                   </option>
@@ -137,8 +144,7 @@ export function Overview({ org, projectSlug }: { org: string; projectSlug: strin
   );
 }
 
-function EnvironmentCard({ environment, href }: { environment: Environment; href: string }) {
-  const services = useApi<Service[]>(`/environments/${environment.id}/services`);
+function EnvironmentCard({ environment, services, href }: { environment: Environment; services: Service[]; href: string }) {
   return (
     <Card>
       <CardHeader
@@ -147,32 +153,28 @@ function EnvironmentCard({ environment, href }: { environment: Environment; href
         actions={<StatusBadge status={environment.kind} />}
       />
       <div className="p-6">
-        <Loaded query={services} skeleton={<TableSkeleton rows={2} />}>
-          {(list) =>
-            list.length === 0 ? (
-              <EmptyState title="No services in this environment" description="Add a web, worker, cron or static service." />
-            ) : (
-              <Table columns={["Service", "Kind", "Resources", "Replicas"]}>
-                {list.map((service) => (
-                  <Row key={service.id}>
-                    <Cell>
-                      <Link href={`${href}/${service.slug}`} className="font-medium hover:text-accent">
-                        {service.name}
-                      </Link>
-                    </Cell>
-                    <Cell>
-                      <StatusBadge status={service.kind} />
-                    </Cell>
-                    <Cell className="text-graphite-400">
-                      {service.cpuMillis}m CPU · {service.memoryMb} MB
-                    </Cell>
-                    <Cell>{service.replicas}</Cell>
-                  </Row>
-                ))}
-              </Table>
-            )
-          }
-        </Loaded>
+        {services.length === 0 ? (
+          <EmptyState title="No services in this environment" description="Add a web, worker, cron or static service." />
+        ) : (
+          <Table columns={["Service", "Kind", "Resources", "Replicas"]}>
+            {services.map((service) => (
+              <Row key={service.id}>
+                <Cell>
+                  <Link href={`${href}/${service.slug}`} className="font-medium hover:text-accent">
+                    {service.name}
+                  </Link>
+                </Cell>
+                <Cell>
+                  <StatusBadge status={service.kind} />
+                </Cell>
+                <Cell className="text-graphite-400">
+                  {service.cpuMillis}m CPU · {service.memoryMb} MB
+                </Cell>
+                <Cell>{service.replicas}</Cell>
+              </Row>
+            ))}
+          </Table>
+        )}
       </div>
     </Card>
   );

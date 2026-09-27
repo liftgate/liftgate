@@ -2,7 +2,7 @@
 
 import { api } from "@/lib/api";
 import { useAction, useApi } from "@/lib/hooks";
-import type { Domain, Service } from "@/lib/types";
+import type { AuthProviders, Domain, Service } from "@/lib/types";
 import { formValues } from "@/lib/util";
 import { Loaded } from "@/components/loaded";
 import { StatusBadge } from "@/components/ui/badge";
@@ -10,13 +10,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FormError, Input } from "@/components/ui/input";
-import { TableSkeleton } from "@/components/ui/skeleton";
+import { Skeleton, TableSkeleton } from "@/components/ui/skeleton";
 import { Cell, Row, Table } from "@/components/ui/table";
 
 const isCustom = (domain: Domain) => domain.kind.toLowerCase() === "custom";
 
 export function DomainsTab({ service }: { service: Service }) {
   const domains = useApi<Domain[]>(`/services/${service.id}/domains`);
+  const providers = useApi<AuthProviders>("/auth/providers");
   const add = useAction(async (form: HTMLFormElement) => {
     const { hostname } = formValues(form);
     await api(`/services/${service.id}/domains`, { method: "POST", body: { hostname } });
@@ -91,24 +92,35 @@ export function DomainsTab({ service }: { service: Service }) {
           </Loaded>
         </div>
       </Card>
-      <Card>
-        <CardHeader title="Add a custom domain" description="Ownership is checked with a TXT record; point the hostname at your Liftgate gateway to receive traffic." />
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            add.run(e.currentTarget);
-          }}
-          className="flex flex-col gap-4 p-6"
-        >
-          <div className="flex gap-2">
-            <Input name="hostname" required placeholder="app.example.com" pattern="[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}" className="max-w-sm flex-1 font-mono" />
-            <Button type="submit" variant="primary" pending={add.pending}>
-              Add domain
-            </Button>
-          </div>
-          <FormError message={add.error} />
-        </form>
-      </Card>
+      <Loaded query={providers} skeleton={<Skeleton className="h-40" />}>
+        {({ customDomains }) =>
+          customDomains ? (
+            <Card>
+              <CardHeader title="Add a custom domain" description="Ownership is checked with a TXT record; point the hostname at your Liftgate gateway to receive traffic." />
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  add.run(e.currentTarget);
+                }}
+                className="flex flex-col gap-4 p-6"
+              >
+                <div className="flex gap-2">
+                  <Input name="hostname" required placeholder="app.example.com" pattern="[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}" className="max-w-sm flex-1 font-mono" />
+                  <Button type="submit" variant="primary" pending={add.pending}>
+                    Add domain
+                  </Button>
+                </div>
+                <FormError message={add.error} />
+              </form>
+            </Card>
+          ) : (
+            <EmptyState
+              title="Custom domains are not enabled"
+              description="This installation serves web and static services on their platform hostname only. You can add your own domain here once custom domains are enabled."
+            />
+          )
+        }
+      </Loaded>
     </div>
   );
 }

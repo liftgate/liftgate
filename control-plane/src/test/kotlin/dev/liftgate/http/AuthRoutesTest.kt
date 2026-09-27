@@ -102,9 +102,16 @@ class AuthRoutesTest {
     fun `providers lists the configured oauth providers`() = testApplication {
         application { liftgate(app) }
         assertEquals(
-            """{"oauth":["github","google"],"passkey":true,"email":false,"sso":true}""",
+            """{"oauth":["github","google"],"passkey":true,"email":false,"sso":true,"customDomains":true}""",
             client.get("/api/v1/auth/providers").bodyAsText(),
         )
+    }
+
+    @Test
+    fun `providers report custom domains as disabled when configured off`() = testApplication {
+        every { app.config } returns testConfig(mapOf("LIFTGATE_CUSTOM_DOMAINS_ENABLED" to "false"))
+        application { liftgate(app) }
+        assertTrue(""""customDomains":false""" in client.get("/api/v1/auth/providers").bodyAsText())
     }
 
     @Test

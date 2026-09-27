@@ -38,6 +38,17 @@ postgres:
   externalUser: ""
   externalPassword: ""
   storage: 10Gi
+  maxConnections: 100
+  backup:
+    enabled: false
+    endpointUrl: ""
+    destinationPath: s3://liftgate-pg/
+    credentialsSecret: liftgate-postgres-backup
+    retention: 30d
+    schedule: "0 0 3 * * *"
+    serverName: ""
+    recoverFrom: ""
+    recoverTo: ""
 
 nats:
   managed: true

@@ -1,12 +1,21 @@
 {{- if .Values.postgres.managed }}
+{{- $backup := .Values.postgres.backup }}
+{{- if and $backup.recoverFrom (eq $backup.recoverFrom (include "liftgate.postgresServerName" .)) }}
+{{- fail "postgres.backup.serverName must differ from postgres.backup.recoverFrom: CloudNativePG refuses to archive a restored cluster into an archive that already holds WAL" }}
+{{- end }}
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
   name: {{ include "liftgate.postgresCluster" . }}
   labels:
     {{- include "liftgate.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
 spec:
   instances: {{ eq (include "liftgate.ha" .) "true" | ternary 3 1 }}
+  postgresql:
+    parameters:
+      max_connections: {{ .Values.postgres.maxConnections | quote }}
   storage:
     size: {{ .Values.postgres.storage }}
   {{- with .Values.nodeSelector }}
@@ -15,7 +24,35 @@ spec:
       {{- toYaml . | nindent 6 }}
   {{- end }}
   bootstrap:
+    {{- if $backup.recoverFrom }}
+    recovery:
+      source: origin
+      database: liftgate
+      owner: liftgate
+      {{- with $backup.recoverTo }}
+      recoveryTarget:
+        targetTime: {{ . | quote }}
+      {{- end }}
+    {{- else }}
     initdb:
       database: liftgate
       owner: liftgate
+    {{- end }}
+  {{- if $backup.recoverFrom }}
+  externalClusters:
+    - name: origin
+      plugin:
+        name: barman-cloud.cloudnative-pg.io
+        parameters:
+          barmanObjectName: {{ include "liftgate.postgresCluster" . }}
+          serverName: {{ $backup.recoverFrom }}
+  {{- end }}
+  {{- if $backup.enabled }}
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: {{ include "liftgate.postgresCluster" . }}
+        serverName: {{ include "liftgate.postgresServerName" . }}
+  {{- end }}
 {{- end }}

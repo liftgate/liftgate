@@ -5,3 +5,7 @@ nats:
     cluster:
       enabled: true
       replicas: 3
+
+postgres:
+  backup:
+    enabled: true

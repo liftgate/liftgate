@@ -87,3 +87,7 @@ nats://{{ include "liftgate.natsService" . }}.{{ .Release.Namespace }}.svc:4222
 {{- range include "liftgate.hosts" . | fromJsonArray }}{{ if and $site (eq $site (include "liftgate.site" .)) }}{{ $shared = $site }}{{ end }}{{ end -}}
 {{- $shared -}}
 {{- end -}}
+
+{{- define "liftgate.postgresServerName" -}}
+{{- .Values.postgres.backup.serverName | default (include "liftgate.postgresCluster" .) -}}
+{{- end -}}

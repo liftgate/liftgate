@@ -41,7 +41,7 @@ data:
   LIFTGATE_WEBAUTHN_RP_NAME: {{ . | quote }}
   {{- end }}
   LIFTGATE_REGISTRY: {{ .Values.registry | quote }}
-  LIFTGATE_BUILD_IMAGE: {{ .Values.build.image | quote }}
+  LIFTGATE_BUILD_IMAGE: {{ .Values.build.image | default (printf "ghcr.io/liftgate/build-image:%s" .Chart.AppVersion) | quote }}
   LIFTGATE_BUILD_NAMESPACE: {{ .Values.build.namespace | quote }}
   {{- if .Values.runtimeClass }}
   LIFTGATE_RUNTIME_CLASS: {{ .Values.runtimeClass | quote }}

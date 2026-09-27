@@ -4,7 +4,7 @@ imagePullSecrets: []
 
 controlPlane:
   image: ghcr.io/liftgate/control-plane
-  tag: 0.1.0
+  tag: ""
   replicas:
     api: 3
     reconciler: 2
@@ -24,7 +24,7 @@ controlPlane:
 
 dashboard:
   image: ghcr.io/liftgate/dashboard
-  tag: 0.1.0
+  tag: ""
   resources:
     requests:
       cpu: 100m
@@ -101,7 +101,7 @@ secrets:
 registry: registry.liftgate.internal
 
 build:
-  image: ghcr.io/liftgate/build-image:latest
+  image: ""
   namespace: liftgate-build
   registryCredentials: ""
   allowedEgressCidrs: []

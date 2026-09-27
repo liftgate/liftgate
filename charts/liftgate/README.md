@@ -25,8 +25,7 @@ Google, GitLab, Bitbucket, email codes, passkeys and SAML sign-in are optional; 
 ## Install
 
 ```sh
-helm dependency update charts/liftgate
-helm upgrade --install liftgate charts/liftgate \
+helm upgrade --install liftgate oci://ghcr.io/liftgate/charts/liftgate --version <version> \
   --namespace liftgate-system --create-namespace \
   --set deployDomain=apps.example.net \
   --set publicUrl=https://liftgate.example.com \
@@ -38,8 +37,9 @@ helm upgrade --install liftgate charts/liftgate \
   --set-file github.privateKey=github-app.pem
 ```
 
-Add `-f charts/liftgate/values-ha.yaml` for the `ha` profile. Values files keep secrets out of
-shell history; pass them with `-f` instead of `--set` in production.
+Add `--set profile=ha --set nats.config.cluster.enabled=true`, the contents of `values-ha.yaml`,
+for the `ha` profile. Values files keep secrets out of shell history; pass them with `-f` instead
+of `--set` in production.
 
 ## Profiles
 
@@ -305,7 +305,7 @@ empty, neither appears.
 | `profile` | `single` | `single` or `ha` |
 | `imagePullSecrets` | `[]` | Pull secrets for both images |
 | `controlPlane.image` | `ghcr.io/liftgate/control-plane` | |
-| `controlPlane.tag` | `0.1.0` | |
+| `controlPlane.tag` | `""` | Empty means the chart's `appVersion` |
 | `controlPlane.replicas.{api,reconciler,builder,meter}` | `3,2,2,1` | Replicas per role in `ha` |
 | `controlPlane.logLevel` | `INFO` | `LIFTGATE_LOG_LEVEL` |
 | `controlPlane.trustedProxies` | `1` | `LIFTGATE_TRUSTED_PROXIES`: how many proxies append to `X-Forwarded-For` before the API. Rate limits read the client IP this many entries from the right. Count the gateway and every proxy in front of it, each of which must keep the incoming header (Caddy needs `trusted_proxies`); `0` uses the connection address. See [Client IP](#client-ip) |
@@ -314,7 +314,7 @@ empty, neither appears.
 | `controlPlane.javaOpts` | `-XX:MaxRAMPercentage=75.0` | `JAVA_TOOL_OPTIONS` |
 | `controlPlane.resources` | 250m / 768Mi, limit 1536Mi | |
 | `dashboard.image` | `ghcr.io/liftgate/dashboard` | |
-| `dashboard.tag` | `0.1.0` | |
+| `dashboard.tag` | `""` | Empty means the chart's `appVersion` |
 | `dashboard.resources` | 100m / 128Mi, limit 256Mi | |
 | `postgres.managed` | `true` | Render a CloudNativePG `Cluster` |
 | `postgres.externalUrl` | `""` | JDBC URL when not managed |
@@ -353,7 +353,7 @@ empty, neither appears.
 | `passkeys.rpName` | `""` | `LIFTGATE_WEBAUTHN_RP_NAME`; empty means `Liftgate` |
 | `secrets.masterKey` | `""` | `LIFTGATE_SECRETS_MASTER_KEY`, base64 of 32 bytes |
 | `registry` | `registry.liftgate.internal` | `LIFTGATE_REGISTRY` |
-| `build.image` | `ghcr.io/liftgate/build-image:latest` | `LIFTGATE_BUILD_IMAGE` |
+| `build.image` | `""` | `LIFTGATE_BUILD_IMAGE`; empty means `ghcr.io/liftgate/build-image:<appVersion>` |
 | `build.namespace` | `liftgate-build` | `LIFTGATE_BUILD_NAMESPACE`; the chart creates it |
 | `build.allowedEgressCidrs` | `[]` | Private addresses build jobs may reach, such as the registry, each as `{cidr: 10.0.0.5/32, ports: [5000]}` (TCP); everything else private is blocked. A bare CIDR string still works but opens every port, and the install notes warn about it |
 | `build.registryCredentials` | `""` | Docker `config.json` content; rendered as Secret `registry-credentials` in `build.namespace` and mounted by build jobs |

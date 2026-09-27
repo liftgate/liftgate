@@ -5,7 +5,7 @@ import dev.liftgate.auth.Sessions
 import dev.liftgate.org.Orgs
 import dev.liftgate.org.User
 import dev.liftgate.testConfig
-import io.ktor.client.request.cookie
+import dev.liftgate.unlimitedCache
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
@@ -33,6 +33,7 @@ class OrgRoutesTest {
         every { it.sessions } returns mockk<Sessions> { coEvery { resolve("s") } returns User(UUID.randomUUID(), "dean", null, null, null) }
         every { it.metrics } returns PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
         every { it.config } returns testConfig()
+        every { it.cache } returns unlimitedCache
     }
 
     @Test
@@ -40,7 +41,7 @@ class OrgRoutesTest {
         application { liftgate(app) }
         listOf("docs", "new", "settings", "admin", "status", "www", "app", "dashboard", "login").forEach {
             val response = client.post("/api/v1/orgs") {
-                cookie(SESSION_COOKIE, "s")
+                session()
                 contentType(ContentType.Application.Json)
                 setBody("""{"slug":"$it","name":"Taken"}""")
             }

@@ -6,7 +6,7 @@ import io.ktor.client.request.cookie
 import io.ktor.client.request.header
 import io.ktor.http.HttpHeaders
 
-fun HttpRequestBuilder.session(origin: String? = testConfig().dashboardUrl) {
-    cookie(SESSION_COOKIE, "s")
+fun HttpRequestBuilder.session(id: String = "s", origin: String? = testConfig().dashboardUrl) {
+    cookie(SESSION_COOKIE, id)
     origin?.let { header(HttpHeaders.Origin, it) }
 }

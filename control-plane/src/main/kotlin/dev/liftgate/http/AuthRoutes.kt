@@ -106,7 +106,7 @@ fun Route.authRoutes(app: App) {
     route("/me") {
         delete("/sessions") {
             app.sessions.deleteAll(call.sessionUser.id)
-            call.response.cookies.append(expired(SESSION_COOKIE))
+            call.response.cookies.append(expired(SESSION_COOKIE).copy(secure = true))
             call.respond(HttpStatusCode.NoContent)
         }
         get("/identities") { call.respond(app.signIn.identities(call.sessionUser.id)) }

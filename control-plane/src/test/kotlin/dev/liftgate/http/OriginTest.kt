@@ -79,10 +79,10 @@ class OriginTest {
     @Test
     fun `a cookie write needs the dashboard origin`() = testApplication {
         application { liftgate(app) }
-        val foreign = rollback { session(EVIL) }
+        val foreign = rollback { session(origin = EVIL) }
         assertEquals(HttpStatusCode.Forbidden, foreign.status)
         assertEquals("bad_origin", json.decodeFromString(ErrorBody.serializer(), foreign.bodyAsText()).error)
-        assertEquals(HttpStatusCode.Forbidden, rollback { session(null) }.status)
+        assertEquals(HttpStatusCode.Forbidden, rollback { session(origin = null) }.status)
         coVerify(exactly = 0) { deployments.rollback(any()) }
         assertEquals(HttpStatusCode.Created, rollback { session() }.status)
     }
@@ -96,7 +96,7 @@ class OriginTest {
     @Test
     fun `logout needs the dashboard origin and clears the secure host-only cookie`() = testApplication {
         application { liftgate(app) }
-        assertEquals(HttpStatusCode.Forbidden, client.post("/api/v1/auth/logout") { session(EVIL) }.status)
+        assertEquals(HttpStatusCode.Forbidden, client.post("/api/v1/auth/logout") { session(origin = EVIL) }.status)
         coVerify(exactly = 0) { sessions.delete(any()) }
         val response = client.post("/api/v1/auth/logout") { session() }
         assertEquals(HttpStatusCode.NoContent, response.status)
@@ -109,7 +109,7 @@ class OriginTest {
         application { liftgate(app) }
         val sockets = createClient { install(WebSockets) }
         val path = "/api/v1/logs/services/${testService.id}"
-        assertFails { sockets.webSocket(path, { session(EVIL) }) { incoming.receive() } }
+        assertFails { sockets.webSocket(path, { session(origin = EVIL) }) { incoming.receive() } }
         sockets.webSocket(path, { session() }) { assertEquals("ready", (incoming.receive() as Frame.Text).readText()) }
     }
 }

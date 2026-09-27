@@ -70,6 +70,11 @@ data class Config(
     val prometheusUrl: String,
     val leaderElection: Boolean,
     val natsReplicas: Int,
+    val signup: Signup,
+    val signupAllow: List<String>,
+    val termsUrl: String?,
+    val privacyUrl: String?,
+    val aupUrl: String?,
 ) {
     companion object {
         fun fromEnv(env: Map<String, String> = System.getenv()): Config {
@@ -96,6 +101,11 @@ data class Config(
                 pair.split('=', limit = 2).map(String::trim).takeIf { it.size == 2 && it[0].isNotEmpty() }?.let { (key, value) -> key to value }
                     ?: error("LIFTGATE_NODE_SELECTOR must be key=value[,key=value]")
             }.orEmpty()
+            val signup = text("SIGNUP", "approval").let { name -> Signup.entries.firstOrNull { it.name.equals(name, ignoreCase = true) } }
+                ?: error("LIFTGATE_SIGNUP must be one of open, approval, closed")
+            val allowEntry = Regex("github:[a-z0-9-]+|@[^@\\s]+|[^@\\s]+@[^@\\s]+")
+            val signupAllow = optional("SIGNUP_ALLOW")?.split(',')?.map { it.trim().lowercase() }?.filter(String::isNotEmpty).orEmpty()
+                .onEach { if (!allowEntry.matches(it)) error("LIFTGATE_SIGNUP_ALLOW entries must be emails, @domains or github:<login>, not $it") }
 
             return Config(
                 role = role,
@@ -130,6 +140,11 @@ data class Config(
                 prometheusUrl = text("PROMETHEUS_URL", "http://prometheus.liftgate-system:9090"),
                 leaderElection = text("LEADER_ELECTION", "kubernetes") != "off",
                 natsReplicas = text("NATS_REPLICAS", "1").toInt(),
+                signup = signup,
+                signupAllow = signupAllow,
+                termsUrl = optional("TERMS_URL"),
+                privacyUrl = optional("PRIVACY_URL"),
+                aupUrl = optional("AUP_URL"),
             )
         }
     }

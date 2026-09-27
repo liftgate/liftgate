@@ -4,9 +4,10 @@ export type User = {
   name: string | null;
   email: string | null;
   avatarUrl: string | null;
+  status: UserStatus;
 };
 
-export type Organization = { id: string; slug: string; name: string; plan: string };
+export type Organization = { id: string; slug: string; name: string; plan: string; suspendedAt: string | null; suspendedReason: string | null };
 
 export type Project = {
   id: string;
@@ -96,7 +97,15 @@ export type OAuthProvider = "github" | "google" | "gitlab" | "bitbucket";
 
 export type IdentityProvider = OAuthProvider | "email" | "saml";
 
-export type AuthProviders = { oauth: OAuthProvider[]; passkey: boolean; email: boolean; sso: boolean };
+export type AuthProviders = {
+  oauth: OAuthProvider[];
+  passkey: boolean;
+  email: boolean;
+  sso: boolean;
+  termsUrl?: string;
+  privacyUrl?: string;
+  aupUrl?: string;
+};
 
 export type Identity = { id: string; provider: IdentityProvider; email: string | null; createdAt: string; lastUsedAt: string | null };
 
@@ -117,3 +126,5 @@ export type SsoConnection = {
 };
 
 export type SsoServiceProvider = { entityId: string; acsUrl: string };
+
+export type UserStatus = "pending" | "active" | "suspended";

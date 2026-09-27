@@ -26,6 +26,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
+import java.time.Instant
 import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -92,6 +93,15 @@ class BuilderTest {
         every { app.github } returns null
         Builder(app, client).build(queued.id)
         coVerify { builds.markFailed(queued.id, "the GitHub App is not configured") }
+        assertNull(job().get())
+    }
+
+    @Test
+    fun `builds of a suspended org are refused`() = runBlocking {
+        coEvery { app.services.scope(testService.id) } returns ServiceScope(testService, testEnvironment, testProject, testOrg.copy(suspendedAt = Instant.now()))
+        Builder(app, client).build(queued.id)
+        coVerify { builds.markFailed(queued.id, "the organization is suspended") }
+        coVerify(exactly = 0) { builds.markRunning(any()) }
         assertNull(job().get())
     }
 

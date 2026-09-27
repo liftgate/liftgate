@@ -78,7 +78,8 @@ data class Release(
 ) {
     val namespace get() = environment.namespace
     val hostnames get() = domains.map { it.hostname }
-    val routable get() = service.kind == ServiceKind.WEB && domains.isNotEmpty()
+    val suspended get() = org.suspendedAt != null
+    val routable get() = !suspended && service.kind == ServiceKind.WEB && domains.isNotEmpty()
 }
 
 /**
@@ -114,7 +115,7 @@ object Resources {
     fun deployment(r: Release, runtimeClass: String?, nodeSelector: Map<String, String> = emptyMap()): KubeDeployment = DeploymentBuilder()
         .withMetadata(meta(r.service.slug, r.namespace, r.deploymentLabels()))
         .withNewSpec()
-        .withReplicas(r.service.replicas)
+        .withReplicas(if (r.suspended) 0 else r.service.replicas)
         .withRevisionHistoryLimit(5)
         .withProgressDeadlineSeconds(600)
         .withSelector(r.selector())
@@ -127,6 +128,7 @@ object Resources {
         .withMetadata(meta(r.service.slug, r.namespace, r.deploymentLabels()))
         .withNewSpec()
         .withSchedule(r.service.cronSchedule)
+        .withSuspend(r.suspended)
         .withConcurrencyPolicy("Forbid")
         .withSuccessfulJobsHistoryLimit(3)
         .withFailedJobsHistoryLimit(3)

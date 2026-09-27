@@ -2,6 +2,7 @@ package dev.liftgate.http
 
 import dev.liftgate.App
 import dev.liftgate.auth.Principal
+import dev.liftgate.org.UserStatus
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.createApplicationPlugin
 import io.ktor.server.request.authorization
@@ -14,7 +15,7 @@ val ApplicationCall.principal: Principal
     get() = attributes.getOrNull(principalKey) ?: unauthorized()
 
 fun authPlugin(app: App) = createApplicationPlugin("LiftgateAuth") {
-    onCall { call -> app.resolve(call)?.let { call.attributes.put(principalKey, it) } }
+    onCall { call -> app.resolve(call)?.takeIf { it.user.status != UserStatus.SUSPENDED }?.let { call.attributes.put(principalKey, it) } }
 }
 
 private suspend fun App.resolve(call: ApplicationCall): Principal? {

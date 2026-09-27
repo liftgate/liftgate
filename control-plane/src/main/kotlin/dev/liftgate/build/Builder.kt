@@ -39,6 +39,7 @@ class Builder(private val app: App, private val kube: KubernetesClient) {
     suspend fun build(buildId: UUID) {
         val build = app.builds.byId(buildId)?.takeIf { it.status == BuildStatus.QUEUED || it.status == BuildStatus.RUNNING } ?: return
         val scope = app.services.scope(build.serviceId) ?: return
+        if (scope.org.suspendedAt != null) return app.builds.markFailed(buildId, "the organization is suspended")
         val github = app.github ?: return app.builds.markFailed(buildId, "the GitHub App is not configured")
         val config = app.config
         val image = BuildJobs.imageRef(config.registry, scope.org, scope.project, scope.service, build.commitSha)

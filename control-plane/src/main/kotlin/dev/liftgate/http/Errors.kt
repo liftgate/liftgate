@@ -25,3 +25,7 @@ fun unauthorized(): Nothing = throw LiftgateException(HttpStatusCode.Unauthorize
 fun conflict(message: String): Nothing = throw LiftgateException(HttpStatusCode.Conflict, "conflict", message)
 
 fun invalid(message: String): Nothing = throw LiftgateException(HttpStatusCode.UnprocessableEntity, "invalid", message)
+
+fun accountPending(): Nothing = throw LiftgateException(HttpStatusCode.Forbidden, "account_pending", "your account is waiting for approval")
+
+fun orgSuspended(message: String = "this organization is suspended"): Nothing = throw LiftgateException(HttpStatusCode.Forbidden, "org_suspended", message)

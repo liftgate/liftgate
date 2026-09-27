@@ -1,5 +1,6 @@
 package dev.liftgate
 
+import dev.liftgate.admin.Admin
 import dev.liftgate.auth.Access
 import dev.liftgate.auth.ApiTokens
 import dev.liftgate.auth.EmailCodes
@@ -24,10 +25,13 @@ import dev.liftgate.domain.Domains
 import dev.liftgate.events.LeaderElection
 import dev.liftgate.events.Nats
 import dev.liftgate.events.OutboxRelay
+import dev.liftgate.events.Subject
+import dev.liftgate.events.uuid
 import dev.liftgate.http.httpServer
 import dev.liftgate.http.json
 import dev.liftgate.k8s.DeploymentWatcher
 import dev.liftgate.k8s.Reconciler
+import dev.liftgate.k8s.Suspension
 import dev.liftgate.metering.Meter
 import dev.liftgate.metering.Prometheus
 import dev.liftgate.org.Orgs
@@ -53,6 +57,7 @@ import kotlinx.coroutines.job
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.CountDownLatch
+import kotlin.system.exitProcess
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -83,7 +88,7 @@ class App(val config: Config) : AutoCloseable {
     val domains = Domains(db, config.deployDomain)
     val github = config.github?.let { GitHubApp(it, http) }
     val oauth = OAuth(http, config.publicUrl, OAuthProviders.enabled(config))
-    val signIn = SignIn(db, sessions)
+    val signIn = SignIn(db, sessions, config.signup, config.signupAllow, consent = config.termsUrl != null)
     val gitConnections = GitConnections(db, secrets, oauth)
     val passkeys = Passkeys(config, db, cache, signIn)
     val emailCodes = config.email?.let { EmailCodes(db, cache, config.secretsMasterKey, Mailer(it), signIn) }
@@ -100,10 +105,12 @@ class App(val config: Config) : AutoCloseable {
             val relay = OutboxRelay(db, nats)
             LeaderElection(config, kube, "liftgate-outbox-relay").start(scope) { coroutineScope { relay.start(this); Housekeeping(db).start(this) } }
             server = httpServer(this).start(wait = false)
+            nats.consume(Subject.USER_UPDATED, "api-user-updated", scope) { sessions.evict(it.uuid("userId")) }
         }
         if (runs(Role.RECONCILER)) {
             Reconciler(this, kube).start()
             DeploymentWatcher(this, kube).start()
+            Suspension(this, kube).start()
         }
         if (runs(Role.BUILDER)) Builder(this, kube).start()
         if (runs(Role.METER)) Meter(this, Prometheus(config.prometheusUrl, http)).start()
@@ -126,8 +133,14 @@ class App(val config: Config) : AutoCloseable {
     }
 }
 
-fun main() {
-    val app = App(Config.fromEnv())
+fun main(args: Array<String>) {
+    val config = Config.fromEnv()
+    if (args.firstOrNull() == "admin") {
+        val result = runCatching { Db(config).use { runBlocking { Admin(it).run(args.drop(1)) } } }
+        result.onSuccess(::println).onFailure { System.err.println(it.message ?: it) }
+        exitProcess(if (result.isSuccess) 0 else 1)
+    }
+    val app = App(config)
     app.start()
     app.awaitShutdown()
 }

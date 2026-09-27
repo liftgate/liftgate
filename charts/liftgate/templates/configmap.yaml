@@ -63,3 +63,16 @@ data:
   LIFTGATE_HTTP_PORT: "8080"
   LIFTGATE_LOG_LEVEL: {{ .Values.controlPlane.logLevel | quote }}
   LIFTGATE_NATS_REPLICAS: {{ ternary "3" "1" (and .Values.nats.managed .Values.nats.config.cluster.enabled) | quote }}
+  LIFTGATE_SIGNUP: {{ .Values.signup.mode | quote }}
+  {{- with .Values.signup.allow }}
+  LIFTGATE_SIGNUP_ALLOW: {{ join "," . | quote }}
+  {{- end }}
+  {{- with .Values.legal.termsUrl }}
+  LIFTGATE_TERMS_URL: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.legal.privacyUrl }}
+  LIFTGATE_PRIVACY_URL: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.legal.aupUrl }}
+  LIFTGATE_AUP_URL: {{ . | quote }}
+  {{- end }}

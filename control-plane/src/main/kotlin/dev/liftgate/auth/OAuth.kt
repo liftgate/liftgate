@@ -16,6 +16,7 @@ import io.ktor.http.parameters
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.time.OffsetDateTime
+import java.util.UUID
 
 const val GITHUB = "github"
 
@@ -33,6 +34,7 @@ data class VerifiedIdentity(
     val login: String? = null,
     val name: String? = null,
     val avatarUrl: String? = null,
+    val vouchedBy: UUID? = null,
 )
 
 /**

@@ -1,0 +1,5 @@
+Contact: https://github.com/liftgate/liftgate/security/advisories/new
+Expires: 2027-09-26T00:00:00Z
+Preferred-Languages: en
+Canonical: https://liftgate.dev/.well-known/security.txt
+Policy: https://github.com/liftgate/liftgate/blob/main/SECURITY.md

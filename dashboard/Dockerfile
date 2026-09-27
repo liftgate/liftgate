@@ -18,6 +18,7 @@ ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 HOSTNAME=0.0.0.0 PORT=3000
 RUN addgroup -S -g 1001 liftgate && adduser -S -u 1001 -G liftgate liftgate
 COPY --from=build --chown=liftgate:liftgate /app/.next/standalone ./
 COPY --from=build --chown=liftgate:liftgate /app/.next/static ./.next/static
+COPY --from=build --chown=liftgate:liftgate /app/public ./public
 USER 1001:1001
 EXPOSE 3000
 CMD ["node", "server.js"]

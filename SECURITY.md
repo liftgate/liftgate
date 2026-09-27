@@ -14,7 +14,7 @@ You will get an acknowledgement within three business days. We keep you informed
 
 ## Scope
 
-Everything in this repository is in scope. The reports we care most about, in rough order:
+Everything in this repository is in scope, and so is Liftgate Cloud at liftgate.dev; test Cloud only with accounts and apps you own. The reports we care most about, in rough order:
 
 - Tenant isolation failures: reaching another environment's namespace, secrets, network or the cluster itself from a tenant workload or a build job.
 - Authentication and authorization bypasses in the API, the dashboard or the GitHub webhook, including account takeover through OAuth, passkey, email code or SAML sign-in and linking.

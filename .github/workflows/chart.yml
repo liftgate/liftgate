@@ -19,6 +19,7 @@ concurrency:
 
 jobs:
   lint:
+    name: lint (${{ matrix.profile }})
     runs-on: ubuntu-24.04
     strategy:
       matrix:

@@ -65,7 +65,7 @@ Postgres decides, NATS carries, Hazelcast remembers. Every state change writes a
 
 The API speaks JSON under `/api/v1`, authenticated by the session cookie or `Authorization: Bearer lg_<token>`; an organization admin mints a token with `POST /api/v1/orgs/{slug}/tokens {"name": "ci"}`, and the response shows it once. Health is at `/healthz` and `/readyz`, Prometheus metrics at `/metrics`.
 
-Stack: Kotlin 2.4, Ktor 3.6, Exposed 1.5, Flyway, PostgreSQL 16, NATS JetStream, Hazelcast 5.7, fabric8 7.9; Next.js 16, React 19, Tailwind 4; Kubernetes with Cilium, Gateway API, cert-manager, CloudNativePG and gVisor.
+Stack: Kotlin 2.4, Ktor 3.6, Exposed 1.5, Flyway, PostgreSQL 16, NATS JetStream, Hazelcast 5.7, fabric8 8.0; Next.js 16, React 19, Tailwind 4; Kubernetes with Cilium, Gateway API, cert-manager, CloudNativePG and gVisor.
 
 ## Self-hosting
 

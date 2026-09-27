@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { legalLinks } from "./legal.ts";
 
-const providers = { oauth: [], passkey: true, email: false, sso: true };
+const providers = { oauth: [], passkey: true, email: false, sso: true, customDomains: true };
 
 test("legalLinks is empty until the operator sets the legal urls", () => {
   assert.deepEqual(legalLinks(undefined), []);

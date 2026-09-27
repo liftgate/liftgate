@@ -79,7 +79,7 @@ data class Release(
     val namespace get() = environment.namespace
     val hostnames get() = domains.map { it.hostname }
     val suspended get() = org.suspendedAt != null
-    val routable get() = !suspended && service.kind == ServiceKind.WEB && domains.isNotEmpty()
+    val routable get() = !suspended && service.kind.servesHttp && domains.isNotEmpty()
 }
 
 /**
@@ -243,7 +243,7 @@ object Resources {
         else probe.withNewTcpSocket().withPort(IntOrString(it)).endTcpSocket().build()
     }
 
-    private fun Release.port() = service.port ?: DEFAULT_WEB_PORT.takeIf { service.kind == ServiceKind.WEB }
+    private fun Release.port() = service.port ?: DEFAULT_WEB_PORT.takeIf { service.kind.servesHttp }
 
     private fun Release.secretName() = "${service.slug}-env"
 

@@ -3,11 +3,14 @@ package dev.liftgate.http
 import dev.liftgate.App
 import dev.liftgate.auth.Access
 import dev.liftgate.auth.Sessions
+import dev.liftgate.db.sql
+import dev.liftgate.domain.Domains
 import dev.liftgate.org.Organization
 import dev.liftgate.org.User
 import dev.liftgate.project.Environment
 import dev.liftgate.project.EnvironmentKind
 import dev.liftgate.project.Project
+import dev.liftgate.project.Projects
 import dev.liftgate.service.BuildStrategy
 import dev.liftgate.service.Service
 import dev.liftgate.service.ServiceKind
@@ -19,6 +22,7 @@ import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.cookie
 import io.ktor.client.request.get
 import io.ktor.client.request.patch
+import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
@@ -30,6 +34,7 @@ import io.micrometer.prometheusmetrics.PrometheusConfig
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry
 import io.mockk.Runs
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
@@ -50,9 +55,16 @@ class ServiceRoutesTest {
     private val service = Service(UUID.randomUUID(), environment.id, "api", "API", ServiceKind.WORKER, "/", BuildStrategy.AUTO, "Dockerfile", null, 1, 500, 512, null, null)
     private val services = mockk<Services>()
     private val access = mockk<Access>()
+    private val projects = mockk<Projects> {
+        coEvery { environment(environment.id) } returns environment
+        coEvery { byId(project.id) } returns project
+    }
+    private val domains = mockk<Domains>()
     private val app = mockk<App>().also {
         every { it.services } returns services
         every { it.access } returns access
+        every { it.projects } returns projects
+        every { it.domains } returns domains
         every { it.sessions } returns mockk<Sessions> { coEvery { resolve("s") } returns user }
         every { it.metrics } returns PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
         every { it.config } returns testConfig()
@@ -114,6 +126,34 @@ class ServiceRoutesTest {
         ).forEach {
             assertEquals(HttpStatusCode.UnprocessableEntity, client.patch("/api/v1/services/${service.id}") { jsonBody(it) }.status, it)
         }
+    }
+
+    @Test
+    fun `creating a service claims a platform hostname only for kinds that serve http`() = testApplication {
+        var created = service
+        val claimed = mutableListOf<ServiceKind>()
+        coEvery { services.create(environment.id, any()) } answers { service.copy(kind = secondArg<ServiceSpec>().kind).also { created = it } }
+        coEvery { services.scope(service.id) } answers { ServiceScope(created, environment, project, org) }
+        coEvery { domains.ensurePlatform(any()) } answers { claimed += firstArg<ServiceScope>().service.kind; mockk() }
+        application { liftgate(app) }
+        ServiceKind.entries.forEach {
+            val body = """{"slug":"api","name":"API","kind":"${it.sql}","cronSchedule":"0 * * * *"}"""
+            assertEquals(HttpStatusCode.Created, client.post("/api/v1/environments/${environment.id}/services") { jsonBody(body) }.status, it.name)
+        }
+        assertEquals(listOf(ServiceKind.WEB, ServiceKind.STATIC), claimed)
+    }
+
+    @Test
+    fun `a failed hostname claim removes the new service`() = testApplication {
+        val web = service.copy(kind = ServiceKind.WEB)
+        coEvery { services.create(environment.id, any()) } returns web
+        coEvery { services.scope(service.id) } returns ServiceScope(web, environment, project, org)
+        coEvery { domains.ensurePlatform(any()) } throws IllegalStateException("database unavailable")
+        coEvery { services.delete(service.id) } just Runs
+        application { liftgate(app) }
+        val response = client.post("/api/v1/environments/${environment.id}/services") { jsonBody("""{"slug":"api","name":"API","kind":"web"}""") }
+        assertEquals(HttpStatusCode.InternalServerError, response.status)
+        coVerify { services.delete(service.id) }
     }
 
     @Test

@@ -3,6 +3,7 @@ package dev.liftgate.domain
 import dev.liftgate.auth.randomToken
 import dev.liftgate.db.Db
 import dev.liftgate.db.Domains as DomainsTable
+import dev.liftgate.db.Services as ServicesTable
 import dev.liftgate.db.now
 import dev.liftgate.db.sql
 import dev.liftgate.db.toEnum
@@ -11,9 +12,7 @@ import dev.liftgate.events.enqueue
 import dev.liftgate.http.conflict
 import dev.liftgate.http.invalid
 import dev.liftgate.http.notFound
-import dev.liftgate.org.Organization
-import dev.liftgate.project.Project
-import dev.liftgate.service.Service
+import dev.liftgate.service.ServiceScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.buildJsonObject
@@ -26,8 +25,8 @@ import org.jetbrains.exposed.v1.core.isNull
 import org.jetbrains.exposed.v1.core.neq
 import org.jetbrains.exposed.v1.jdbc.JdbcTransaction
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
-import org.jetbrains.exposed.v1.jdbc.insertIgnore
 import org.jetbrains.exposed.v1.jdbc.insertReturning
+import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.updateReturning
 import java.util.UUID
@@ -47,19 +46,20 @@ fun ResultRow.toDomain() = Domain(
  * @date 9/17/2026
  */
 class Domains(private val db: Db, private val deployDomain: String) {
-    suspend fun ensurePlatform(service: Service, project: Project, org: Organization): Domain = db.tx {
-        val hostname = DomainNames.platform(org.slug, project.slug, service.slug, deployDomain)
-        DomainsTable.insertIgnore {
-            it[id] = UUID.randomUUID()
-            it[serviceId] = service.id
-            it[DomainsTable.hostname] = hostname
-            it[kind] = DomainKind.PLATFORM.sql
-            it[verifiedAt] = now()
-            it[certificateStatus] = "ready"
-        }
-        val domain = DomainsTable.selectAll().where { DomainsTable.hostname eq hostname }.single().toDomain()
-        if (domain.serviceId != service.id) conflict("$hostname belongs to another service")
-        domain
+    suspend fun ensurePlatform(scope: ServiceScope): Domain = db.tx {
+        val service = scope.service
+        ServicesTable.select(ServicesTable.id).where { ServicesTable.id eq service.id }.forUpdate().toList()
+        DomainsTable.selectAll().where { (DomainsTable.serviceId eq service.id) and (DomainsTable.kind eq DomainKind.PLATFORM.sql) }.firstOrNull()?.toDomain()
+            ?: DomainNames.platform(scope, deployDomain).firstNotNullOf { hostname ->
+                DomainsTable.insertReturning(ignoreErrors = true) {
+                    it[id] = UUID.randomUUID()
+                    it[serviceId] = service.id
+                    it[DomainsTable.hostname] = hostname
+                    it[kind] = DomainKind.PLATFORM.sql
+                    it[verifiedAt] = now()
+                    it[certificateStatus] = "ready"
+                }.singleOrNull()?.toDomain()
+            }
     }
 
     suspend fun addCustom(serviceId: UUID, hostname: String): Domain {

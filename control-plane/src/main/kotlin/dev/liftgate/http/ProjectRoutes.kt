@@ -47,6 +47,11 @@ fun Route.projectRoutes(app: App) {
                 ?: invalid("install the GitHub App on ${body.repoFullName} from an account that can push to it")
             call.respond(HttpStatusCode.Created, app.projects.create(org.id, body.slug, body.name.trim(), body.repoFullName, installationId))
         }
+        get("/{project}/tree") {
+            val tree = app.services.tree(call.parameters["slug"]!!, call.parameters["project"]!!, call.principal.user.id) ?: notFound("project")
+            app.access.require(tree.project.orgId, call.principal)
+            call.respond(tree)
+        }
     }
     route("/projects/{id}") {
         get { call.respond(call.project(app)) }

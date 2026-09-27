@@ -213,6 +213,13 @@
         "privacyUrl": { "type": "string", "pattern": "^(https?://.*)?$" },
         "aupUrl": { "type": "string", "pattern": "^(https?://.*)?$" }
       }
+    },
+    "customDomains": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" }
+      }
     }
   }
 }

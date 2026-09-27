@@ -78,6 +78,7 @@ data class Config(
     val privacyUrl: String?,
     val aupUrl: String?,
     val gitlabTrustEmail: Boolean,
+    val customDomainsEnabled: Boolean,
 ) {
     companion object {
         fun fromEnv(env: Map<String, String> = System.getenv()): Config {
@@ -150,6 +151,7 @@ data class Config(
                 privacyUrl = optional("PRIVACY_URL"),
                 aupUrl = optional("AUP_URL"),
                 gitlabTrustEmail = text("GITLAB_TRUST_EMAIL", (gitlabUrl == GITLAB_COM).toString()).toBoolean(),
+                customDomainsEnabled = text("CUSTOM_DOMAINS_ENABLED", "true").toBoolean(),
             )
         }
     }

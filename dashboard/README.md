@@ -13,7 +13,8 @@ The web UI for the Liftgate control plane: Next.js 16 (App Router), React 19, Ty
 | `/[org]` | Projects |
 | `/[org]/settings/sso` | SAML connection, owners only |
 | `/[org]/[project]` | Environments and their services |
-| `/[org]/[project]/[service]` | Deployments, builds with live logs, environment variables, domains, settings |
+| `/[org]/[project]/[environment]/[service]` | Deployments, builds with live logs, environment variables, domains, settings |
+| `/[org]/[project]/[service]` | Redirects to the service in the production environment |
 
 ## Development
 

@@ -1,3 +1,5 @@
+import type { EnvVar, ProjectTree } from "./types";
+
 export function timeAgo(iso: string) {
   const seconds = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
   if (seconds < 60) return "just now";
@@ -35,3 +37,17 @@ const authErrors: Record<string, string> = {
 };
 
 export const authError = (code: unknown) => (typeof code === "string" && code ? (authErrors[code] ?? "Sign-in failed. Try again.") : undefined);
+
+export const keepsStoredValue = (r: EnvVar) => r.secret && !r.value;
+
+export const envPayload = (rows: EnvVar[]) =>
+  rows.map((r) => {
+    if (!r.secret && r.value === null) throw new Error(`Retype the value of ${r.name} before saving it as a plain variable.`);
+    return { ...r, value: keepsStoredValue(r) ? null : r.value };
+  });
+
+export const findService = (tree: ProjectTree, environmentSlug: string, serviceSlug: string) => {
+  const environment = tree.environments.find((e) => e.slug === environmentSlug);
+  const service = tree.services.find((s) => s.environmentId === environment?.id && s.slug === serviceSlug);
+  return environment && service && { environment, service };
+};

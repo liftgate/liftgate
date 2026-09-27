@@ -2,6 +2,7 @@ package dev.liftgate.service
 
 import dev.liftgate.db.Db
 import dev.liftgate.db.Environments
+import dev.liftgate.db.Memberships
 import dev.liftgate.db.Organizations
 import dev.liftgate.db.Projects
 import dev.liftgate.db.Services as ServicesTable
@@ -15,6 +16,7 @@ import dev.liftgate.project.toProject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.jetbrains.exposed.v1.core.ResultRow
+import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.innerJoin
 import org.jetbrains.exposed.v1.core.statements.UpdateBuilder
@@ -64,6 +66,17 @@ class Services(private val db: Db) {
     }
 
     suspend fun idsForOrg(orgId: UUID): List<UUID> = db.tx { orgServiceIds(orgId).map { it[ServicesTable.id] } }
+
+    suspend fun tree(orgSlug: String, projectSlug: String, userId: UUID): ProjectTree? = db.tx {
+        val project = (Projects innerJoin Organizations innerJoin Memberships).selectAll()
+            .where { (Organizations.slug eq orgSlug) and (Projects.slug eq projectSlug) and (Memberships.userId eq userId) }
+            .singleOrNull()?.toProject() ?: return@tx null
+        ProjectTree(
+            project,
+            Environments.selectAll().where { Environments.projectId eq project.id }.orderBy(Environments.slug).map { it.toEnvironment() },
+            (ServicesTable innerJoin Environments).selectAll().where { Environments.projectId eq project.id }.orderBy(ServicesTable.slug).map { it.toService() },
+        )
+    }
 
     suspend fun forEnvironment(environmentId: UUID): List<Service> = db.tx {
         ServicesTable.selectAll().where { ServicesTable.environmentId eq environmentId }.orderBy(ServicesTable.slug).map { it.toService() }

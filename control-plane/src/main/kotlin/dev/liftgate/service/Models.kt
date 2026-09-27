@@ -16,11 +16,11 @@ import java.util.UUID
  * @date 9/17/2026
  */
 @Serializable
-enum class ServiceKind {
-    @SerialName("web") WEB,
-    @SerialName("worker") WORKER,
-    @SerialName("cron") CRON,
-    @SerialName("static") STATIC,
+enum class ServiceKind(val servesHttp: Boolean) {
+    @SerialName("web") WEB(true),
+    @SerialName("worker") WORKER(false),
+    @SerialName("cron") CRON(false),
+    @SerialName("static") STATIC(true),
 }
 
 /**

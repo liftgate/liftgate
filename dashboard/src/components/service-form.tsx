@@ -64,7 +64,7 @@ export function ServiceForm({
             ))}
           </Select>
         </Field>
-        <Field label="Port" hint="Web services only">
+        <Field label="Port" hint="Web and static services, default 8080">
           <Input name="port" type="number" min={1} max={65535} defaultValue={initial?.port ?? ""} />
         </Field>
         <Field label="Root directory">

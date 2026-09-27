@@ -4,6 +4,7 @@ import { useState } from "react";
 import { api } from "@/lib/api";
 import { useAction, useApi } from "@/lib/hooks";
 import type { EnvVar, Service } from "@/lib/types";
+import { envPayload, keepsStoredValue } from "@/lib/util";
 import { Loaded } from "@/components/loaded";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -24,7 +25,7 @@ function EnvEditor({ serviceId, initial }: { serviceId: string; initial: EnvVar[
   const [rows, setRows] = useState(initial);
   const [saved, setSaved] = useState(false);
   const save = useAction(async () => {
-    const body = rows.map((r) => ({ ...r, value: r.secret && !r.value ? null : (r.value ?? "") }));
+    const body = envPayload(rows);
     await api(`/services/${serviceId}/env`, { method: "PUT", body });
     setRows(body.map((r) => (r.secret ? { ...r, value: null } : r)));
     setSaved(true);
@@ -77,7 +78,13 @@ function EnvEditor({ serviceId, initial }: { serviceId: string; initial: EnvVar[
                   className="font-mono"
                 />
                 <label className="flex items-center gap-2 text-sm text-graphite-200">
-                  <input type="checkbox" checked={row.secret} onChange={(e) => update(i, { secret: e.target.checked })} className="accent-accent" />
+                  <input
+                    type="checkbox"
+                    checked={row.secret}
+                    disabled={keepsStoredValue(row)}
+                    onChange={(e) => update(i, { secret: e.target.checked })}
+                    className="accent-accent"
+                  />
                   Secret
                 </label>
                 <Button variant="ghost" onClick={() => change(rows.filter((_, j) => j !== i))}>

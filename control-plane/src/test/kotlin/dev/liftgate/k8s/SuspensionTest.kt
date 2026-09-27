@@ -83,7 +83,7 @@ class SuspensionTest {
         val environment = projects.environments(project.id).single()
         val services = (listOf(ServiceSpec("api", "API", ServiceKind.WEB, replicas = 2), ServiceSpec("worker", "Worker", ServiceKind.WORKER, replicas = 3)) + extra)
             .map { Services(db).create(environment.id, it) }
-        Domains(db, "liftgate.app").ensurePlatform(services.first(), project, org)
+        Domains(db, "liftgate.app").ensurePlatform(requireNotNull(Services(db).scope(services.first().id)))
         services.forEach { deployments.transition(release(it).id, DeploymentStatus.RUNNING, replicasReady = it.replicas) }
         namespace = environment.namespace
         val namespaced = "namespaces/$namespace"

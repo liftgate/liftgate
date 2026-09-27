@@ -336,6 +336,7 @@ empty, neither appears.
 | `legal.termsUrl` | `""` | `LIFTGATE_TERMS_URL` |
 | `legal.privacyUrl` | `""` | `LIFTGATE_PRIVACY_URL` |
 | `legal.aupUrl` | `""` | `LIFTGATE_AUP_URL`, the acceptable use policy |
+| `customDomains.enabled` | `true` | `LIFTGATE_CUSTOM_DOMAINS_ENABLED`; `false` replaces the dashboard's add-domain form with a notice, for edges that cannot route customer hostnames yet |
 
 Derived variables: `LIFTGATE_DATABASE_URL` points at the CloudNativePG `-rw` Service (or
 `postgres.externalUrl`), `LIFTGATE_DATABASE_USER` and `LIFTGATE_DATABASE_PASSWORD` come from

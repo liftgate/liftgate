@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { useApi } from "@/lib/hooks";
-import type { Environment, Project, Service } from "@/lib/types";
+import type { ProjectTree } from "@/lib/types";
+import { findService } from "@/lib/util";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/ui/badge";
 import { ErrorState } from "@/components/ui/empty-state";
@@ -25,21 +26,15 @@ const tabs = [
 
 type Tab = (typeof tabs)[number]["id"];
 
-async function findService(org: string, projectSlug: string, serviceSlug: string) {
-  const project = (await api<Project[]>(`/orgs/${org}/projects`)).find((p) => p.slug === projectSlug);
-  if (!project) throw new ApiError(404, "not_found", `There is no project called ${projectSlug} in ${org}.`);
-  const environments = await api<Environment[]>(`/projects/${project.id}/environments`);
-  const lists = await Promise.all(environments.map((e) => api<Service[]>(`/environments/${e.id}/services`)));
-  for (const [i, list] of lists.entries()) {
-    const service = list.find((s) => s.slug === serviceSlug);
-    if (service) return { project, environment: environments[i], service };
-  }
-  throw new ApiError(404, "not_found", `There is no service called ${serviceSlug} in ${projectSlug}.`);
+async function loadService(org: string, projectSlug: string, environmentSlug: string, serviceSlug: string) {
+  const found = findService(await api<ProjectTree>(`/orgs/${org}/projects/${projectSlug}/tree`), environmentSlug, serviceSlug);
+  if (!found) throw new ApiError(404, "not_found", `There is no service called ${serviceSlug} in ${projectSlug}/${environmentSlug}.`);
+  return found;
 }
 
-export function ServiceView({ org, projectSlug, serviceSlug }: { org: string; projectSlug: string; serviceSlug: string }) {
+export function ServiceView({ org, projectSlug, environmentSlug, serviceSlug }: { org: string; projectSlug: string; environmentSlug: string; serviceSlug: string }) {
   const [tab, setTab] = useState<Tab>("deployments");
-  const lookup = useApi(`${org}/${projectSlug}/${serviceSlug}`, () => findService(org, projectSlug, serviceSlug));
+  const lookup = useApi(`${org}/${projectSlug}/${environmentSlug}/${serviceSlug}`, () => loadService(org, projectSlug, environmentSlug, serviceSlug));
   if (lookup.error) return <ErrorState error={lookup.error} retry={lookup.reload} />;
   if (!lookup.data) return <PageSkeleton />;
   const { service, environment } = lookup.data;

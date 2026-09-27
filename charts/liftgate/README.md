@@ -371,9 +371,9 @@ empty, neither appears.
 | `postgres.externalPassword` | `""` | |
 | `postgres.storage` | `10Gi` | Volume per instance |
 | `postgres.maxConnections` | `100` | PostgreSQL `max_connections` |
-| `postgres.backup.enabled` | `false` | WAL archiving and scheduled base backups, see [Backups](#backups); required for `ha` |
+| `postgres.backup.enabled` | `false` | WAL archiving and scheduled base backups, see [Backups](#backups); required for `ha` with a managed database |
 | `postgres.backup.endpointUrl` | `""` | S3 endpoint; empty means AWS S3 |
-| `postgres.backup.destinationPath` | `""` | `s3://<bucket>/<optional prefix>`; required when `enabled` |
+| `postgres.backup.destinationPath` | `""` | `s3://<bucket>/<optional prefix>`; required when `enabled` with a managed database |
 | `postgres.backup.credentialsSecret` | `liftgate-postgres-backup` | Secret with `ACCESS_KEY_ID`, `ACCESS_SECRET_KEY` and `ACCESS_REGION` |
 | `postgres.backup.retention` | `30d` | Recovery window: `<n>d`, `<n>w` or `<n>m` |
 | `postgres.backup.schedule` | `0 0 3 * * *` | Base backup schedule, cron with a leading seconds field |

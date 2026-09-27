@@ -107,10 +107,6 @@
           },
           "allOf": [
             {
-              "if": { "properties": { "enabled": { "const": true } } },
-              "then": { "properties": { "destinationPath": { "minLength": 1 } } }
-            },
-            {
               "if": { "properties": { "recoverFrom": { "minLength": 1 } } },
               "then": { "properties": { "enabled": { "const": true } } }
             },

@@ -11,7 +11,7 @@ metadata:
 spec:
   retentionPolicy: {{ .retention | quote }}
   configuration:
-    destinationPath: {{ .destinationPath | quote }}
+    destinationPath: {{ required "postgres.backup.destinationPath is required when backups are enabled" .destinationPath | quote }}
     {{- with .endpointUrl }}
     endpointURL: {{ . | quote }}
     {{- end }}

@@ -37,8 +37,10 @@ helm upgrade --install liftgate oci://ghcr.io/liftgate/charts/liftgate --version
   --set-file github.privateKey=github-app.pem
 ```
 
-Add `--set profile=ha --set nats.config.cluster.enabled=true`, the contents of `values-ha.yaml`,
-for the `ha` profile. Values files keep secrets out of shell history; pass them with `-f` instead
+Add `--set profile=ha --set nats.config.cluster.enabled=true --set postgres.backup.enabled=true`,
+the contents of `values-ha.yaml`, for the `ha` profile. The backups it turns on also need
+`postgres.backup.destinationPath`, the Barman Cloud plugin and a credentials Secret; see
+[Backups](#backups). Values files keep secrets out of shell history; pass them with `-f` instead
 of `--set` in production.
 
 ## Profiles

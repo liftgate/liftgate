@@ -24,18 +24,17 @@ and log lines.
 
 ## 2. Find the organization
 
-Look up a hostname, platform or custom. A custom domain can also have unverified claims from
-other organizations; only the row with `verified_at` set serves it:
+For a hostname, platform or custom:
 
 ```sh
 sql -v host=login.example.liftgate.app <<'SQL'
-select o.slug as org, o.id as org_id, o.suspended_at, d.verified_at, p.repo_full_name, p.imported_by_login, e.namespace, s.slug as service
+select o.slug as org, o.id as org_id, o.suspended_at, p.repo_full_name, p.imported_by_login, e.namespace, s.slug as service
 from domains d
 join services s on s.id = d.service_id
 join environments e on e.id = s.environment_id
 join projects p on p.id = e.project_id
 join organizations o on o.id = p.org_id
-where d.hostname = :'host';
+where d.hostname = :'host' and d.verified_at is not null;
 SQL
 ```
 
@@ -164,7 +163,8 @@ admin unsuspend acme
 admin unsuspend-user <user>
 ```
 
-`unsuspend` writes an `org.unsuspend` row and re-applies every service with its configured
-replicas, Services and HTTPRoutes; check with the `kubectl get` above. Builds cancelled by the
+`unsuspend` writes an `org.unsuspend` row and re-applies every service: Deployments get their
+configured replicas back, CronJobs resume, and services that serve HTTP on a hostname get their
+Service and HTTPRoute again. Check with the `kubectl get` above. Builds cancelled by the
 suspension are not retried, so the owners push or redeploy. `unsuspend-user` makes the account
 active again; the sessions and tokens removed by the suspension stay removed.

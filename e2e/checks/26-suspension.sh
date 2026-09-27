@@ -26,7 +26,7 @@ until stopped; do
 done
 echo "e2e-b stopped $(($(date +%s) - start)) s after admin suspend"
 reason="$(kubectl -n liftgate-system exec liftgate-postgres-1 -c postgres -- psql --username postgres --dbname liftgate --tuples-only --no-align \
-  --command "select details->>'reason' from audit_log where action = 'org.suspend' and target_id = '00000000-0000-4000-8000-000000000010'")"
+  --command "select details->>'reason' from audit_log where action = 'org.suspend' and target_id = '00000000-0000-4000-8000-000000000010' order by id desc limit 1")"
 test "$reason" = "abuse drill" || { echo "FAIL: audit_log holds '$reason' as the suspension reason"; exit 1; }
 
 admin unsuspend e2e-b

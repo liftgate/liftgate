@@ -194,6 +194,24 @@
     "runtimeClass": { "type": "string" },
     "nodeSelector": { "type": "object", "additionalProperties": { "type": "string" } },
     "registryInsecure": { "type": "boolean" },
-    "prometheusUrl": { "type": "string", "pattern": "^https?://" }
+    "prometheusUrl": { "type": "string", "pattern": "^https?://" },
+    "signup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "allow"],
+      "properties": {
+        "mode": { "type": "string", "enum": ["open", "approval", "closed"] },
+        "allow": { "type": "array", "items": { "type": "string", "pattern": "^(github:[A-Za-z0-9-]+|@[^@ ]+|[^@ ]+@[^@ ]+)$" } }
+      }
+    },
+    "legal": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "termsUrl": { "type": "string", "pattern": "^(https?://.*)?$" },
+        "privacyUrl": { "type": "string", "pattern": "^(https?://.*)?$" },
+        "aupUrl": { "type": "string", "pattern": "^(https?://.*)?$" }
+      }
+    }
   }
 }

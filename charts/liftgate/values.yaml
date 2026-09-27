@@ -110,3 +110,12 @@ nodeSelector: {}
 registryInsecure: false
 
 prometheusUrl: http://prometheus.liftgate-system:9090
+
+signup:
+  mode: approval
+  allow: []
+
+legal:
+  termsUrl: ""
+  privacyUrl: ""
+  aupUrl: ""

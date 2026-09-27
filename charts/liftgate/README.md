@@ -227,6 +227,44 @@ IdP-initiated logins from a provider's app dashboard are rejected because every 
 to answer a request Liftgate sent. Only emails in the configured domains are accepted, and a
 first sign-in adds the user to the organisation with the default role.
 
+## Sign-up and accounts
+
+`signup.mode` decides what the first sign-in of an unknown identity does:
+
+| Mode | First sign-in |
+|---|---|
+| `approval` (default) | Creates a pending account. It can sign in and manage its sign-in methods, and gets `403 account_pending` from organization calls until an operator approves it |
+| `open` | Creates an active account |
+| `closed` | Is refused with `403 signup_closed`; existing accounts still sign in |
+
+Identities in `signup.allow` are active from their first sign-in: verified emails
+(`dean@example.com`), email domains (`@example.com`) and GitHub logins (`github:dean`). Put
+the first admin there. SAML users who join an organization through a verified email domain are
+active while that organization has an active owner and is not suspended.
+
+Operators approve and suspend with the control plane's admin commands. In the `ha` profile run
+them in `deploy/<fullname>-api` instead:
+
+```sh
+kubectl -n liftgate-system exec deploy/liftgate-control-plane -- /opt/liftgate/bin/liftgate-control-plane admin list-pending
+```
+
+| Command | Effect |
+|---|---|
+| `list-pending` | Lists pending accounts |
+| `approve <user>` | Activates a pending account |
+| `suspend <org> <reason>` | Scales every app of the organization to zero, suspends its cron jobs, removes its routes, cancels its queued builds and refuses new builds and admin changes (`403 org_suspended`). Releases keep it stopped |
+| `unsuspend <org>` | Restores each service's configured replicas and routes |
+| `suspend-user <user> <reason>` | Deletes the account's sessions and API tokens and refuses its sign-ins |
+| `unsuspend-user <user>` | Reactivates a suspended account |
+
+`<user>` is a user id, login or email. Each change is written together with an `audit_log` row
+and an outbox event in one transaction.
+
+Set `legal.termsUrl`, `legal.privacyUrl` and `legal.aupUrl` to show a consent line on sign-in
+and a footer with the documents; new accounts then record when they accepted the terms. Left
+empty, neither appears.
+
 ## Values
 
 | Key | Default | Description |
@@ -287,6 +325,11 @@ first sign-in adds the user to the organisation with the default role.
 | `nodeSelector` | `{}` | Node labels that pin the control plane, dashboard, CloudNativePG cluster, tenant pods and build jobs; rendered into `LIFTGATE_NODE_SELECTOR` as `key=value,key=value`. See [Node pinning](#node-pinning) for NATS |
 | `registryInsecure` | `false` | `LIFTGATE_REGISTRY_INSECURE`; build jobs push to `registry` over plain HTTP |
 | `prometheusUrl` | `http://prometheus.liftgate-system:9090` | `LIFTGATE_PROMETHEUS_URL` |
+| `signup.mode` | `approval` | `LIFTGATE_SIGNUP`: `open`, `approval` or `closed`; see [Sign-up and accounts](#sign-up-and-accounts) |
+| `signup.allow` | `[]` | `LIFTGATE_SIGNUP_ALLOW`: emails, `@domains` and `github:<login>` entries that are active from their first sign-in |
+| `legal.termsUrl` | `""` | `LIFTGATE_TERMS_URL` |
+| `legal.privacyUrl` | `""` | `LIFTGATE_PRIVACY_URL` |
+| `legal.aupUrl` | `""` | `LIFTGATE_AUP_URL`, the acceptable use policy |
 
 Derived variables: `LIFTGATE_DATABASE_URL` points at the CloudNativePG `-rw` Service (or
 `postgres.externalUrl`), `LIFTGATE_DATABASE_USER` and `LIFTGATE_DATABASE_PASSWORD` come from

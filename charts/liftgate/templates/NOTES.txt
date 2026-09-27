@@ -21,6 +21,13 @@ WARNING: profile ha is running a single NATS server. Install with -f values-ha.y
 DNS: point {{ include "liftgate.hosts" . | fromJsonArray | join ", " }} and *.{{ .Values.deployDomain }} at the nodes running the {{ .Values.gateway.className }} gateway.
 TLS: the wildcard listener reads secret {{ .Values.gateway.wildcardSecret }} in {{ .Release.Namespace }}; issue it with a DNS-01 Certificate for *.{{ .Values.deployDomain }}.
 {{- end }}
+{{- if eq .Values.signup.mode "approval" }}
+{{- $admin := printf "kubectl -n %s exec deploy/%s-%s -- /opt/liftgate/bin/liftgate-control-plane admin" .Release.Namespace (include "liftgate.fullname" .) (eq (include "liftgate.ha" .) "true" | ternary "api" "control-plane") }}
+
+Sign-up needs approval. {{ if .Values.signup.allow }}Approved on first sign-in: {{ join ", " .Values.signup.allow }}.{{ else }}Set signup.allow (for example github:<login>) so your first admin is approved on sign-in.{{ end }} Approve everyone else by hand:
+  {{ $admin }} list-pending
+  {{ $admin }} approve <user id, login or email>
+{{- end }}
 
 Pods:  kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/instance={{ .Release.Name }}
 Logs:  kubectl -n {{ .Release.Namespace }} logs -l app.kubernetes.io/component=control-plane -f

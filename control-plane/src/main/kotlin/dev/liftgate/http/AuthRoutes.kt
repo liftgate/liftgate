@@ -103,6 +103,11 @@ fun Route.authRoutes(app: App) {
         }
     }
     route("/me") {
+        delete("/sessions") {
+            app.sessions.deleteAll(call.sessionUser.id)
+            call.response.cookies.append(expired(SESSION_COOKIE))
+            call.respond(HttpStatusCode.NoContent)
+        }
         get("/identities") { call.respond(app.signIn.identities(call.sessionUser.id)) }
         delete("/identities/{id}") {
             app.signIn.unlink(call.sessionUser.id, call.uuid("id"))

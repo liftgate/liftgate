@@ -65,16 +65,16 @@ fun Route.ssoRoutes(app: App) {
         }
     }
     route("/orgs/{slug}/sso") {
-        get { call.respond(app.sso.settings(call.org(app, OrgRole.OWNER).id) ?: notFound("SSO connection")) }
-        put { call.respond(app.sso.save(call.org(app, OrgRole.OWNER).id, call.receive<SsoSettings>())) }
+        get { call.respond(app.sso.settings(call.sessionOrg(app, OrgRole.OWNER).id) ?: notFound("SSO connection")) }
+        put { call.respond(app.sso.save(call.sessionOrg(app, OrgRole.OWNER).id, call.receive<SsoSettings>())) }
         delete {
-            app.sso.delete(call.org(app, OrgRole.OWNER).id)
+            app.sso.delete(call.sessionOrg(app, OrgRole.OWNER).id)
             call.respond(HttpStatusCode.NoContent)
         }
         get("/sp") {
-            val org = call.org(app, OrgRole.OWNER).slug
+            val org = call.sessionOrg(app, OrgRole.OWNER).slug
             call.respond(SsoServiceProvider(app.sso.entityId(org), app.sso.acsUrl(org)))
         }
-        post("/verify") { call.respond(app.sso.verifyDomains(call.org(app, OrgRole.OWNER).id)) }
+        post("/verify") { call.respond(app.sso.verifyDomains(call.sessionOrg(app, OrgRole.OWNER).id)) }
     }
 }

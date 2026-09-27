@@ -36,7 +36,7 @@ probe() {
 }
 probe --fail --retry 30 --retry-all-errors --retry-delay 2
 codes="$(mktemp)"
-while :; do probe || true; sleep 0.2; done > "$codes" &
+while :; do echo "$(date +%T.%3N) $(probe)"; sleep 0.2; done > "$codes" &
 trap 'kill $!' EXIT
 old="$(kubectl -n "$NAMESPACE" get pods -l app.kubernetes.io/component=control-plane -o name)"
 
@@ -47,9 +47,9 @@ kubectl -n "$NAMESPACE" rollout status deployment/liftgate-control-plane --timeo
 kubectl -n "$NAMESPACE" rollout status deployment/liftgate-dashboard --timeout=5m
 kubectl -n "$NAMESPACE" wait --for=delete $old --timeout=5m
 
-sort "$codes" | uniq -c
+awk '{ print $2 }' "$codes" | sort | uniq -c
 test -s "$codes"
-test -z "$(grep -v '^2' "$codes")"
+if grep -v ' 2..$' "$codes"; then exit 1; fi
 kubectl get --raw "/api/v1/namespaces/$NAMESPACE/services/liftgate-control-plane:http/proxy/readyz"
 running
 test "$(sql --command 'select version from flyway_schema_history where success order by installed_rank desc limit 1')" = \

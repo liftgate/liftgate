@@ -78,10 +78,19 @@ jobs:
       - name: k3s as in infra/k3s/install.md
         run: |
           curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC='server --flannel-backend=none --disable-network-policy --disable-kube-proxy --disable=traefik --disable=servicelb --write-kubeconfig-mode=644' sh -
-          until kubectl get nodes -o jsonpath='{.items[*].status.conditions[?(@.type=="Ready")].message}' | grep -q NetworkReady=false; do sleep 2; done
+          for attempt in $(seq 60); do
+            kubectl get nodes -o jsonpath='{.items[*].status.conditions[?(@.type=="Ready")].message}' | grep -q NetworkReady=false && break
+            sleep 2
+          done
       - run: sh infra/install.sh
       - name: a second run changes no release
         run: |
           before="$(helm list --all-namespaces --output json)"
           sh infra/install.sh
           test "$(helm list --all-namespaces --output json)" = "$before"
+      - name: diagnostics
+        if: failure()
+        run: |
+          kubectl get nodes -o jsonpath='{range .items[*].status.conditions[*]}{.type}={.status} {.message}{"\n"}{end}'
+          ls -la /etc/cni/net.d /opt/cni/bin || true
+          sudo journalctl -u k3s --no-pager | grep -i cni | tail -40

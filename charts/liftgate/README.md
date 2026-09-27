@@ -536,3 +536,11 @@ release name into the same namespace again adopts them and keeps the data. Insta
 kubectl -n liftgate-system delete cluster liftgate-postgres
 kubectl -n liftgate-system delete objectstore liftgate-postgres
 ```
+
+The `ObjectStore` only points at the bucket, so the backups and WAL stay there, and nothing in the
+cluster prunes them once the `Cluster` is gone. Delete everything under
+`postgres.backup.destinationPath` with any S3 client to remove the data for good. Before installing
+again, do that or set a `destinationPath` that has never been used: CloudNativePG refuses to archive
+into a folder that already holds WAL. Also remove `recoverFrom`, `recoverTo` and `serverName` from the
+values file: with `recoverFrom` set, the new `Cluster` restores from the archive instead of starting
+empty.

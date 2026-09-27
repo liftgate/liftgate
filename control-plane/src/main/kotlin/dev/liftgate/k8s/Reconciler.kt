@@ -6,6 +6,7 @@ import dev.liftgate.deploy.DeploymentStatus
 import dev.liftgate.events.Subject
 import dev.liftgate.events.uuid
 import dev.liftgate.service.ServiceKind
+import io.fabric8.kubernetes.api.model.HasMetadata
 import io.fabric8.kubernetes.api.model.gatewayapi.v1.Gateway
 import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPRoute
 import io.fabric8.kubernetes.client.KubernetesClient
@@ -88,11 +89,21 @@ class Reconciler(private val app: App, private val kube: KubernetesClient) {
         val config = app.config
         val workloads = listOf(Resources.deployment(r, config.runtimeClass, config.nodeSelector), Resources.cronJob(r, config.runtimeClass, config.nodeSelector))
         val (workload, otherWorkload) = if (r.service.kind == ServiceKind.CRON) workloads.reversed() else workloads
-        (listOf(Resources.namespace(r), Resources.resourceQuota(r), Resources.secret(r)) + Resources.networkPolicies(r, config.gatewayNamespace) + workload)
-            .forEach { kube.resource(it).apply() }
-        if (r.suspended && r.service.kind == ServiceKind.CRON) stopJobs(r)
+        val setup = listOf(Resources.namespace(r), Resources.resourceQuota(r), Resources.secret(r)) + Resources.networkPolicies(r, config.gatewayNamespace)
+        if (r.suspended) stop(r, workload) else (setup + workload).forEach { kube.resource(it).apply() }
         route(r)
         kube.resource(otherWorkload).delete()
+        if (r.suspended) setup.forEach { kube.resource(it).apply() }
+    }
+
+    private fun stop(r: Release, workload: HasMetadata) {
+        try {
+            kube.resource(workload).apply()
+        } catch (e: KubernetesClientException) {
+            log.warn("deleting the workload of suspended service {} because it could not be applied", r.service.id, e)
+            kube.resource(workload).delete()
+        }
+        if (r.service.kind == ServiceKind.CRON) stopJobs(r)
     }
 
     private fun stopJobs(r: Release) = kube.batch().v1().jobs().inNamespace(r.namespace).list().items

@@ -174,14 +174,20 @@ class SuspensionTest {
     }
 
     @Test
-    fun `a service that cannot be applied does not keep the rest of the org running`() = runBlocking {
+    fun `services whose secret or workload cannot be applied are still stopped and do not keep the rest of the org running`() = runBlocking {
         val (orgId, services) = seed()
-        val broken = Services(db).create(services.first().environmentId, ServiceSpec("broken", "Broken", ServiceKind.WORKER))
-        deployments.transition(release(broken).id, DeploymentStatus.RUNNING)
-        every { app.services } returns spyk(Services(db)) { coEvery { idsForOrg(orgId) } returns listOf(broken.id) + services.map { it.id } }
+        val (secretless, rejected) = listOf("secretless" to ServiceKind.WEB, "rejected" to ServiceKind.WORKER)
+            .map { (slug, kind) -> Services(db).create(services.first().environmentId, ServiceSpec(slug, slug, kind)) }
+        listOf(secretless, rejected).forEach { deployments.transition(release(it).id, DeploymentStatus.RUNNING) }
+        val namespaced = "namespaces/$namespace"
+        server.expect().patch().withPath("/apis/apps/v1/$namespaced/deployments/secretless?fieldManager=liftgate&force=true").andReply(200) { record(it) }.always()
+        listOf(routePath(namespaced, secretless), "/apis/apps/v1/$namespaced/deployments/rejected").forEach { accept(it) }
+        every { app.services } returns spyk(Services(db)) { coEvery { idsForOrg(orgId) } returns (listOf(secretless, rejected) + services).map { it.id } }
         admin("suspend", "acme", "mining")
         assertFailsWith<KubernetesClientException> { Suspension(app, client).reapply(orgId) }
-        assertEquals(mapOf("api" to 0, "worker" to 0), workloads().associate { it.metadata.name to it.spec.replicas })
+        assertEquals(mapOf("api" to 0, "worker" to 0, "secretless" to 0), workloads().associate { it.metadata.name to it.spec.replicas })
+        assertEquals((services + secretless).map { it.slug }.toSet(), sent("DELETE", "httproutes").map { it.first.substringAfterLast('/') }.toSet())
+        assertEquals(listOf(rejected.slug), sent("DELETE", "deployments").map { it.first.substringAfterLast('/') })
     }
 
     @Test

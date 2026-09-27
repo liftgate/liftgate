@@ -71,8 +71,7 @@ fun Route.orgRoutes(app: App) {
         route("/{slug}") {
             get { call.respond(call.org(app)) }
             delete {
-                if (call.principal.token) forbidden()
-                app.orgs.delete(call.org(app, OrgRole.OWNER).id)
+                app.orgs.delete(call.sessionOrg(app, OrgRole.OWNER).id)
                 call.respond(HttpStatusCode.NoContent)
             }
             get("/members") { call.respond(app.orgs.members(call.org(app).id).map { (user, role) -> Member(user, role) }) }

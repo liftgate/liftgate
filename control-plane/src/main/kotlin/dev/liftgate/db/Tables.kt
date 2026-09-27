@@ -320,6 +320,7 @@ object Deployments : Table("deployments") {
     val error = text("error").nullable()
     val startedAt = timestampWithTimeZone("started_at").nullable()
     val finishedAt = timestampWithTimeZone("finished_at").nullable()
+    val reachedRunning = bool("reached_running").default(false)
     val createdAt = createdAtColumn()
     override val primaryKey = PrimaryKey(id)
 

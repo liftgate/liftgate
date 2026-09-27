@@ -596,11 +596,12 @@ of the switch-over.
 Once a day the builder deletes the images Liftgate no longer needs from the repositories it
 pushed to. It keeps the images of pending, releasing and running deployments and of queued and
 running builds, the newest 10 successful builds of each service, and each service's `cache`.
-While a service has no running deployment, because a rollback is still rolling out or a rollout
-failed, it also keeps the images of that service's rolled-back and failed deployments.
-The repositories of deleted services lose every tag. Rolling back to a pruned build answers 409
-`image_pruned`. With `registryAuth: token` the builder logs in as `janitor`; with `shared` it
-logs in with `build.registryCredentials`, which must be allowed to delete.
+It also keeps the image of each service's newest deployment that reached running, which still
+serves while a rollback rolls out or after a rollout failed. It only deletes `cache` and
+40-character commit sha tags, the tags builds push, and the repositories of deleted services
+lose all of them. Rolling back to a pruned build answers 409 `image_pruned`. With
+`registryAuth: token` the builder logs in as `janitor`; with `shared` it logs in with
+`build.registryCredentials`, which must be allowed to delete.
 
 The registry must accept deletes (`storage.delete.enabled` in Distribution), and deleting frees
 no disk until the registry's garbage collection runs; [`infra/registry`](../../infra/registry#image-retention)

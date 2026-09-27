@@ -100,6 +100,7 @@ class Deployments(private val db: Db) {
                 it[status] = to.sql
                 it[DeploymentsTable.replicasReady] = replicasReady
                 it[DeploymentsTable.error] = error
+                if (to == DeploymentStatus.RUNNING) it[reachedRunning] = true
             }
             if (to == DeploymentStatus.RUNNING) supersedeOlder(current)
             updated(id, to)

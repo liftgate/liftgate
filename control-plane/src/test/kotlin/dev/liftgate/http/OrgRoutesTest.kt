@@ -39,7 +39,7 @@ class OrgRoutesTest {
     @Test
     fun `reserved slugs cannot name an organization`() = testApplication {
         application { liftgate(app) }
-        listOf("docs", "new", "settings", "admin", "status", "www", "app", "dashboard", "login").forEach {
+        listOf("docs", "new", "settings", "admin", "status", "www", "app", "dashboard", "login", "liftgate").forEach {
             val response = client.post("/api/v1/orgs") {
                 session()
                 contentType(ContentType.Application.Json)

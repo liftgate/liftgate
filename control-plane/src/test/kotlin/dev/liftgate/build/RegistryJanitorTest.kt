@@ -104,10 +104,10 @@ class RegistryJanitorTest {
         }
     }) { install(ContentNegotiation) { json(json) } }
 
-    private suspend fun environment(project: String = "shop"): UUID {
+    private suspend fun environment(project: String = "shop", slug: String = "acme"): UUID {
         val projects = Projects(db)
-        val org = Orgs(db).bySlug("acme") ?: Orgs(db).create("acme", "Acme", db.tx { insertUser("dean", null, null, null) }.id)
-        return projects.environments(projects.create(org.id, project, project, "acme/$project", 42).id).single().id
+        val org = Orgs(db).bySlug(slug) ?: Orgs(db).create(slug, slug, db.tx { insertUser("dean", null, null, null) }.id)
+        return projects.environments(projects.create(org.id, project, project, "$slug/$project", 42).id).single().id
     }
 
     private suspend fun succeed(buildId: UUID, image: String): Deployment =
@@ -129,20 +129,20 @@ class RegistryJanitorTest {
         val environment = environment()
         val api = services.create(environment, ServiceSpec("api", "API", ServiceKind.WEB)).id
         val gone = services.create(environment, ServiceSpec("gone", "Gone", ServiceKind.WORKER)).id
-        release(api, "old.registry/acme/shop-api:b00")
-        val released = (1..12).map { release(api, "registry.test/acme/shop-api:b%02d".format(it)) }
+        release(api, "old.registry/acme/shop-api:${sha(0)}")
+        val released = (1..12).map { release(api, "registry.test/acme/shop-api:${sha(it)}") }
         deployments.transition(deployments.rollback(released[1].id).id, DeploymentStatus.RUNNING)
         deployments.transition(deployments.rollback(released[11].id).id, DeploymentStatus.FAILED)
-        builds.request(api, "c00", null, "main")
-        release(gone, "registry.test/acme/shop-gone:g1")
+        builds.request(api, sha(13), null, "main")
+        release(gone, "registry.test/acme/shop-gone:${sha(31)}")
         services.delete(gone)
         val blog = environment("blog")
-        release(services.create(blog, ServiceSpec("web", "Web", ServiceKind.WEB)).id, "registry.test/acme/blog-web:w1")
+        release(services.create(blog, ServiceSpec("web", "Web", ServiceKind.WEB)).id, "registry.test/acme/blog-web:${sha(41)}")
         Projects(db).delete(requireNotNull(Projects(db).environment(blog)).projectId)
-        registry["acme/shop-api"] = (1..12).associate { "b%02d".format(it) to "sha256:d%02d".format(it) }.toMutableMap()
-            .apply { putAll(mapOf("c00" to "sha256:dc0", "cache" to "sha256:dcache", "stray" to "sha256:dstray", "twin" to "sha256:d05")) }
-        registry["acme/shop-gone"] = mutableMapOf("g1" to "sha256:dg1", "cache" to "sha256:dgcache")
-        registry["acme/blog-web"] = mutableMapOf("w1" to "sha256:dw1")
+        registry["acme/shop-api"] = (1..13).associate { sha(it) to "sha256:d%02d".format(it) }.toMutableMap()
+            .apply { putAll(mapOf("cache" to "sha256:dcache", sha(14) to "sha256:dstray", sha(15) to "sha256:d05", "latest" to "sha256:dlatest")) }
+        registry["acme/shop-gone"] = mutableMapOf(sha(31) to "sha256:dg1", "cache" to "sha256:dgcache")
+        registry["acme/blog-web"] = mutableMapOf(sha(41) to "sha256:dw1")
         registry["liftgate/control-plane"] = mutableMapOf("0.1.0" to "sha256:platform")
         val config = testConfig().copy(registry = "registry.test")
 
@@ -160,8 +160,8 @@ class RegistryJanitorTest {
             deletes.map { it.url.encodedPath.removePrefix("/v2/") }.toSet(),
         )
         assertTrue(requests.none { "liftgate/" in it.url.encodedPath })
-        assertEquals((2..12).map { "b%02d".format(it) }.toSet() + setOf("c00", "cache", "twin"), registry.getValue("acme/shop-api").keys)
-        assertEquals(setOf("b01"), pruned())
+        assertEquals(((2..15) - 14).map(::sha).toSet() + setOf("cache", "latest"), registry.getValue("acme/shop-api").keys)
+        assertEquals(setOf(sha(1)), pruned())
         assertPruned(released[0])
 
         requests.clear()
@@ -171,9 +171,35 @@ class RegistryJanitorTest {
     }
 
     @Test
+    fun `tags builds never push survive in a repository that a service maps onto`() = runBlocking {
+        services.create(environment("control", "liftgate"), ServiceSpec("plane", "Plane", ServiceKind.WEB))
+        registry["liftgate/control-plane"] = mutableMapOf("0.1.0" to "sha256:platform", "0.1" to "sha256:platform")
+
+        assertEquals(0, janitor(testConfig().copy(registry = "registry.test")).runOnce())
+
+        assertEquals(setOf("0.1.0", "0.1"), registry.getValue("liftgate/control-plane").keys)
+        assertTrue(requests.none { it.method == HttpMethod.Delete })
+    }
+
+    @Test
+    fun `a service whose deploys all fail keeps its newest ten builds and the cache`() = runBlocking {
+        val api = services.create(environment(), ServiceSpec("api", "API", ServiceKind.WEB)).id
+        (1..30).forEach {
+            val deployment = builds.markSucceeded(builds.request(api, sha(it), null, "main").id, "registry.test/acme/shop-api:${sha(it)}")
+            deployments.transition(deployment.id, DeploymentStatus.FAILED)
+        }
+        registry["acme/shop-api"] = ((1..30).associate { sha(it) to "sha256:d%02d".format(it) } + ("cache" to "sha256:dcache")).toMutableMap()
+
+        assertEquals(20, janitor(testConfig().copy(registry = "registry.test")).runOnce())
+
+        assertEquals((21..30).map(::sha).toSet() + "cache", registry.getValue("acme/shop-api").keys)
+        assertEquals((1..20).map(::sha).toSet(), pruned())
+    }
+
+    @Test
     fun `shared registry auth logs in with the registry-credentials secret when there is one`() = runBlocking {
-        release(services.create(environment(), ServiceSpec("api", "API", ServiceKind.WEB)).id, "registry.test/acme/shop-api:b01")
-        registry["acme/shop-api"] = mutableMapOf("b01" to "sha256:d01")
+        release(services.create(environment(), ServiceSpec("api", "API", ServiceKind.WEB)).id, "registry.test/acme/shop-api:${sha(1)}")
+        registry["acme/shop-api"] = mutableMapOf(sha(1) to "sha256:d01")
         val config = testConfig().copy(registry = "registry.test")
         janitor(config).runOnce()
         assertTrue(requests.isNotEmpty() && requests.all { it.headers[HttpHeaders.Authorization] == null })

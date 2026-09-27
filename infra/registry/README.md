@@ -113,20 +113,21 @@ deploy. Once a day, and whenever a builder pod takes the `liftgate-registry-jani
 builder prunes the repositories Liftgate pushed to. It keeps:
 
 - the images of pending, releasing and running deployments;
-- while a service has no running deployment, the images of its rolled-back and failed
-  deployments, because the pods of the last rollout that succeeded keep serving until another
-  one does;
+- the image of each service's newest deployment that reached running, because the pods of the
+  last rollout that succeeded keep serving until another one does;
 - the images of queued and running builds;
 - the newest 10 successful builds of each service;
 - each service's `:cache`.
 
-Every other tag is deleted with `HEAD` for its `Docker-Content-Digest` and then
-`DELETE /v2/<repository>/manifests/<digest>`, and its build is marked pruned, so a rollback to it
-answers 409 `image_pruned` and the dashboard hides the button. A tag that shares its manifest
-with a kept tag stays. Repositories of deleted services, projects and organizations lose every
-tag. Repositories Liftgate never pushed to, such as the platform's own `liftgate/*` images, are
-never touched. With token auth the janitor logs in to the control plane's token service as
-`janitor` and gets a token for `pull,delete` on one repository at a time.
+Every other `:cache` or 40-character commit sha tag, the only tags builds push, is deleted with
+`HEAD` for its `Docker-Content-Digest` and then `DELETE /v2/<repository>/manifests/<digest>`, and
+its build is marked pruned, so a rollback to it answers 409 `image_pruned` and the dashboard
+hides the button. Other tags stay, and so does a tag that shares its manifest with a kept tag.
+Repositories of deleted services, projects and organizations lose every tag builds pushed. The
+janitor only reads the repositories of current and deleted services, and the organization slug
+`liftgate` is reserved so that none of them holds the platform's own `liftgate/*` images. With
+token auth the janitor logs in to the control plane's token service as `janitor` and gets a
+token for `pull,delete` on one repository at a time.
 
 Deleting a manifest frees no disk. `registry garbage-collect --delete-untagged` does: it removes
 the pruned images and the `:cache` manifests that newer builds replaced, together with every blob

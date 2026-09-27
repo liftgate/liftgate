@@ -11,10 +11,10 @@ import dev.liftgate.db.Services as ServicesTable
 import dev.liftgate.db.sql
 import dev.liftgate.deploy.Build
 import dev.liftgate.deploy.BuildStatus
-import dev.liftgate.deploy.DeploymentStatus
 import dev.liftgate.deploy.live
 import dev.liftgate.deploy.toBuild
 import dev.liftgate.http.json
+import dev.liftgate.http.shaPattern
 import dev.liftgate.org.toOrganization
 import dev.liftgate.project.toProject
 import dev.liftgate.service.toService
@@ -48,8 +48,6 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.innerJoin
 import org.jetbrains.exposed.v1.core.isNotNull
-import org.jetbrains.exposed.v1.core.notInSubQuery
-import org.jetbrains.exposed.v1.core.or
 import org.jetbrains.exposed.v1.jdbc.JdbcTransaction
 import org.jetbrains.exposed.v1.jdbc.batchInsert
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
@@ -63,7 +61,6 @@ import kotlin.time.Duration.Companion.days
 
 private const val KEPT_BUILDS = 10
 private val building = listOf(BuildStatus.QUEUED, BuildStatus.RUNNING).map { it.sql }
-private val lingering = listOf(DeploymentStatus.ROLLED_BACK, DeploymentStatus.FAILED).map { it.sql }
 private val manifestTypes = listOf(
     "application/vnd.oci.image.index.v1+json",
     "application/vnd.oci.image.manifest.v1+json",
@@ -103,7 +100,7 @@ class RegistryJanitor(private val app: App, private val kube: KubernetesClient) 
         val listed = repositories.filter { it.startsWith("$registry/") }.flatMap { repository ->
             val name = repository.removePrefix("$host/")
             val auth = authorization(name)
-            send(HttpMethod.Get, "/v2/$name/tags/list", auth)?.body<Tags>()?.tags.orEmpty().map { tag ->
+            send(HttpMethod.Get, "/v2/$name/tags/list", auth)?.body<Tags>()?.tags.orEmpty().filter { it == "cache" || shaPattern.matches(it) }.map { tag ->
                 val digest = send(HttpMethod.Head, "/v2/$name/manifests/$tag", auth)?.let { it.headers["Docker-Content-Digest"] ?: error("$host sent no digest for $name:$tag") }
                 "$repository:$tag" to digest?.let { "$name@$it" }
             }
@@ -126,11 +123,13 @@ class RegistryJanitor(private val app: App, private val kube: KubernetesClient) 
             .orderBy(BuildsTable.createdAt, SortOrder.DESC)
             .forUpdate()
             .map { it.toBuild() }
-        val running = DeploymentsTable.select(DeploymentsTable.serviceId).where { DeploymentsTable.status eq DeploymentStatus.RUNNING.sql }
-        val released = (DeploymentsTable innerJoin BuildsTable).select(BuildsTable.imageRef)
-            .where { (DeploymentsTable.status inList live) or ((DeploymentsTable.status inList lingering) and (DeploymentsTable.serviceId notInSubQuery running)) }
+        val released = (DeploymentsTable innerJoin BuildsTable).select(BuildsTable.imageRef).where { DeploymentsTable.status inList live }.mapNotNull { it[BuildsTable.imageRef] }
+        val serving = (DeploymentsTable innerJoin BuildsTable).select(BuildsTable.imageRef)
+            .where { DeploymentsTable.reachedRunning eq true }
+            .withDistinctOn(DeploymentsTable.serviceId to SortOrder.ASC)
+            .orderBy(DeploymentsTable.createdAt, SortOrder.DESC)
             .mapNotNull { it[BuildsTable.imageRef] }
-        val keep = (inFlight + released + services.keys.mapNotNull { image(it, "cache") } +
+        val keep = (inFlight + released + serving + services.keys.mapNotNull { image(it, "cache") } +
             succeeded.groupBy { it.serviceId }.values.flatMap { builds -> builds.take(KEPT_BUILDS).mapNotNull { it.imageRef } }).toSet()
         return keep to succeeded.filter { it.imageRef !in keep }
     }

@@ -102,3 +102,87 @@ docker run -d --name liftgate-registry --network host --restart unless-stopped \
 `rootcertbundle` may hold several certificates. Append the new certificate to `token.crt` and
 restart the registry, upgrade Liftgate with the new key and certificate, then remove the old
 certificate and restart the registry again.
+
+## Image retention
+
+Every build pushes a `:<sha>` tag and replaces `:cache`, so the registry grows with every
+deploy. Once a day, and whenever a builder pod takes the `liftgate-registry-janitor` lease, the
+builder prunes the repositories Liftgate pushed to. It keeps:
+
+- the images of pending, releasing and running deployments;
+- the images of queued and running builds;
+- the newest 10 successful builds of each service;
+- each service's `:cache`.
+
+Every other tag is deleted with `HEAD` for its `Docker-Content-Digest` and then
+`DELETE /v2/<repository>/manifests/<digest>`, and its build is marked pruned, so a rollback to it
+answers 409 `image_pruned` and the dashboard hides the button. A tag that shares its manifest
+with a kept tag stays. Repositories of deleted services, projects and organizations lose every
+tag. Repositories Liftgate never pushed to, such as the platform's own `liftgate/*` images, are
+never touched. With token auth the janitor signs itself a token for `pull,delete` on one
+repository at a time.
+
+Deleting a manifest frees no disk. `registry garbage-collect --delete-untagged` does: it removes
+the pruned images and the `:cache` manifests that newer builds replaced, together with every blob
+that no tagged manifest references. It must not run while builds push, so a weekly timer puts the
+registry in read-only mode while it runs. Checked on 2026-09-27: `registry:2.8.3` started with
+`REGISTRY_STORAGE_MAINTENANCE_READONLY='{"enabled":true}'` answers uploads with 405 and still
+serves `GET /v2/`, so nodes keep pulling. `RegistryJanitorTest` runs this garbage collection
+against the same image after 30 deploys and checks that the kept images and cache survive it.
+
+Install it only after the switch-over above, because it starts the registry from `config.yml`.
+`/usr/local/sbin/liftgate-registry-gc`, mode 755:
+
+```sh
+#!/bin/sh
+set -eu
+registry() {
+  docker rm -f liftgate-registry >/dev/null
+  docker run -d --name liftgate-registry --network host --restart unless-stopped \
+    -v /srv/liftgate-registry:/var/lib/registry \
+    -v /etc/liftgate-registry/config.yml:/etc/docker/registry/config.yml:ro \
+    -v /etc/liftgate-registry/token.crt:/etc/docker/registry/token.crt:ro \
+    "$@" registry:2.8.3 >/dev/null
+}
+trap registry EXIT
+registry -e REGISTRY_STORAGE_MAINTENANCE_READONLY='{"enabled":true}'
+docker exec liftgate-registry registry garbage-collect --delete-untagged /etc/docker/registry/config.yml
+```
+
+`/etc/systemd/system/liftgate-registry-gc.service`:
+
+```ini
+[Unit]
+Description=Liftgate registry garbage collection
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/liftgate-registry-gc
+```
+
+`/etc/systemd/system/liftgate-registry-gc.timer`:
+
+```ini
+[Unit]
+Description=Weekly Liftgate registry garbage collection
+
+[Timer]
+OnCalendar=Sun *-*-* 04:30:00 UTC
+RandomizedDelaySec=15m
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+```
+
+```sh
+systemctl daemon-reload
+systemctl enable --now liftgate-registry-gc.timer
+systemctl start liftgate-registry-gc.service
+journalctl -u liftgate-registry-gc.service -n 50
+du -sh /srv/liftgate-registry
+```
+
+A build that pushes during the run fails and can be redeployed.

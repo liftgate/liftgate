@@ -583,6 +583,19 @@ Configure the registry with `realm` `<publicUrl>/api/v1/registry/token`, `servic
 [`infra/registry`](../../infra/registry) has the configuration Liftgate Cloud uses and the order
 of the switch-over.
 
+## Image retention
+
+Once a day the builder deletes the images Liftgate no longer needs from the repositories it
+pushed to. It keeps the images of pending, releasing and running deployments and of queued and
+running builds, the newest 10 successful builds of each service, and each service's `cache`.
+The repositories of deleted services lose every tag. Rolling back to a pruned build answers 409
+`image_pruned`. With `registryAuth: shared` the builder logs in with `build.registryCredentials`,
+which must be allowed to delete.
+
+The registry must accept deletes (`storage.delete.enabled` in Distribution), and deleting frees
+no disk until the registry's garbage collection runs; [`infra/registry`](../../infra/registry#image-retention)
+has the weekly timer Liftgate Cloud uses.
+
 ## Build namespace
 
 `build.namespace` is created with `pod-security.kubernetes.io/enforce: privileged` because

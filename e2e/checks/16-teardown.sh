@@ -32,6 +32,7 @@ insert into outbox (subject, payload) values
     ('liftgate.release.requested', '{"deploymentId": "00000000-0000-4000-8000-000000000407"}'),
     ('liftgate.release.requested', '{"deploymentId": "00000000-0000-4000-8000-000000000408"}');
 EOF
+kubectl wait namespace/$ns --for=create --timeout=5m
 kubectl -n $ns wait deployment/keep httproute/gone --for=create --timeout=5m
 test "$(owned $gone | wc -l)" = 4
 

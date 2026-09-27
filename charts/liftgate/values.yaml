@@ -144,6 +144,7 @@ legal:
 
 customDomains:
   enabled: true
+  max: null
 
 allowSharedSite: false
 
@@ -152,3 +153,23 @@ allowUnsandboxedTenants: false
 workloads:
   nodeSelector: {}
   tolerations: []
+
+plans:
+  free:
+    ownedOrgs: 1
+    projects: 3
+    environmentsPerProject: 2
+    services: 6
+    cpuMillis: 1000
+    memoryMb: 1024
+    replicas: 6
+    cpuRequestRatio: 0.25
+    ephemeralMb: 1024
+    customDomains: 2
+    concurrentBuilds: 1
+    buildsPerHour: 10
+    egressBandwidth: 20M
+    udp: false
+  unlimited: {}
+
+defaultPlan: unlimited

@@ -7,7 +7,7 @@ Everything the Liftgate chart expects from a cluster, in install order:
 | 1 | k3s without flannel, kube-proxy, Traefik and ServiceLB, with kubelet limits | v1.34.8+k3s1 | [`k3s/install.md`](k3s/install.md) |
 | 2 | gVisor `runsc` on every node | latest release | [`gvisor/`](gvisor) |
 | 3 | Gateway API CRDs | v1.6.1 | [`gateway-api/README.md`](gateway-api/README.md) |
-| 4 | Cilium with kube-proxy replacement and Gateway API in host network mode | 1.20.2 | [`cilium/values.yaml`](cilium/values.yaml) |
+| 4 | Cilium with kube-proxy replacement, Gateway API in host network mode and the bandwidth manager | 1.20.2 | [`cilium/values.yaml`](cilium/values.yaml) |
 | 5 | gVisor RuntimeClass `gvisor` | | [`gvisor/runtimeclass.yaml`](gvisor/runtimeclass.yaml) |
 | 6 | cert-manager with Gateway API support and ClusterIssuer `letsencrypt` | v1.21.2 | [`cert-manager/clusterissuer.yaml`](cert-manager/clusterissuer.yaml) |
 | 7 | CloudNativePG operator | 0.29.0 (operator 1.30) | [`cnpg/README.md`](cnpg/README.md) |
@@ -39,6 +39,15 @@ issuer to solve challenges.
 `LIFTGATE_GATEWAY_NAME` and `LIFTGATE_GATEWAY_NAMESPACE` (default `liftgate` in
 `liftgate-system`) name the Gateway the `letsencrypt` ClusterIssuer solves HTTP-01 challenges
 through; match them to the chart's `gateway.name` and release namespace.
+
+The bandwidth manager enforces the `kubernetes.io/egress-bandwidth` annotation that plans with an
+`egressBandwidth` put on tenant pods. A Cilium installed before it was part of the values gets it
+with:
+
+```sh
+helm upgrade cilium cilium --repo https://helm.cilium.io/ --version 1.20.2 -n kube-system --reuse-values --set bandwidthManager.enabled=true
+kubectl -n kube-system rollout restart daemonset/cilium
+```
 
 Set `K8S_API_HOST` when the API server is not the first address of the `kubernetes`
 EndpointSlice (multi-server clusters behind a load balancer).

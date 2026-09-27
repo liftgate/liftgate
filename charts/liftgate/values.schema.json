@@ -279,7 +279,8 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "enabled": { "type": "boolean" }
+        "enabled": { "type": "boolean" },
+        "max": { "type": ["integer", "null"], "minimum": 0 }
       }
     },
     "allowSharedSite": { "type": "boolean" },
@@ -291,13 +292,36 @@
         "nodeSelector": { "$ref": "#/definitions/nodeSelector" },
         "tolerations": { "$ref": "#/definitions/tolerations" }
       }
-    }
+    },
+    "plans": { "type": "object", "minProperties": 1, "additionalProperties": { "$ref": "#/definitions/plan" } },
+    "defaultPlan": { "type": "string", "minLength": 1 }
   },
   "definitions": {
     "nodeSelector": { "type": "object", "additionalProperties": { "type": "string" } },
     "tolerations": {
       "type": "array",
       "items": { "type": "string", "pattern": "^[A-Za-z0-9_./-]+(=[A-Za-z0-9_.-]*)?(:(NoSchedule|PreferNoSchedule|NoExecute))?$" }
+    },
+    "limit": { "type": "integer", "minimum": 0 },
+    "plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ownedOrgs": { "$ref": "#/definitions/limit" },
+        "projects": { "$ref": "#/definitions/limit" },
+        "environmentsPerProject": { "$ref": "#/definitions/limit" },
+        "services": { "$ref": "#/definitions/limit" },
+        "cpuMillis": { "$ref": "#/definitions/limit" },
+        "memoryMb": { "$ref": "#/definitions/limit" },
+        "replicas": { "$ref": "#/definitions/limit" },
+        "cpuRequestRatio": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+        "ephemeralMb": { "type": "integer", "minimum": 1 },
+        "customDomains": { "$ref": "#/definitions/limit" },
+        "concurrentBuilds": { "$ref": "#/definitions/limit" },
+        "buildsPerHour": { "$ref": "#/definitions/limit" },
+        "egressBandwidth": { "type": "string", "pattern": "^[0-9]+[kMG]?$" },
+        "udp": { "type": "boolean" }
+      }
     }
   },
   "allOf": [

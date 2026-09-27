@@ -171,13 +171,13 @@ class RegistryJanitorTest {
     }
 
     @Test
-    fun `tags builds never push survive in a repository that a service maps onto`() = runBlocking {
+    fun `tags builds never push and their manifests survive in a repository that a service maps onto`() = runBlocking {
         services.create(environment("control", "liftgate"), ServiceSpec("plane", "Plane", ServiceKind.WEB))
-        registry["liftgate/control-plane"] = mutableMapOf("0.1.0" to "sha256:platform", "0.1" to "sha256:platform")
+        registry["liftgate/control-plane"] = mutableMapOf("0.1.0" to "sha256:platform", "0.1" to "sha256:platform", sha(7) to "sha256:platform")
 
         assertEquals(0, janitor(testConfig().copy(registry = "registry.test")).runOnce())
 
-        assertEquals(setOf("0.1.0", "0.1"), registry.getValue("liftgate/control-plane").keys)
+        assertEquals(setOf("0.1.0", "0.1", sha(7)), registry.getValue("liftgate/control-plane").keys)
         assertTrue(requests.none { it.method == HttpMethod.Delete })
     }
 

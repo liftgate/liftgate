@@ -122,12 +122,12 @@ builder prunes the repositories Liftgate pushed to. It keeps:
 Every other `:cache` or 40-character commit sha tag, the only tags builds push, is deleted with
 `HEAD` for its `Docker-Content-Digest` and then `DELETE /v2/<repository>/manifests/<digest>`, and
 its build is marked pruned, so a rollback to it answers 409 `image_pruned` and the dashboard
-hides the button. Other tags stay, and so does a tag that shares its manifest with a kept tag.
-Repositories of deleted services, projects and organizations lose every tag builds pushed. The
-janitor only reads the repositories of current and deleted services, and the organization slug
-`liftgate` is reserved so that none of them holds the platform's own `liftgate/*` images. With
-token auth the janitor logs in to the control plane's token service as `janitor` and gets a
-token for `pull,delete` on one repository at a time.
+hides the button. Other tags stay, and so does every tag that shares its manifest with one that
+stays. Repositories of deleted services, projects and organizations lose every tag builds
+pushed. The janitor only reads the repositories of current and deleted services, and the
+organization slug `liftgate` is reserved so that none of them holds the platform's own
+`liftgate/*` images. With token auth the janitor logs in to the control plane's token service
+as `janitor` and gets a token for `pull,delete` on one repository at a time.
 
 Deleting a manifest frees no disk. `registry garbage-collect --delete-untagged` does: it removes
 the pruned images and the `:cache` manifests that newer builds replaced, together with every blob

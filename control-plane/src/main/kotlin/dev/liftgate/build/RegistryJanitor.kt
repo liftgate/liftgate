@@ -100,7 +100,7 @@ class RegistryJanitor(private val app: App, private val kube: KubernetesClient) 
         val listed = repositories.filter { it.startsWith("$registry/") }.flatMap { repository ->
             val name = repository.removePrefix("$host/")
             val auth = authorization(name)
-            send(HttpMethod.Get, "/v2/$name/tags/list", auth)?.body<Tags>()?.tags.orEmpty().filter { it == "cache" || shaPattern.matches(it) }.map { tag ->
+            send(HttpMethod.Get, "/v2/$name/tags/list", auth)?.body<Tags>()?.tags.orEmpty().map { tag ->
                 val digest = send(HttpMethod.Head, "/v2/$name/manifests/$tag", auth)?.let { it.headers["Docker-Content-Digest"] ?: error("$host sent no digest for $name:$tag") }
                 "$repository:$tag" to digest?.let { "$name@$it" }
             }
@@ -140,7 +140,8 @@ class RegistryJanitor(private val app: App, private val kube: KubernetesClient) 
     }
 
     private fun JdbcTransaction.prune(repositories: Set<String>, listed: Map<String, String?>): Set<String> {
-        val (keep, candidates) = images()
+        val (kept, candidates) = images()
+        val keep = kept + listed.keys.filterNot { key -> key.substringAfterLast(':').let { it == "cache" || shaPattern.matches(it) } }
         val doomed = listed.filterKeys { it !in keep }.values.filterNotNull().toSet() - keep.mapNotNull { listed[it] }.toSet()
         val gone = candidates.filter { build -> build.imageRef?.let { it.startsWith("$registry/") && listed[it].let { digest -> digest == null || digest in doomed } } == true }
         BuildsTable.update({ BuildsTable.id inList gone.map { it.id } }) { it[imagePruned] = true }

@@ -1,8 +1,7 @@
 package dev.liftgate.http
 
 import dev.liftgate.App
-import dev.liftgate.events.buildLogSubject
-import dev.liftgate.events.serviceLogSubject
+import dev.liftgate.deploy.BuildStatus
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.route
 import io.ktor.server.websocket.DefaultWebSocketServerSession
@@ -11,6 +10,7 @@ import io.ktor.websocket.CloseReason
 import io.ktor.websocket.close
 import io.ktor.websocket.send
 import kotlinx.coroutines.channels.consumeEach
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -20,21 +20,31 @@ const val LOG_SOCKETS_PER_USER = 20
 fun Route.logRoutes(app: App) {
     val sockets = ConcurrentHashMap<UUID, Int>()
     route("/logs") {
-        webSocket("/builds/{id}") { relay(app, sockets) { buildLogSubject(call.build(app).id) } }
-        webSocket("/services/{id}") { relay(app, sockets) { serviceLogSubject(call.service(app).service.id) } }
+        webSocket("/builds/{id}") {
+            relay(app, sockets) { call.build(app).let { app.nats.logs.follow(it.id, it.status != BuildStatus.QUEUED && it.status != BuildStatus.RUNNING) } }
+        }
+        webSocket("/services/{id}") {
+            relay(app, sockets) {
+                val scope = call.service(app)
+                app.podLogs.follow(scope.environment.namespace, scope.service.id, call.request.queryParameters["previous"] == "true")
+            }
+        }
     }
 }
 
-private suspend fun DefaultWebSocketServerSession.relay(app: App, sockets: ConcurrentHashMap<UUID, Int>, subject: suspend () -> String) {
-    val name = try {
-        subject()
+private suspend fun DefaultWebSocketServerSession.relay(app: App, sockets: ConcurrentHashMap<UUID, Int>, lines: suspend () -> Flow<String>) {
+    val flow = try {
+        lines()
     } catch (e: LiftgateException) {
         return close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, e.message))
     }
     val user = call.principal.user.id
     try {
         if (sockets.merge(user, 1, Int::plus)!! > LOG_SOCKETS_PER_USER) return close(CloseReason(CloseReason.Codes.TRY_AGAIN_LATER, "too many open log streams"))
-        val relay = launch { app.nats.logs(name).collect { send(it) } }
+        val relay = launch {
+            flow.collect { send(it) }
+            close(CloseReason(CloseReason.Codes.NORMAL, "end of log"))
+        }
         incoming.consumeEach { }
         relay.cancel()
     } finally {

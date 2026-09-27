@@ -248,7 +248,8 @@
           }
         },
         "nodeSelector": { "$ref": "#/definitions/nodeSelector" },
-        "tolerations": { "$ref": "#/definitions/tolerations" }
+        "tolerations": { "$ref": "#/definitions/tolerations" },
+        "logsMaxBytes": { "type": "integer", "minimum": 1 }
       }
     },
     "runtimeClass": { "type": "string" },

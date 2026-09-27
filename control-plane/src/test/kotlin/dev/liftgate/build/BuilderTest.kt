@@ -4,6 +4,7 @@ import dev.liftgate.App
 import dev.liftgate.config.GitHubConfig
 import dev.liftgate.deploy.BuildStatus
 import dev.liftgate.deploy.Builds
+import dev.liftgate.events.LogStream
 import dev.liftgate.events.Nats
 import dev.liftgate.events.Redeliver
 import dev.liftgate.http.json
@@ -36,6 +37,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
@@ -77,6 +79,7 @@ class BuilderTest {
     }
     private val registryTokens = mockk<RegistryTokens>(relaxUnitFun = true) { coEvery { issue(queued.id) } returns "registry-password" }
     private val admission = mockk<BuildAdmission> { coEvery { admit(any(), any()) } returns null }
+    private val logs = mockk<LogStream>(relaxed = true)
     private val app = mockk<App> {
         every { config } returns testConfig()
         every { this@mockk.builds } returns this@BuilderTest.builds
@@ -86,7 +89,7 @@ class BuilderTest {
         every { github } returns this@BuilderTest.github
         every { registryTokens } returns this@BuilderTest.registryTokens
         every { buildAdmission } returns admission
-        every { nats } returns mockk<Nats>(relaxed = true)
+        every { nats } returns mockk<Nats> { every { logs } returns this@BuilderTest.logs }
     }
 
     private fun job() = client.batch().v1().jobs().inNamespace("liftgate-build").withName(BuildJobs.name(queued.id))
@@ -116,6 +119,7 @@ class BuilderTest {
         coVerify(exactly = 1) { builds.markSucceeded(queued.id, image) }
         coVerify(exactly = 0) { builds.markFailed(any(), any()) }
         coVerify(exactly = 1) { registryTokens.revoke(queued.id) }
+        verify(exactly = 1) { logs.end(queued.id, null) }
         assertNull(job().get())
     }
 
@@ -124,6 +128,7 @@ class BuilderTest {
         build(JobStatusBuilder().withFailed(1).build())
         coVerify(exactly = 1) { builds.markFailed(queued.id, "the build job failed") }
         coVerify(exactly = 0) { builds.markSucceeded(any(), any()) }
+        verify(exactly = 1) { logs.end(queued.id, "the build job failed") }
         coVerify(exactly = 0) { registryTokens.issue(any()) }
         assertNotNull(job().get())
         assertEquals(mapOf("token" to "ghs_token"), secret().stringData)
@@ -201,6 +206,7 @@ class BuilderTest {
         coEvery { admission.admit(queued, testOrg.id) } returns "the organization is suspended"
         Builder(app, client).build(queued.id)
         coVerify { builds.markFailed(queued.id, "the organization is suspended") }
+        verify { logs.end(queued.id, "the organization is suspended") }
         assertNull(job().get())
     }
 

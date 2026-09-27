@@ -127,8 +127,10 @@ class Reconciler(private val app: App, private val kube: KubernetesClient) {
         if (r.suspended) setup.forEach { kube.resource(it).apply() }
     }
 
-    private fun environment(r: Release): List<HasMetadata> =
-        listOf(Resources.namespace(r), Resources.resourceQuota(r)) + Resources.networkPolicies(r, app.config.gatewayNamespace)
+    private fun environment(r: Release): List<HasMetadata> = with(app.config) {
+        listOf(Resources.namespace(r), Resources.resourceQuota(r)) + Resources.networkPolicies(r, gatewayNamespace) +
+            listOfNotNull(logReaderRole?.let { Resources.logReaderBinding(r, it, logReaderAccount, kube.namespace) })
+    }
 
     private fun stop(r: Release, workload: HasMetadata) {
         try {

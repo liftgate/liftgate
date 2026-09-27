@@ -1,6 +1,7 @@
 package dev.liftgate
 
 import dev.liftgate.events.Nats
+import io.nats.client.Connection
 import io.nats.client.api.StreamConfiguration
 import org.testcontainers.containers.GenericContainer
 import org.testcontainers.containers.wait.strategy.Wait
@@ -20,7 +21,8 @@ object TestNats {
     }
     private val url = "nats://${container.host}:${container.getMappedPort(4222)}"
     private val nats = Nats(testConfig(mapOf("LIFTGATE_NATS_URL" to url)), Duration.ofMillis(10))
-    val streams = io.nats.client.Nats.connect(url).jetStreamManagement()
+    val connection: Connection = io.nats.client.Nats.connect(url)
+    val streams = connection.jetStreamManagement()
 
     fun clean(): Nats = nats.also {
         streams.streamNames.forEach(streams::deleteStream)

@@ -5,7 +5,7 @@ import dev.liftgate.auth.Access
 import dev.liftgate.auth.ApiTokens
 import dev.liftgate.auth.Sessions
 import dev.liftgate.deploy.Deployments
-import dev.liftgate.events.Nats
+import dev.liftgate.k8s.PodLogs
 import dev.liftgate.k8s.testDeployment
 import dev.liftgate.k8s.testEnvironment
 import dev.liftgate.k8s.testOrg
@@ -37,7 +37,8 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
-import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.flow.flow
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -70,7 +71,7 @@ class OriginTest {
         every { orgs } returns mockk<Orgs> { coEvery { user(user.id) } returns user }
         every { services } returns mockk<Services> { coEvery { scope(testService.id) } returns ServiceScope(testService, testEnvironment, testProject, testOrg) }
         every { access } returns mockk<Access>(relaxUnitFun = true)
-        every { nats } returns mockk<Nats> { every { logs(any()) } returns flowOf("ready") }
+        every { podLogs } returns mockk<PodLogs> { every { follow(any(), any(), any()) } returns flow { emit("ready"); awaitCancellation() } }
     }
 
     private suspend fun ApplicationTestBuilder.rollback(block: HttpRequestBuilder.() -> Unit) =

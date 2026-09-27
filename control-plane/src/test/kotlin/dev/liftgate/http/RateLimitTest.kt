@@ -7,7 +7,7 @@ import dev.liftgate.auth.Sessions
 import dev.liftgate.cache.Cache
 import dev.liftgate.cache.PASSKEY_CHALLENGES_CAP
 import dev.liftgate.deploy.Builds
-import dev.liftgate.events.Nats
+import dev.liftgate.k8s.PodLogs
 import dev.liftgate.k8s.testBuild
 import dev.liftgate.k8s.testEnvironment
 import dev.liftgate.k8s.testOrg
@@ -39,8 +39,9 @@ import io.micrometer.prometheusmetrics.PrometheusMeterRegistry
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flow
 import org.junit.jupiter.api.AfterAll
 import java.util.UUID
 import kotlin.test.Test
@@ -72,7 +73,7 @@ class RateLimitTest {
         every { services } returns mockk<Services> { coEvery { scope(testService.id) } returns ServiceScope(testService, testEnvironment, testProject, testOrg) }
         every { access } returns mockk<Access>(relaxUnitFun = true)
         every { builds } returns mockk<Builds> { coEvery { request(any(), any(), any(), any()) } returns testBuild }
-        every { nats } returns mockk<Nats> { every { logs(any()) } returns flowOf("ready") }
+        every { podLogs } returns mockk<PodLogs> { every { follow(any(), any(), any()) } returns flow { emit("ready"); awaitCancellation() } }
     }
 
     private fun freshWindow() = (60_000 - System.currentTimeMillis() % 60_000).let { if (it < 20_000) Thread.sleep(it) }

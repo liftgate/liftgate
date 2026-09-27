@@ -120,6 +120,7 @@ build:
   allowedEgressCidrs: []
   nodeSelector: {}
   tolerations: []
+  logsMaxBytes: 536870912
 
 runtimeClass: gvisor
 

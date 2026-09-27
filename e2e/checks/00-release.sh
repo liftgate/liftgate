@@ -14,7 +14,7 @@ kubectl -n env-e2e get service/web httproute/web
 kubectl -n env-e2e get networkpolicy
 
 for attempt in $(seq 30); do
-  status="$(kubectl -n liftgate-system exec liftgate-postgres-1 -c postgres -- psql --username postgres --dbname liftgate --tuples-only --no-align --command "select status from deployments where id = '00000000-0000-4000-8000-000000000008'")"
+  status="$(kubectl -n liftgate-system exec liftgate-postgres-1 -c postgres -- psql --username postgres --dbname liftgate --tuples-only --no-align --command "select status from deployments where id = '00000000-0000-4000-8000-000000000008'")" || true
   echo "deployment status: $status"
   test "$status" = running && exit 0
   sleep 5

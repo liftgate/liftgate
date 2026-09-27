@@ -1,0 +1,66 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  control-plane:
+    uses: ./.github/workflows/control-plane.yml
+  dashboard:
+    uses: ./.github/workflows/dashboard.yml
+  chart:
+    uses: ./.github/workflows/chart.yml
+  e2e:
+    uses: ./.github/workflows/e2e.yml
+  upgrade:
+    uses: ./.github/workflows/upgrade.yml
+    permissions:
+      contents: read
+      packages: read
+  images:
+    needs: [control-plane, dashboard, chart, e2e, upgrade]
+    uses: ./.github/workflows/images.yml
+    permissions:
+      contents: read
+      packages: write
+  publish:
+    needs: images
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      packages: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      CHARTS: oci://ghcr.io/${{ github.repository_owner }}/charts
+    steps:
+      - uses: actions/checkout@v7
+      - uses: azure/setup-helm@v5
+        with:
+          version: v4.3.0
+      - name: push the chart
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          helm dependency update charts/liftgate
+          helm package charts/liftgate --version "$version" --app-version "$version"
+          echo "$GH_TOKEN" | helm registry login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          helm push "liftgate-$version.tgz" "$CHARTS"
+          helm registry logout ghcr.io
+      - name: pull everything anonymously
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          docker logout ghcr.io
+          for image in control-plane dashboard build-image; do
+            docker buildx imagetools inspect "ghcr.io/$GITHUB_REPOSITORY_OWNER/$image:$version"
+          done
+          helm pull "$CHARTS/liftgate" --version "$version" --destination pulled
+          helm show chart "pulled/liftgate-$version.tgz" | tee pulled/Chart.yaml
+          grep -qx "version: $version" pulled/Chart.yaml
+          grep -qx "appVersion: $version" pulled/Chart.yaml
+      - name: github release
+        env:
+          PRERELEASE: ${{ contains(github.ref_name, '-') }}
+        run: gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes --prerelease="$PRERELEASE"

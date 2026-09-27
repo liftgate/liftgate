@@ -6,6 +6,7 @@ import { useAction, useApi } from "@/lib/hooks";
 import type { Organization, User } from "@/lib/types";
 import { formValues } from "@/lib/util";
 import { NameSlugFields } from "@/components/name-slug-fields";
+import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { ErrorState } from "@/components/ui/empty-state";
@@ -26,8 +27,8 @@ export default function Home() {
   if (!me.data || !orgs.data) return <PageSkeleton />;
   if (me.data.status === "pending")
     return (
-      <Card className="mx-auto mt-16 w-full max-w-lg">
-        <CardHeader
+      <Card className="mx-auto mt-16 w-full max-w-lg p-6">
+        <PageHeader
           title="Your account is waiting for approval"
           description="The operator of this Liftgate instance approves new accounts by hand. Once yours is approved, this page lets you create your first organization."
         />

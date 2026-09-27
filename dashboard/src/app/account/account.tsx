@@ -251,12 +251,12 @@ function DeleteAccount({ login }: { login?: string }) {
       <CardHeader
         title={<span className="text-danger">Delete account</span>}
         description="Removes your sign-in methods, passkeys and sessions, and deletes the organizations only you belong to with their projects and apps. This cannot be undone."
-        actions={
-          <Button variant="danger" disabled={!login} onClick={() => setOpen(true)}>
-            Delete account
-          </Button>
-        }
       />
+      <div className="p-6">
+        <Button variant="danger" disabled={!login} onClick={() => setOpen(true)}>
+          Delete account
+        </Button>
+      </div>
       <Dialog open={open} title="Delete your account" onClose={close}>
         <form
           onSubmit={(e) => {

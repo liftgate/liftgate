@@ -3,10 +3,6 @@ set -eu
 
 cd "$(dirname "$0")/.."
 
-GATEWAY_API_VERSION=v1.6.1
-CILIUM_VERSION=1.20.2
-CERT_MANAGER_VERSION=v1.21.2
-CNPG_VERSION=0.29.0
 NAMESPACE=liftgate-system
 
 kind create cluster --name liftgate --config - <<EOF
@@ -18,22 +14,8 @@ networking:
 EOF
 kind load docker-image --name liftgate liftgate/control-plane:e2e liftgate/dashboard:e2e
 
-kubectl apply --server-side -f "https://github.com/kubernetes-sigs/gateway-api/releases/download/${GATEWAY_API_VERSION}/standard-install.yaml"
-helm repo add cilium https://helm.cilium.io/ --force-update
-helm repo add jetstack https://charts.jetstack.io --force-update
-helm repo add cnpg https://cloudnative-pg.github.io/charts --force-update
-helm upgrade --install cilium cilium/cilium --version "$CILIUM_VERSION" \
-  --namespace kube-system \
-  -f infra/cilium/values.yaml \
-  --set k8sServiceHost="$(kubectl -n default get endpointslice kubernetes -o jsonpath='{.endpoints[0].addresses[0]}')" \
-  --set ipam.mode=kubernetes \
-  --wait --timeout 10m
-helm upgrade --install cert-manager jetstack/cert-manager --version "$CERT_MANAGER_VERSION" \
-  --namespace cert-manager --create-namespace --set crds.enabled=true --wait --timeout 10m
-helm upgrade --install cnpg cnpg/cloudnative-pg --version "$CNPG_VERSION" \
-  --namespace cnpg-system --create-namespace --wait --timeout 10m
+LETSENCRYPT_EMAIL=e2e@liftgate.test sh infra/install.sh
 
-kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 kubectl apply -f - <<EOF
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer

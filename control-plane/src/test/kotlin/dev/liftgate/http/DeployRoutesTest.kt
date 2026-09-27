@@ -15,13 +15,10 @@ import dev.liftgate.service.ServiceScope
 import dev.liftgate.service.Services
 import dev.liftgate.testConfig
 import dev.liftgate.unlimitedCache
-import io.ktor.client.request.cookie
-import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
-import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.testing.ApplicationTestBuilder
@@ -55,8 +52,7 @@ class DeployRoutesTest {
     }
 
     private suspend fun ApplicationTestBuilder.deploy(body: String) = client.post("/api/v1/services/${testService.id}/deploy") {
-        cookie(SESSION_COOKIE, "s")
-        header(HttpHeaders.Origin, "http://localhost:3000")
+        session()
         contentType(ContentType.Application.Json)
         setBody(body)
     }

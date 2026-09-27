@@ -10,7 +10,6 @@ import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.post
-import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 
 const val WEBHOOK_BODY_LIMIT = 25L * 1024 * 1024
@@ -21,10 +20,8 @@ fun Route.webhookRoutes(app: App) {
         val secret = app.config.github?.webhookSecret ?: notFound("webhook")
         val body = call.receive<ByteArray>()
         if (!Webhooks.verify(secret, body, call.request.header("X-Hub-Signature-256"))) unauthorized()
-        if (call.request.header("X-GitHub-Event") == "push") {
-            val payload = json.parseToJsonElement(body.decodeToString()).jsonObject
-            call.limit(app, "webhook", WEBHOOKS_PER_MINUTE, (payload["installation"] as? JsonObject)?.get("id").toString())
-            handler.handlePush(payload)
+        if (call.request.header("X-GitHub-Event") == "push") handler.handlePush(json.parseToJsonElement(body.decodeToString()).jsonObject) {
+            call.limit(app, "webhook", WEBHOOKS_PER_MINUTE, it.toString())
         }
         call.respond(HttpStatusCode.NoContent)
     }.install(RequestBodyLimit) { bodyLimit { WEBHOOK_BODY_LIMIT } }

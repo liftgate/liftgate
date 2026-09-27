@@ -19,8 +19,6 @@ import dev.liftgate.service.Services
 import dev.liftgate.testConfig
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.client.plugins.websocket.webSocketSession
-import io.ktor.client.request.HttpRequestBuilder
-import io.ktor.client.request.cookie
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -78,11 +76,6 @@ class RateLimitTest {
     }
 
     private fun freshWindow() = (60_000 - System.currentTimeMillis() % 60_000).let { if (it < 20_000) Thread.sleep(it) }
-
-    private fun HttpRequestBuilder.session() {
-        cookie(SESSION_COOKIE, "s")
-        header(HttpHeaders.Origin, "http://localhost:3000")
-    }
 
     private suspend fun ApplicationTestBuilder.options(vararg headers: Pair<String, String>): HttpResponse =
         client.post("/api/v1/auth/passkey/options") { headers.forEach { (name, value) -> header(name, value) } }

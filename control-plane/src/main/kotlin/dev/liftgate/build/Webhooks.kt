@@ -30,7 +30,7 @@ object Webhooks {
  * @date 9/17/2026
  */
 class WebhookHandler(private val app: App) {
-    suspend fun handlePush(payload: JsonObject) {
+    suspend fun handlePush(payload: JsonObject, admit: (Long) -> Unit) {
         val ref = payload.text("ref")?.takeIf { it.startsWith(BRANCH_PREFIX) } ?: return
         if (payload["deleted"]?.jsonPrimitive?.booleanOrNull == true) return
         val branch = ref.removePrefix(BRANCH_PREFIX)
@@ -38,9 +38,11 @@ class WebhookHandler(private val app: App) {
         val repo = (payload["repository"] as? JsonObject)?.text("full_name") ?: return
         val installation = (payload["installation"] as? JsonObject)?.get("id")?.jsonPrimitive?.longOrNull ?: return
         val message = (payload["head_commit"] as? JsonObject)?.text("message")
-        app.projects.environmentsForRepo(installation, repo, branch)
+        val services = app.projects.environmentsForRepo(installation, repo, branch)
             .flatMap { app.services.forEnvironment(it.id) }
-            .forEach { app.builds.request(it.id, sha, message, branch) }
+            .ifEmpty { return }
+        admit(installation)
+        services.forEach { app.builds.request(it.id, sha, message, branch) }
     }
 
     private fun JsonObject.text(key: String) = this[key]?.jsonPrimitive?.contentOrNull

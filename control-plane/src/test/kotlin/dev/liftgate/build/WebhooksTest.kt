@@ -23,6 +23,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 import kotlin.test.Test
@@ -97,7 +98,7 @@ class WebhooksTest {
     }
 
     @Test
-    fun `untracked branches, tags, deleted branches, other installations and other events build nothing`() = testApplication {
+    fun `untracked branches, tags, deleted branches, other installations and other events build nothing and spend none of the webhook limit`() = testApplication {
         application { liftgate(app) }
         listOf("push" to push(ref = "refs/heads/feature"), "push" to push(ref = "refs/tags/v1"), "push" to push(deleted = true), "push" to push(installation = 7), "ping" to push()).forEach { (event, body) ->
             val response = client.post("/api/v1/webhooks/github") {
@@ -108,6 +109,7 @@ class WebhooksTest {
             assertEquals(HttpStatusCode.NoContent, response.status)
         }
         coVerify(exactly = 0) { builds.request(any(), any(), any(), any()) }
+        verify(exactly = 0) { cache.allow(any(), any(), any()) }
     }
 
     @Test

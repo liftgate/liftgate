@@ -20,7 +20,6 @@ import dev.liftgate.unlimitedCache
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.client.plugins.websocket.webSocket
 import io.ktor.client.request.HttpRequestBuilder
-import io.ktor.client.request.cookie
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.statement.bodyAsText
@@ -45,7 +44,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFails
 import kotlin.test.assertTrue
 
-private const val DASHBOARD = "http://localhost:3000"
 private const val EVIL = "https://evil.example"
 
 /**
@@ -75,11 +73,6 @@ class OriginTest {
         every { nats } returns mockk<Nats> { every { logs(any()) } returns flowOf("ready") }
     }
 
-    private fun HttpRequestBuilder.session(origin: String?) {
-        cookie(SESSION_COOKIE, "s")
-        origin?.let { header(HttpHeaders.Origin, it) }
-    }
-
     private suspend fun ApplicationTestBuilder.rollback(block: HttpRequestBuilder.() -> Unit) =
         client.post("/api/v1/deployments/${testDeployment.id}/rollback", block)
 
@@ -91,7 +84,7 @@ class OriginTest {
         assertEquals("bad_origin", json.decodeFromString(ErrorBody.serializer(), foreign.bodyAsText()).error)
         assertEquals(HttpStatusCode.Forbidden, rollback { session(null) }.status)
         coVerify(exactly = 0) { deployments.rollback(any()) }
-        assertEquals(HttpStatusCode.Created, rollback { session(DASHBOARD) }.status)
+        assertEquals(HttpStatusCode.Created, rollback { session() }.status)
     }
 
     @Test
@@ -105,7 +98,7 @@ class OriginTest {
         application { liftgate(app) }
         assertEquals(HttpStatusCode.Forbidden, client.post("/api/v1/auth/logout") { session(EVIL) }.status)
         coVerify(exactly = 0) { sessions.delete(any()) }
-        val response = client.post("/api/v1/auth/logout") { session(DASHBOARD) }
+        val response = client.post("/api/v1/auth/logout") { session() }
         assertEquals(HttpStatusCode.NoContent, response.status)
         val cleared = response.headers[HttpHeaders.SetCookie].orEmpty()
         assertTrue(cleared.startsWith("__Host-liftgate_session=;") && "Secure" in cleared && "Path=/" in cleared, cleared)
@@ -117,6 +110,6 @@ class OriginTest {
         val sockets = createClient { install(WebSockets) }
         val path = "/api/v1/logs/services/${testService.id}"
         assertFails { sockets.webSocket(path, { session(EVIL) }) { incoming.receive() } }
-        sockets.webSocket(path, { session(DASHBOARD) }) { assertEquals("ready", (incoming.receive() as Frame.Text).readText()) }
+        sockets.webSocket(path, { session() }) { assertEquals("ready", (incoming.receive() as Frame.Text).readText()) }
     }
 }

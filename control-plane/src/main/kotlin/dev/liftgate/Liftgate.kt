@@ -12,6 +12,7 @@ import dev.liftgate.auth.Passkeys
 import dev.liftgate.auth.Sessions
 import dev.liftgate.auth.SignIn
 import dev.liftgate.auth.Sso
+import dev.liftgate.build.BuildAdmission
 import dev.liftgate.build.Builder
 import dev.liftgate.build.GitHubApp
 import dev.liftgate.build.RegistryTokens
@@ -35,6 +36,7 @@ import dev.liftgate.k8s.Reconciler
 import dev.liftgate.k8s.Suspension
 import dev.liftgate.metering.Meter
 import dev.liftgate.metering.Prometheus
+import dev.liftgate.org.Limits
 import dev.liftgate.org.Orgs
 import dev.liftgate.project.Projects
 import dev.liftgate.secret.SecretBox
@@ -77,16 +79,17 @@ class App(val config: Config) : AutoCloseable {
     }
     val metrics = PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
     val kube = KubernetesClientBuilder().build()
-    val orgs = Orgs(db)
+    private val limits = Limits(config.plans, config.customDomainsMax)
+    val orgs = Orgs(db, limits)
     val sessions = Sessions(db, cache, orgs)
     val apiTokens = ApiTokens(db, cache)
     val access = Access(orgs)
-    val projects = Projects(db)
-    val services = Services(db)
+    val projects = Projects(db, limits)
+    val services = Services(db, limits)
     val envVars = EnvVars(db, secrets)
     val builds = Builds(db)
     val deployments = Deployments(db)
-    val domains = Domains(db, config.deployDomain)
+    val domains = Domains(db, config.deployDomain, limits)
     val github = config.github?.let { GitHubApp(it, http) }
     val oauth = OAuth(http, config.publicUrl, OAuthProviders.enabled(config))
     val signIn = SignIn(db, sessions, config.signup, config.signupAllow, consent = config.termsUrl != null)
@@ -95,6 +98,7 @@ class App(val config: Config) : AutoCloseable {
     val emailCodes = config.email?.let { EmailCodes(db, cache, config.secretsMasterKey, Mailer(it), signIn) }
     val sso = Sso(config.publicUrl, db, cache, signIn)
     val registryTokens = RegistryTokens(db, services, config)
+    val buildAdmission = BuildAdmission(db, config.plans)
     private val stopped = CountDownLatch(1)
     private var server: EmbeddedServer<*, *>? = null
 
@@ -138,7 +142,7 @@ class App(val config: Config) : AutoCloseable {
 fun main(args: Array<String>) {
     val config = Config.fromEnv()
     if (args.firstOrNull() == "admin") {
-        val result = runCatching { Db(config).use { runBlocking { Admin(it).run(args.drop(1)) } } }
+        val result = runCatching { Db(config).use { runBlocking { Admin(it, config.plans).run(args.drop(1)) } } }
         result.onSuccess(::println).onFailure { System.err.println(it.message ?: it) }
         exitProcess(if (result.isSuccess) 0 else 1)
     }

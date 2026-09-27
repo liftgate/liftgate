@@ -1,5 +1,6 @@
 package dev.liftgate.db
 
+import dev.liftgate.org.DEFAULT_PLAN
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import org.jetbrains.exposed.v1.core.Column
@@ -51,7 +52,7 @@ object Organizations : Table("organizations") {
     val id = javaUUID("id")
     val slug = text("slug").uniqueIndex()
     val name = text("name")
-    val plan = text("plan").default("free")
+    val plan = text("plan").default(DEFAULT_PLAN)
     val createdAt = createdAtColumn()
     val suspendedAt = timestampWithTimeZone("suspended_at").nullable()
     val suspendedReason = text("suspended_reason").nullable()

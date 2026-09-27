@@ -12,7 +12,9 @@ import dev.liftgate.db.sql
 import dev.liftgate.deploy.BuildStatus
 import dev.liftgate.events.Subject
 import dev.liftgate.events.enqueue
+import dev.liftgate.org.DEFAULT_PLAN
 import dev.liftgate.org.Organization
+import dev.liftgate.org.Plans
 import dev.liftgate.org.User
 import dev.liftgate.org.UserStatus
 import dev.liftgate.org.toOrganization
@@ -40,6 +42,7 @@ private val usage = """
       unsuspend <org>
       suspend-user <user> <reason>
       unsuspend-user <user>
+      plan <org> <plan>
     <user> is a user id, login or email
 """.trimIndent()
 
@@ -47,7 +50,7 @@ private val usage = """
  * @author Dean
  * @date 9/27/2026
  */
-class Admin(private val db: Db) {
+class Admin(private val db: Db, private val plans: Plans = Plans()) {
     suspend fun run(args: List<String>): String {
         val target by lazy { args.getOrNull(1) ?: error(usage) }
         val reason by lazy { args.drop(2).joinToString(" ").ifEmpty { error(usage) } }
@@ -59,6 +62,7 @@ class Admin(private val db: Db) {
                 "unsuspend" -> unsuspendOrg(target)
                 "suspend-user" -> setStatus(target, setOf(UserStatus.PENDING, UserStatus.ACTIVE), UserStatus.SUSPENDED, "user.suspend", reason)
                 "unsuspend-user" -> setStatus(target, setOf(UserStatus.SUSPENDED), UserStatus.ACTIVE, "user.unsuspend")
+                "plan" -> setPlan(target, args.getOrNull(2) ?: error(usage))
                 else -> error(usage)
             }
         }
@@ -104,6 +108,14 @@ class Admin(private val db: Db) {
         }
         record(Subject.ORG_UNSUSPENDED, "org.unsuspend", "org", org.id, emptyMap())
         return "$slug is active"
+    }
+
+    private fun JdbcTransaction.setPlan(slug: String, plan: String): String {
+        if (plan != DEFAULT_PLAN && plan !in plans.all) error("$plan is not a plan, choose one of ${(plans.all.keys + DEFAULT_PLAN).joinToString()}")
+        val org = org(slug)
+        Organizations.update({ Organizations.id eq org.id }) { it[Organizations.plan] = plan }
+        record(Subject.ORG_PLAN_CHANGED, "org.plan", "org", org.id, mapOf("plan" to plan))
+        return "$slug is on the ${plans.name(plan)} plan"
     }
 
     private fun org(slug: String): Organization =

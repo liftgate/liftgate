@@ -1,11 +1,14 @@
 package dev.liftgate.config
 
 import dev.liftgate.domain.DomainNames
+import dev.liftgate.org.Plan
+import dev.liftgate.org.Plans
 import io.fabric8.kubernetes.api.model.Toleration
 import io.fabric8.kubernetes.api.model.TolerationBuilder
 import io.ktor.http.Url
 import io.netty.handler.ipfilter.IpFilterRuleType
 import io.netty.handler.ipfilter.IpSubnetFilterRule
+import kotlinx.serialization.json.Json
 import java.util.Base64
 
 private const val GITLAB_COM = "https://gitlab.com"
@@ -92,6 +95,8 @@ data class Config(
     val registryTokens: RegistryTokenConfig?,
     val buildNodeSelector: Map<String, String>,
     val buildTolerations: List<Toleration>,
+    val plans: Plans,
+    val customDomainsMax: Int?,
 ) {
     companion object {
         private val taint = Regex("""([\w./-]+)(?:=([\w.-]*))?(?::(NoSchedule|PreferNoSchedule|NoExecute))?""")
@@ -145,6 +150,7 @@ data class Config(
                 "token" -> true
                 else -> error("LIFTGATE_REGISTRY_AUTH must be shared or token")
             }
+            val builtInPlans = Plans()
 
             return Config(
                 role = role,
@@ -199,6 +205,12 @@ data class Config(
                 ) else null,
                 buildNodeSelector = selector("BUILD_NODE_SELECTOR") ?: nodeSelector,
                 buildTolerations = tolerations("BUILD_TOLERATIONS"),
+                plans = Plans(
+                    optional("PLANS")?.let { runCatching { Json.decodeFromString<Map<String, Plan>>(it) }.getOrElse { e -> error("LIFTGATE_PLANS must map plan names to limits: ${e.message}") } }
+                        ?: builtInPlans.all,
+                    text("DEFAULT_PLAN", builtInPlans.default),
+                ),
+                customDomainsMax = optional("CUSTOM_DOMAINS_MAX")?.let { it.toIntOrNull()?.takeIf { max -> max >= 0 } ?: error("LIFTGATE_CUSTOM_DOMAINS_MAX must be a number") },
             )
         }
     }

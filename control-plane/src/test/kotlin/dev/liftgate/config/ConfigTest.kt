@@ -2,6 +2,8 @@ package dev.liftgate.config
 
 import dev.liftgate.domain.DomainNames
 import dev.liftgate.minimalEnv
+import dev.liftgate.org.Plan
+import dev.liftgate.org.Plans
 import io.fabric8.kubernetes.api.model.TolerationBuilder
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -41,6 +43,28 @@ class ConfigTest {
         assertTrue(config.nodeSelector.isEmpty())
         assertTrue(config.workloadTolerations.isEmpty() && config.buildTolerations.isEmpty())
         assertFalse(config.registryInsecure)
+    }
+
+    @Test
+    fun `plans parse strictly, default to unlimited and must contain the default plan`() {
+        assertEquals(Plans(), Config.fromEnv(minimalEnv).plans)
+        assertNull(Config.fromEnv(minimalEnv).customDomainsMax)
+        val config = Config.fromEnv(
+            minimalEnv + mapOf(
+                "LIFTGATE_PLANS" to """{"free":{"projects":3,"cpuRequestRatio":0.25,"egressBandwidth":"20M","udp":false},"unlimited":{}}""",
+                "LIFTGATE_DEFAULT_PLAN" to "free",
+                "LIFTGATE_CUSTOM_DOMAINS_MAX" to "100",
+            ),
+        )
+        assertEquals(Plan(projects = 3, cpuRequestRatio = 0.25, egressBandwidth = "20M", udp = false), config.plans.of("default"))
+        assertEquals(Plan(), config.plans.of("unlimited"))
+        assertEquals(100, config.customDomainsMax)
+        listOf(
+            mapOf("LIFTGATE_PLANS" to """{"free":{"project":3}}""", "LIFTGATE_DEFAULT_PLAN" to "free") to "LIFTGATE_PLANS",
+            mapOf("LIFTGATE_PLANS" to """{"free":{}}""") to "LIFTGATE_DEFAULT_PLAN",
+            mapOf("LIFTGATE_DEFAULT_PLAN" to "free") to "LIFTGATE_DEFAULT_PLAN",
+            mapOf("LIFTGATE_CUSTOM_DOMAINS_MAX" to "lots") to "LIFTGATE_CUSTOM_DOMAINS_MAX",
+        ).forEach { (env, name) -> assertTrue(name in assertFailsWith<IllegalStateException> { Config.fromEnv(minimalEnv + env) }.message.orEmpty(), env.toString()) }
     }
 
     @Test

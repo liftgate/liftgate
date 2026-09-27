@@ -62,10 +62,11 @@ fun insertUser(
  * @author Dean
  * @date 9/17/2026
  */
-class Orgs(private val db: Db) {
+class Orgs(private val db: Db, private val limits: Limits = Limits()) {
     suspend fun user(id: UUID): User? = db.tx { Users.selectAll().where { Users.id eq id }.singleOrNull()?.toUser() }
 
     suspend fun create(slug: String, name: String, owner: UUID): Organization = db.tx {
+        limits.ownedOrgs(owner)
         val org = Organizations.insertReturning {
             it[id] = UUID.randomUUID()
             it[Organizations.slug] = slug
@@ -94,6 +95,8 @@ class Orgs(private val db: Db) {
     suspend fun role(orgId: UUID, userId: UUID): OrgRole? = db.tx {
         Memberships.select(Memberships.role).where { (Memberships.orgId eq orgId) and (Memberships.userId eq userId) }.singleOrNull()?.toRole()
     }
+
+    suspend fun usage(orgId: UUID): Usage = db.tx { limits.usage(orgId) }
 
     suspend fun suspended(orgId: UUID): Boolean = db.tx {
         Organizations.select(Organizations.suspendedAt).where { Organizations.id eq orgId }.single()[Organizations.suspendedAt] != null

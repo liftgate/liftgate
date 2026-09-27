@@ -5,6 +5,7 @@ import dev.liftgate.config.GitHubConfig
 import dev.liftgate.deploy.BuildStatus
 import dev.liftgate.deploy.Builds
 import dev.liftgate.events.Nats
+import dev.liftgate.events.Redeliver
 import dev.liftgate.http.json
 import dev.liftgate.k8s.testBuild
 import dev.liftgate.k8s.testDeployment
@@ -38,7 +39,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
-import java.time.Instant
+import java.time.Duration
 import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -75,6 +76,7 @@ class BuilderTest {
         coEvery { markSucceeded(queued.id, any()) } returns testDeployment
     }
     private val registryTokens = mockk<RegistryTokens>(relaxUnitFun = true) { coEvery { issue(queued.id) } returns "registry-password" }
+    private val admission = mockk<BuildAdmission> { coEvery { admit(any(), any()) } returns null }
     private val app = mockk<App> {
         every { config } returns testConfig()
         every { this@mockk.builds } returns this@BuilderTest.builds
@@ -83,6 +85,7 @@ class BuilderTest {
         }
         every { github } returns this@BuilderTest.github
         every { registryTokens } returns this@BuilderTest.registryTokens
+        every { buildAdmission } returns admission
         every { nats } returns mockk<Nats>(relaxed = true)
     }
 
@@ -109,7 +112,7 @@ class BuilderTest {
     @Test
     fun `a succeeded job releases the image and is deleted`() {
         build(JobStatusBuilder().withSucceeded(1).build())
-        coVerify(exactly = 1) { builds.markRunning(queued.id) }
+        coVerify(exactly = 1) { admission.admit(queued, testOrg.id) }
         coVerify(exactly = 1) { builds.markSucceeded(queued.id, image) }
         coVerify(exactly = 0) { builds.markFailed(any(), any()) }
         coVerify(exactly = 1) { registryTokens.revoke(queued.id) }
@@ -194,11 +197,18 @@ class BuilderTest {
     }
 
     @Test
-    fun `builds of a suspended org are refused`() = runBlocking {
-        coEvery { app.services.scope(testService.id) } returns ServiceScope(testService, testEnvironment, testProject, testOrg.copy(suspendedAt = Instant.now()))
+    fun `a refused build fails before any job exists`() = runBlocking {
+        coEvery { admission.admit(queued, testOrg.id) } returns "the organization is suspended"
         Builder(app, client).build(queued.id)
         coVerify { builds.markFailed(queued.id, "the organization is suspended") }
-        coVerify(exactly = 0) { builds.markRunning(any()) }
+        assertNull(job().get())
+    }
+
+    @Test
+    fun `a build over the concurrency limit is redelivered untouched`() = runBlocking {
+        coEvery { admission.admit(queued, testOrg.id) } throws Redeliver(Duration.ofSeconds(15))
+        assertFailsWith<Redeliver> { Builder(app, client).build(queued.id) }
+        coVerify(exactly = 0) { builds.markFailed(any(), any()) }
         assertNull(job().get())
     }
 
@@ -206,7 +216,7 @@ class BuilderTest {
     fun `finished builds are not run again`() = runBlocking {
         coEvery { builds.byId(queued.id) } returns testBuild
         Builder(app, client).build(queued.id)
-        coVerify(exactly = 0) { builds.markRunning(any()) }
+        coVerify(exactly = 0) { admission.admit(any(), any()) }
         assertNull(job().get())
     }
 }

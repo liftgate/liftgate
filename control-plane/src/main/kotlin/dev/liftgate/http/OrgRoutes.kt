@@ -78,6 +78,7 @@ fun Route.orgRoutes(app: App) {
                 call.respond(HttpStatusCode.NoContent)
             }
             get("/members") { call.respond(app.orgs.members(call.org(app).id).map { (user, role) -> Member(user, role) }) }
+            get("/usage") { call.respond(app.orgs.usage(call.org(app).id)) }
             route("/tokens") {
                 get { call.respond(app.apiTokens.list(call.sessionOrg(app, OrgRole.ADMIN).id)) }
                 post {

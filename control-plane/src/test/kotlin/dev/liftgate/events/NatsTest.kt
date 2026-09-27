@@ -15,10 +15,13 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import java.time.Duration
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.nanoseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.measureTime
 
@@ -79,6 +82,23 @@ class NatsTest {
         nats.publish(Subject.TEARDOWN_REQUESTED.value, 1, payload)
         assertEquals(payload, withTimeout(20.seconds) { received.await() })
         assertTrue(nats.lastPolls.getValue("recreate-test") > registered)
+        consumer.cancel()
+    }
+
+    @Test
+    fun `a handler asking for redelivery gets the message back after exactly that delay`() = runBlocking {
+        val nats = TestNats.clean()
+        val deliveries = CopyOnWriteArrayList<Long>()
+        val handled = CompletableDeferred<Unit>()
+        val consumer = nats.consume(Subject.BUILD_REQUESTED, "redeliver-test", this) {
+            deliveries += System.nanoTime()
+            if (deliveries.size < 3) throw Redeliver(Duration.ofSeconds(1))
+            handled.complete(Unit)
+        }
+        nats.publish(Subject.BUILD_REQUESTED.value, 1, payload)
+        withTimeout(20.seconds) { handled.await() }
+        val gaps = deliveries.zipWithNext { first, next -> (next - first).nanoseconds }
+        assertTrue(gaps.size == 2 && gaps.all { it >= 900.milliseconds }, "redelivered after $gaps")
         consumer.cancel()
     }
 

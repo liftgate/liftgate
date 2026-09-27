@@ -10,6 +10,7 @@ import dev.liftgate.db.sql
 import dev.liftgate.db.toEnum
 import dev.liftgate.events.Subject
 import dev.liftgate.events.enqueue
+import dev.liftgate.org.Limits
 import dev.liftgate.org.toOrganization
 import dev.liftgate.project.toEnvironment
 import dev.liftgate.project.toProject
@@ -50,8 +51,9 @@ fun orgServiceIds(orgId: UUID) = (ServicesTable innerJoin Environments innerJoin
  * @author Dean
  * @date 9/17/2026
  */
-class Services(private val db: Db) {
+class Services(private val db: Db, private val limits: Limits = Limits()) {
     suspend fun create(environmentId: UUID, spec: ServiceSpec): Service = db.tx {
+        limits.service(environmentId, spec)
         ServicesTable.insertReturning {
             it[id] = UUID.randomUUID()
             it[ServicesTable.environmentId] = environmentId
@@ -83,6 +85,7 @@ class Services(private val db: Db) {
     }
 
     suspend fun update(id: UUID, spec: ServiceSpec): Service = db.tx {
+        limits.resize(id, spec)
         ServicesTable.updateReturning(ServicesTable.columns, { ServicesTable.id eq id }) { it.set(spec) }.single().toService()
     }
 

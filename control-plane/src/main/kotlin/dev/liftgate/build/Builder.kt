@@ -37,14 +37,13 @@ class Builder(private val app: App, private val kube: KubernetesClient) {
     suspend fun build(buildId: UUID) {
         val build = app.builds.byId(buildId)?.takeIf { it.status == BuildStatus.QUEUED || it.status == BuildStatus.RUNNING } ?: return
         val scope = app.services.scope(build.serviceId) ?: return
-        if (scope.org.suspendedAt != null) return app.builds.markFailed(buildId, "the organization is suspended")
+        app.buildAdmission.admit(build, scope.org.id)?.let { return app.builds.markFailed(buildId, it) }
         val github = app.github ?: return app.builds.markFailed(buildId, "the GitHub App is not configured")
         val config = app.config
         val project = scope.project
         val image = BuildJobs.imageRef(config.registry, scope.org, project, scope.service, build.commitSha)
         val cache = BuildJobs.imageRef(config.registry, scope.org, project, scope.service, "cache")
         val jobs = kube.batch().v1().jobs().inNamespace(config.buildNamespace)
-        app.builds.markRunning(buildId)
         val failure = try {
             val token = github.installationToken(project.installationId, project.repoFullName.substringAfter('/'))
             if (project.importedByLogin?.let { github.canPush(token, project.repoFullName, it) } == false) {

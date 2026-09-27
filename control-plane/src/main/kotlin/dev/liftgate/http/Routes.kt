@@ -8,6 +8,8 @@ import io.ktor.server.application.ApplicationCall
 import io.ktor.server.plugins.origin
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.route
+import io.netty.util.NetUtil
+import java.net.Inet6Address
 import java.net.InetSocketAddress
 import java.util.UUID
 
@@ -35,7 +37,8 @@ fun ApplicationCall.uuid(name: String): UUID = parameters[name]?.let { runCatchi
 fun ApplicationCall.clientIp(config: Config): String {
     val peer = request.origin.remoteAddress
     val header = config.clientIpHeader?.takeIf { config.trustedProxyCidrs.any { it.matches(InetSocketAddress(peer, 0)) } }
-    return header?.let { request.headers[it]?.trim() }?.takeIf { it.isNotEmpty() }
+    val ip = header?.let { request.headers[it]?.trim() }?.takeIf { it.isNotEmpty() }
         ?: request.headers.getAll(HttpHeaders.XForwardedFor).orEmpty().flatMap { it.split(',') }.map(String::trim)
             .let { hops -> hops.getOrNull(hops.size - config.trustedProxies) }?.takeIf { it.isNotEmpty() } ?: peer
+    return (NetUtil.createInetAddressFromIpAddressString(ip) as? Inet6Address)?.let { it.address.toHexString(0, 8) + "/64" } ?: ip
 }

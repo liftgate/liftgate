@@ -100,7 +100,7 @@ appends the address it received the request from, so the default of `1` fits cli
 the gateway directly. Add one for every proxy in front of the gateway that appends to the
 header; a proxy that replaces the header counts as one entry. Behind Cloudflare and a reverse
 proxy that sets `X-Forwarded-For` from `CF-Connecting-IP`, the control plane receives
-`<client>, <proxy>`, so set `trustedProxies: 2`.
+`<client>, <proxy>`, so set `trustedProxies: 2`. IPv6 clients share one key per /64.
 
 Alternatively `controlPlane.clientIpHeader` names a header that carries the client address,
 such as `CF-Connecting-IP`. The control plane reads it only on connections from an address in

@@ -145,6 +145,20 @@ class RateLimitTest {
     }
 
     @Test
+    fun `ipv6 clients share one bucket per 64 prefix while ipv4-mapped clients keep their own`() {
+        freshWindow()
+        testApplication {
+            application { liftgate(app("LIFTGATE_TRUSTED_PROXIES" to "1")) }
+            suspend fun from(ip: String) = options(HttpHeaders.XForwardedFor to ip).status
+            val exhausted = List(AUTH_PER_MINUTE) { HttpStatusCode.OK } + HttpStatusCode.TooManyRequests
+            assertEquals(exhausted, List(AUTH_PER_MINUTE + 1) { from("2001:db8::${it + 1}") })
+            assertEquals(HttpStatusCode.OK, from("2001:db8:0:1::1"))
+            assertEquals(exhausted, List(AUTH_PER_MINUTE + 1) { from("::ffff:192.0.2.1") })
+            assertEquals(HttpStatusCode.OK, from("::ffff:192.0.2.2"))
+        }
+    }
+
+    @Test
     fun `deploys are limited per service and only authorised deploys count`() {
         freshWindow()
         testApplication {

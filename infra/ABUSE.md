@@ -120,10 +120,10 @@ The rest of the line is the reason. Members see it in the dashboard as "<name> i
 the suspension, cancels the organization's queued builds and writes an `org.suspend` row with
 the reason to `audit_log`. Within a minute the reconciler scales every Deployment of the
 organization to 0, suspends its CronJobs, deletes their running Jobs, and deletes its Services
-and HTTPRoutes. Later releases render it stopped too, and the builder fails its new builds. A
-build that is already running keeps running until it ends or hits the build job's 30-minute
-deadline. Members can still sign in and read, every change to the organization answers
-`403 org_suspended`, and owners can delete neither the organization nor their account.
+and HTTPRoutes. Later releases and the 5-minute resync keep it stopped, and the builder fails
+its new builds. A build that is already running keeps running until it ends or hits the build
+job's 30-minute deadline. Members can still sign in and read, every change to the organization
+answers `403 org_suspended`, and owners can delete neither the organization nor their account.
 
 Check that nothing is served:
 

@@ -170,6 +170,7 @@ class BuilderTest {
         coVerify(exactly = 1) { registryTokens.issue(queued.id) }
         assertEquals(1, jobCreations())
         assertNull(job().get())
+        assertEquals(1L, metrics.timer("liftgate.build.duration", "status", "succeeded").count())
     }
 
     @Test

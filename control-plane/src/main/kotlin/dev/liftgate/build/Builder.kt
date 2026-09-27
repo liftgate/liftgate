@@ -62,13 +62,13 @@ class Builder(private val app: App, private val kube: KubernetesClient) {
             log.warn("build {} failed", buildId, e)
             e.message ?: "the build could not be run"
         }
-        sample.stop(app.metrics.timer("liftgate.build.duration", "status", (if (failure == null) BuildStatus.SUCCEEDED else BuildStatus.FAILED).sql))
         if (failure == null) {
             app.builds.markSucceeded(buildId, image)
             runCatching { jobs.withName(BuildJobs.name(buildId)).delete() }
         } else {
             app.builds.markFailed(buildId, failure)
         }
+        sample.stop(app.metrics.timer("liftgate.build.duration", "status", (if (failure == null) BuildStatus.SUCCEEDED else BuildStatus.FAILED).sql))
         app.registryTokens.revoke(buildId)
         app.nats.logs.end(buildId, failure)
     }

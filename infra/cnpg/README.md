@@ -57,11 +57,13 @@ volumes are kept until the restored database has been checked.
    for pv in $(kubectl -n liftgate-system get pvc --selector cnpg.io/cluster=liftgate-postgres -o jsonpath='{.items[*].spec.volumeName}'); do
      kubectl patch pv "$pv" -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
    done
+   kubectl get pv -o custom-columns=NAME:.metadata.name,CLAIM:.spec.claimRef.name,RECLAIM:.spec.persistentVolumeReclaimPolicy
    ```
 
-   Until step 8 they hold the old data directory, including any WAL the archive is missing
-   because step 2 could not run. They are the only way back if the restore fails; without them
-   step 4 is irreversible.
+   Go on only when the last command shows `Retain` for the volume of every
+   `liftgate-postgres-<n>` claim. Until step 8 these volumes hold the old data directory,
+   including any WAL the archive is missing because step 2 could not run. They are the only way
+   back if the restore fails; without them step 4 is irreversible.
 
 4. Delete the `Cluster`. This removes the Postgres pods, their PVCs and the
    `liftgate-postgres-app` Secret; the volumes from step 3 stay `Released` and the object store

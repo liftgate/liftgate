@@ -8,7 +8,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
-import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.isNull
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.update
@@ -29,12 +29,10 @@ class OutboxRelay(private val db: Db, private val nats: Nats) {
                 .where { Outbox.publishedAt.isNull() }
                 .orderBy(Outbox.id)
                 .limit(BATCH)
-                .map { Triple(it[Outbox.id], Subject.of(it[Outbox.subject]), it[Outbox.payload]) }
+                .map { Triple(it[Outbox.id], it[Outbox.subject], it[Outbox.payload]) }
         }
-        pending.forEach { (id, subject, payload) ->
-            nats.publish(subject, id, payload)
-            db.tx { Outbox.update({ Outbox.id eq id }) { it[publishedAt] = now() } }
-        }
+        pending.forEach { (id, subject, payload) -> nats.publish(subject, id, payload) }
+        if (pending.isNotEmpty()) db.tx { Outbox.update({ Outbox.id inList pending.map { it.first } }) { it[publishedAt] = now() } }
         return pending.size
     }
 

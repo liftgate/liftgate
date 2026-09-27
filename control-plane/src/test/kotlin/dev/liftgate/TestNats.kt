@@ -1,9 +1,11 @@
 package dev.liftgate
 
 import dev.liftgate.events.Nats
+import io.nats.client.api.StreamConfiguration
 import org.testcontainers.containers.GenericContainer
 import org.testcontainers.containers.wait.strategy.Wait
 import org.testcontainers.utility.DockerImageName
+import java.time.Duration
 
 /**
  * @author Dean
@@ -17,11 +19,15 @@ object TestNats {
         start()
     }
     private val url = "nats://${container.host}:${container.getMappedPort(4222)}"
-    private val nats = Nats(testConfig(mapOf("LIFTGATE_NATS_URL" to url)))
-    private val streams = io.nats.client.Nats.connect(url).jetStreamManagement()
+    private val nats = Nats(testConfig(mapOf("LIFTGATE_NATS_URL" to url)), Duration.ofMillis(10))
+    val streams = io.nats.client.Nats.connect(url).jetStreamManagement()
 
     fun clean(): Nats = nats.also {
         streams.streamNames.forEach(streams::deleteStream)
         it.ensureStream()
+    }
+
+    fun addSubject(subject: String) {
+        streams.updateStream(StreamConfiguration.builder(streams.getStreamInfo("LIFTGATE").configuration).addSubjects(subject).build())
     }
 }

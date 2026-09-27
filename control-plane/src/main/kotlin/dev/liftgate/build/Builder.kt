@@ -56,7 +56,7 @@ class Builder(private val app: App, private val kube: KubernetesClient) {
         if (failure == null) app.builds.markSucceeded(buildId, image) else app.builds.markFailed(buildId, failure)
     }
 
-    fun start(): Job = app.nats.consume(Subject.BUILD_REQUESTED, "builder-build-requested", app.scope, Duration.ofMinutes(WAIT_MINUTES), CONCURRENT_BUILDS) { build(it.uuid("buildId")) }
+    fun start(): Job = app.nats.consume(Subject.BUILD_REQUESTED, "builder-build-requested", app.scope, Duration.ofSeconds(60), CONCURRENT_BUILDS) { build(it.uuid("buildId")) }
 
     private suspend fun run(job: ScalableResource<KubeJob>, spec: BuildJobSpec): Boolean = coroutineScope {
         val buildId = spec.build.id

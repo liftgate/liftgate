@@ -17,6 +17,7 @@ import dev.liftgate.cache.Cache
 import dev.liftgate.config.Config
 import dev.liftgate.config.Role
 import dev.liftgate.db.Db
+import dev.liftgate.db.Housekeeping
 import dev.liftgate.deploy.Builds
 import dev.liftgate.deploy.Deployments
 import dev.liftgate.domain.Domains
@@ -46,9 +47,13 @@ import io.micrometer.prometheusmetrics.PrometheusMeterRegistry
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.job
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.CountDownLatch
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * @author Dean
@@ -93,7 +98,7 @@ class App(val config: Config) : AutoCloseable {
         nats.ensureStream()
         if (runs(Role.API)) {
             val relay = OutboxRelay(db, nats)
-            LeaderElection(config, kube).start(scope) { coroutineScope { relay.start(this) } }
+            LeaderElection(config, kube, "liftgate-outbox-relay").start(scope) { coroutineScope { relay.start(this); Housekeeping(db).start(this) } }
             server = httpServer(this).start(wait = false)
         }
         if (runs(Role.RECONCILER)) {
@@ -111,7 +116,7 @@ class App(val config: Config) : AutoCloseable {
 
     override fun close() {
         server?.stop(1000, 5000)
-        scope.cancel()
+        runBlocking { withTimeoutOrNull(10.seconds) { scope.coroutineContext.job.cancelAndJoin() } }
         http.close()
         nats.close()
         cache.close()

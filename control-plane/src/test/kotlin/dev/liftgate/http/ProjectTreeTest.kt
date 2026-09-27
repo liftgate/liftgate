@@ -2,6 +2,7 @@ package dev.liftgate.http
 
 import dev.liftgate.App
 import dev.liftgate.TestDatabase
+import dev.liftgate.auth.Access
 import dev.liftgate.auth.ApiTokens
 import dev.liftgate.auth.Sessions
 import dev.liftgate.org.Orgs
@@ -43,6 +44,7 @@ class ProjectTreeTest {
     private val app = mockk<App>().also {
         every { it.services } returns services
         every { it.orgs } returns orgs
+        every { it.access } returns Access(orgs)
         every { it.apiTokens } returns apiTokens
         every { it.sessions } returns mockk<Sessions> {
             coEvery { resolve("member") } returns member
@@ -70,7 +72,7 @@ class ProjectTreeTest {
         assertEquals(workers.toSet(), tree.services.toSet())
 
         assertEquals(HttpStatusCode.OK, client.get("/api/v1/orgs/acme/projects/shop/tree") { bearerAuth("lg_acme") }.status)
-        assertEquals(HttpStatusCode.NotFound, client.get("/api/v1/orgs/acme/projects/shop/tree") { bearerAuth("lg_other") }.status)
+        assertEquals(HttpStatusCode.Forbidden, client.get("/api/v1/orgs/acme/projects/shop/tree") { bearerAuth("lg_other") }.status)
         assertEquals(HttpStatusCode.NotFound, client.get("/api/v1/orgs/acme/projects/shop/tree") { cookie(SESSION_COOKIE, "outsider") }.status)
         assertEquals(HttpStatusCode.NotFound, client.get("/api/v1/orgs/acme/projects/missing/tree") { cookie(SESSION_COOKIE, "member") }.status)
     }

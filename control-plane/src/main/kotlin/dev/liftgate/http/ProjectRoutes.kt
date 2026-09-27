@@ -48,9 +48,9 @@ fun Route.projectRoutes(app: App) {
             call.respond(HttpStatusCode.Created, app.projects.create(org.id, body.slug, body.name.trim(), body.repoFullName, installationId))
         }
         get("/{project}/tree") {
-            val principal = call.principal
-            val tree = app.services.tree(call.parameters["slug"]!!, call.parameters["project"]!!, principal.user.id)
-            call.respond(tree?.takeIf { principal.orgId == null || it.project.orgId == principal.orgId } ?: notFound("project"))
+            val tree = app.services.tree(call.parameters["slug"]!!, call.parameters["project"]!!, call.principal.user.id) ?: notFound("project")
+            app.access.require(tree.project.orgId, call.principal)
+            call.respond(tree)
         }
     }
     route("/projects/{id}") {

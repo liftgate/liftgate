@@ -35,7 +35,12 @@ fun Route.serviceRoutes(app: App) {
         post {
             val environment = call.environment(app, OrgRole.ADMIN)
             val service = app.services.create(environment.id, call.receive<ServiceSpec>().validated())
-            app.claimPlatformDomain(app.services.scope(service.id) ?: notFound("service"))
+            try {
+                app.claimPlatformDomain(app.services.scope(service.id) ?: notFound("service"))
+            } catch (e: Exception) {
+                app.services.delete(service.id)
+                throw e
+            }
             call.respond(HttpStatusCode.Created, service)
         }
     }

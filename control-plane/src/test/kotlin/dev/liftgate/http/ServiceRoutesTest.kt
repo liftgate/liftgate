@@ -34,6 +34,7 @@ import io.micrometer.prometheusmetrics.PrometheusConfig
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry
 import io.mockk.Runs
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
@@ -140,6 +141,19 @@ class ServiceRoutesTest {
             assertEquals(HttpStatusCode.Created, client.post("/api/v1/environments/${environment.id}/services") { jsonBody(body) }.status, it.name)
         }
         assertEquals(listOf(ServiceKind.WEB, ServiceKind.STATIC), claimed)
+    }
+
+    @Test
+    fun `a failed hostname claim removes the new service`() = testApplication {
+        val web = service.copy(kind = ServiceKind.WEB)
+        coEvery { services.create(environment.id, any()) } returns web
+        coEvery { services.scope(service.id) } returns ServiceScope(web, environment, project, org)
+        coEvery { domains.ensurePlatform(any()) } throws IllegalStateException("database unavailable")
+        coEvery { services.delete(service.id) } just Runs
+        application { liftgate(app) }
+        val response = client.post("/api/v1/environments/${environment.id}/services") { jsonBody("""{"slug":"api","name":"API","kind":"web"}""") }
+        assertEquals(HttpStatusCode.InternalServerError, response.status)
+        coVerify { services.delete(service.id) }
     }
 
     @Test

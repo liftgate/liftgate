@@ -13,5 +13,5 @@ spec:
           gatewayHTTPRoute:
             parentRefs:
               - kind: Gateway
-                name: liftgate
-                namespace: liftgate-system
+                name: GATEWAY_NAME
+                namespace: GATEWAY_NAMESPACE

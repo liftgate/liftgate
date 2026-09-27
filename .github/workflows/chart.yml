@@ -5,19 +5,21 @@ on:
     branches: [main]
     paths:
       - charts/**
+      - infra/**
       - .github/workflows/chart.yml
   pull_request:
+  workflow_call:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: chart-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         include:
@@ -42,3 +44,54 @@ jobs:
           helm template liftgate charts/liftgate ${{ matrix.args }} --set runtimeClass= --set allowUnsandboxedTenants=true --show-only templates/configmap.yaml | grep 'LIFTGATE_ALLOW_RUNC: "true"'
           helm template liftgate charts/liftgate ${{ matrix.args }} --set-json 'build.allowedEgressCidrs=[{"cidr":"10.200.0.1/32","ports":[5050]}]' --show-only templates/networkpolicy.yaml \
             | yq -e 'select(.metadata.name == "build-isolation") | .spec.egress | (length == 3 and .[1].to[0].ipBlock.except[0] == "10.0.0.0/8" and .[2].to[0].ipBlock.cidr == "10.200.0.1/32" and (.[2].ports | length) == 1 and .[2].ports[0].protocol == "TCP" and .[2].ports[0].port == 5050)'
+
+  install-kindnet:
+    runs-on: ubuntu-24.04
+    env:
+      LETSENCRYPT_EMAIL: ci@liftgate.test
+    steps:
+      - uses: actions/checkout@v7
+      - uses: azure/setup-helm@v5
+        with:
+          version: v4.3.0
+      - uses: helm/kind-action@v1
+      - name: install.sh refuses a cluster with another CNI and changes nothing
+        run: |
+          for cilium in 0 1; do
+            if LIFTGATE_INSTALL_CILIUM=$cilium sh infra/install.sh; then exit 1; fi
+          done
+          test -z "$(helm list --all-namespaces --short)"
+          test -z "$(kubectl get crds --output name)"
+
+  install-k3s:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+      LIFTGATE_INSTALL_CILIUM: "1"
+      LETSENCRYPT_EMAIL: ci@liftgate.test
+    steps:
+      - uses: actions/checkout@v7
+      - uses: azure/setup-helm@v5
+        with:
+          version: v4.3.0
+      - name: k3s as in infra/k3s/install.md, without the podman CNI config the runner ships
+        run: |
+          sudo rm -f /etc/cni/net.d/87-podman-bridge.conflist
+          curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.34.8+k3s1 INSTALL_K3S_EXEC='server --flannel-backend=none --disable-network-policy --disable-kube-proxy --disable=traefik --disable=servicelb --write-kubeconfig-mode=644' sh -
+          for attempt in $(seq 60); do
+            kubectl get nodes -o jsonpath='{.items[*].status.conditions[?(@.type=="Ready")].message}' | grep -q NetworkReady=false && break
+            sleep 2
+          done
+      - run: sh infra/install.sh
+      - name: a second run changes no release
+        run: |
+          before="$(helm list --all-namespaces --output json)"
+          sh infra/install.sh
+          test "$(helm list --all-namespaces --output json)" = "$before"
+      - name: diagnostics
+        if: failure()
+        run: |
+          kubectl get nodes -o jsonpath='{range .items[*].status.conditions[*]}{.type}={.status} {.message}{"\n"}{end}'
+          ls -la /etc/cni/net.d /opt/cni/bin || true
+          sudo journalctl -u k3s --no-pager | grep -i cni | tail -40

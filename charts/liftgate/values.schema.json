@@ -40,7 +40,7 @@
       "required": ["image", "tag", "replicas", "logLevel", "trustedProxies", "javaOpts", "resources", "clientIpHeader", "trustedProxyCidrs"],
       "properties": {
         "image": { "type": "string", "minLength": 1 },
-        "tag": { "type": "string", "minLength": 1 },
+        "tag": { "type": "string" },
         "replicas": {
           "type": "object",
           "additionalProperties": false,
@@ -66,7 +66,7 @@
       "required": ["image", "tag", "resources"],
       "properties": {
         "image": { "type": "string", "minLength": 1 },
-        "tag": { "type": "string", "minLength": 1 },
+        "tag": { "type": "string" },
         "resources": { "type": "object" }
       }
     },
@@ -188,7 +188,7 @@
       "additionalProperties": false,
       "required": ["image", "namespace"],
       "properties": {
-        "image": { "type": "string", "minLength": 1 },
+        "image": { "type": "string" },
         "namespace": { "type": "string", "minLength": 1 },
         "registryCredentials": { "type": "string" },
         "allowedEgressCidrs": {

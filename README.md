@@ -4,7 +4,7 @@
 
 Open-source full-stack application hosting. Connect a GitHub repository and Liftgate builds a container image on every push and runs it on Kubernetes, with a hostname on `liftgate.app`, custom domains, environment variables, logs and rollbacks. The same software runs [Liftgate Cloud](https://liftgate.dev) and self-hosted installs.
 
-> **Status: pre-alpha.** Liftgate is being built towards its first milestone. The API, the database schema and the chart values change without notice, there are no tagged releases or published images yet, and nothing has run in production. Read the code, try it on a cluster you can throw away, open issues.
+> **Status: pre-alpha.** Liftgate is being built towards its first milestone. The API, the database schema and the chart values change without notice, every release so far is an alpha pre-release, and nothing has run in production. Read the code, try it on a cluster you can throw away, open issues.
 
 ## What it does
 
@@ -71,7 +71,7 @@ Stack: Kotlin 2.4, Ktor 3.6, Exposed 1.5, Flyway, PostgreSQL 16, NATS JetStream,
 
 ### Prerequisites
 
-- A Kubernetes cluster with the baseline under `infra/`. Install k3s and gVisor by hand following `infra/k3s/install.md`, then run `LETSENCRYPT_EMAIL=you@example.com sh infra/install.sh`, which installs the Gateway API CRDs, Cilium, the gVisor RuntimeClass, cert-manager, CloudNativePG and Prometheus in order. NATS comes with the Liftgate chart.
+- A Kubernetes cluster with the baseline under `infra/`. Install k3s and gVisor by hand following `infra/k3s/install.md`, then run `LIFTGATE_INSTALL_CILIUM=1 LETSENCRYPT_EMAIL=you@example.com sh infra/install.sh` from a checkout of this repository, which installs the Gateway API CRDs, Cilium, the gVisor RuntimeClass, cert-manager, CloudNativePG with its Barman Cloud plugin and Prometheus in order. It skips whatever is already installed and stops before changing anything on a cluster that runs another CNI. On a cluster that already has a Gateway API implementation, leave `LIFTGATE_INSTALL_CILIUM` unset and set `gateway.className`. NATS comes with the Liftgate chart.
 - A container registry that build jobs can push to and the nodes can pull from: set `registry`, and `build.registryCredentials` when it needs a login. The default `registry.liftgate.internal` does not exist.
 - A TLS secret named `liftgate-wildcard-tls` in the release namespace for `*.<deployDomain>`, issued with a DNS-01 `Certificate` for your DNS provider; the `https-apps` listener reads it.
 - Helm (CI uses 4.3.0).
@@ -80,13 +80,11 @@ Stack: Kotlin 2.4, Ktor 3.6, Exposed 1.5, Flyway, PostgreSQL 16, NATS JetStream,
 
 ### Install
 
-Images are published to GHCR on tagged releases. Until the first tag exists, build them yourself from `control-plane/`, `dashboard/` and `build-image/` and point the chart's image values at your registry.
+Every `v*` tag publishes the control plane, dashboard and build images to GHCR and the chart to `oci://ghcr.io/liftgate/charts/liftgate`, all pullable without credentials. The chart's image tags default to its `appVersion`, which is the release version. Pick a version from the [releases](https://github.com/liftgate/liftgate/releases):
 
 ```sh
-git clone https://github.com/liftgate/liftgate.git
-cd liftgate
-helm dependency update charts/liftgate
-helm install liftgate charts/liftgate --namespace liftgate-system --create-namespace --values my-values.yaml
+helm install liftgate oci://ghcr.io/liftgate/charts/liftgate --version <version> \
+  --namespace liftgate-system --create-namespace --values my-values.yaml
 ```
 
 A minimal `my-values.yaml`:
@@ -95,6 +93,10 @@ A minimal `my-values.yaml`:
 profile: single
 deployDomain: apps.example.net
 publicUrl: https://liftgate.example.com
+registry: registry.example.com
+signup:
+  allow:
+    - github:your-github-login
 github:
   appId: "123456"
   clientId: "Iv1.abc"
@@ -108,7 +110,7 @@ secrets:
   masterKey: "..."
 ```
 
-Generate `masterKey` with `openssl rand -base64 32`. Keep `deployDomain` on a different registrable domain from `publicUrl` so tenant apps are not same-site with the dashboard; the chart refuses a shared one, as `charts/liftgate/README.md` explains under Separate sites. `dashboardUrl` defaults to `publicUrl`, which serves the dashboard and the API on one host. With `postgres.managed` and `nats.managed` left at `true` the chart renders a CloudNativePG cluster and installs the NATS chart; set `externalUrl` on either to bring your own. For high availability install with `--values charts/liftgate/values-ha.yaml`: it sets `profile: ha` (three `api`, two `reconciler`, two `builder`, one `meter` replica and a three-instance database) and turns on the three-server NATS cluster, which `profile: ha` alone leaves at one server. Every value is documented in `charts/liftgate/README.md`.
+Generate `masterKey` with `openssl rand -base64 32`. `registry` is where build jobs push images, and `signup.allow` lists the accounts approved on their first sign-in, so the first admin is not left waiting for approval. [documentation/self-hosting.md](documentation/self-hosting.md) walks through an install on a fresh VM. Keep `deployDomain` on a different registrable domain from `publicUrl` so tenant apps are not same-site with the dashboard; the chart refuses a shared one, as `charts/liftgate/README.md` explains under Separate sites. `dashboardUrl` defaults to `publicUrl`, which serves the dashboard and the API on one host. With `postgres.managed` and `nats.managed` left at `true` the chart renders a CloudNativePG cluster and installs the NATS chart; set `externalUrl` on either to bring your own. For high availability add `--set profile=ha --set nats.config.cluster.enabled=true`, the contents of `charts/liftgate/values-ha.yaml`: `profile=ha` runs three `api`, two `reconciler`, two `builder` and one `meter` replica and a three-instance database, and the second flag turns on the three-server NATS cluster, which `profile=ha` alone leaves at one server. Every value is documented in `charts/liftgate/README.md`.
 
 ### GitHub App
 
@@ -182,7 +184,7 @@ liftgate/
   compose.yaml          PostgreSQL 16 and NATS with JetStream for local development.
 ```
 
-CI runs on GitHub Actions: `control-plane.yml` builds and tests with Gradle on JDK 21, `dashboard.yml` lints and builds on Node 22, `chart.yml` lints and templates both profiles, and `images.yml` pushes the three images to GHCR on tags matching `v*`.
+CI runs on GitHub Actions: `control-plane.yml` builds and tests with Gradle on JDK 21, `dashboard.yml` lints and builds on Node 24, `chart.yml` lints and templates both profiles and runs `infra/install.sh` on kind and k3s, `images.yml` builds the three images, and `upgrade.yml` upgrades the previous release to the pull request's build. On tags matching `v*`, `release.yml` runs all of them and then publishes the images, the chart and a GitHub release.
 
 ## Roadmap
 

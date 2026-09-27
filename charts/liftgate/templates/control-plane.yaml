@@ -58,7 +58,7 @@ spec:
       {{- end }}
       containers:
         - name: control-plane
-          image: "{{ $.Values.controlPlane.image }}:{{ $.Values.controlPlane.tag }}"
+          image: "{{ $.Values.controlPlane.image }}:{{ $.Values.controlPlane.tag | default $.Chart.AppVersion }}"
           imagePullPolicy: IfNotPresent
           env:
             - name: LIFTGATE_ROLE

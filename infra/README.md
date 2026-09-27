@@ -11,20 +11,36 @@ Everything the Liftgate chart expects from a cluster, in install order:
 | 5 | gVisor RuntimeClass `gvisor` | | [`gvisor/runtimeclass.yaml`](gvisor/runtimeclass.yaml) |
 | 6 | cert-manager with Gateway API support and ClusterIssuer `letsencrypt` | v1.21.2 | [`cert-manager/clusterissuer.yaml`](cert-manager/clusterissuer.yaml) |
 | 7 | CloudNativePG operator | 0.29.0 (operator 1.30) | [`cnpg/README.md`](cnpg/README.md) |
-| 8 | Prometheus as `prometheus.liftgate-system:9090` | chart 29.30.1 | [`prometheus/values.yaml`](prometheus/values.yaml) |
+| 8 | Barman Cloud plugin for CloudNativePG backups | chart 0.8.0 (plugin 0.15.0) | [`cnpg/README.md`](cnpg/README.md) |
+| 9 | Prometheus as `prometheus.liftgate-system:9090` | chart 29.30.1 | [`prometheus/values.yaml`](prometheus/values.yaml) |
 
-Steps 1 and 2 run on each node by hand. Steps 3 to 8 are [`install.sh`](install.sh), which is
-idempotent and needs `kubectl`, `helm` and `LETSENCRYPT_EMAIL` in the environment:
+Steps 1 and 2 run on each node by hand. Steps 3 to 9 are [`install.sh`](install.sh), which needs
+`kubectl`, `helm` and `LETSENCRYPT_EMAIL` in the environment:
 
 ```sh
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-LETSENCRYPT_EMAIL=ops@example.com sh infra/install.sh
+LIFTGATE_INSTALL_CILIUM=1 LETSENCRYPT_EMAIL=ops@example.com sh infra/install.sh
 ```
+
+Steps 3 and 4 run only with `LIFTGATE_INSTALL_CILIUM=1`, and then only when every node's
+`Ready` condition says `NetworkReady=false`, so the script never installs Cilium over another
+CNI. Without it the cluster must already have a GatewayClass; set the chart's
+`gateway.className` to it. Every step is skipped when its component is already there (the
+Gateway API or cert-manager CRDs, the `cilium` DaemonSet, the `gvisor` RuntimeClass, the
+`letsencrypt` ClusterIssuer, the CloudNativePG or Barman Cloud CRDs, the `prometheus` Service),
+and nothing that exists is upgraded, so a second run changes nothing. Upgrade a component with
+its own `helm upgrade`. A cert-manager that was already there needs Gateway API support
+(`config.gatewayAPI.enabled=true`) for the `letsencrypt` issuer to solve challenges.
+
+`LIFTGATE_GATEWAY_NAME` and `LIFTGATE_GATEWAY_NAMESPACE` (default `liftgate` in
+`liftgate-system`) name the Gateway the `letsencrypt` ClusterIssuer solves HTTP-01 challenges
+through; match them to the chart's `gateway.name` and release namespace.
 
 Set `K8S_API_HOST` when the API server is not the first address of the `kubernetes`
 EndpointSlice (multi-server clusters behind a load balancer).
 
-Then install the chart from [`charts/liftgate`](../charts/liftgate). NATS is installed by the
+Then install the published chart `oci://ghcr.io/liftgate/charts/liftgate`, documented in
+[`charts/liftgate`](../charts/liftgate). NATS is installed by the
 chart (`nats.managed=true`); [`nats/values.yaml`](nats/values.yaml) is for running NATS outside
 the release:
 

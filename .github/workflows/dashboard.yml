@@ -7,17 +7,18 @@ on:
       - dashboard/**
       - .github/workflows/dashboard.yml
   pull_request:
+  workflow_call:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: dashboard-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: dashboard
@@ -25,7 +26,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: "22"
+          node-version-file: dashboard/.nvmrc
           cache: npm
           cache-dependency-path: dashboard/package-lock.json
       - run: npm ci

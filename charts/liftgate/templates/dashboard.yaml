@@ -33,7 +33,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: dashboard
-          image: "{{ .Values.dashboard.image }}:{{ .Values.dashboard.tag }}"
+          image: "{{ .Values.dashboard.image }}:{{ .Values.dashboard.tag | default .Chart.AppVersion }}"
           imagePullPolicy: IfNotPresent
           env:
             - name: HOSTNAME

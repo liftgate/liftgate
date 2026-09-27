@@ -253,6 +253,7 @@ kubectl -n $ns create configmap isolated --from-file=Dockerfile="$work/isolated"
 build isolated "$rival" "$rival_password" e2e-rival/app-web
 expect "isolated build" "$(finished isolated)" Succeeded
 kubectl -n $ns logs pod/isolated -c build > "$work/isolated.log"
+grep -E ' (buildkitd-visible|git-token|docker-config) [0-9]+$' "$work/isolated.log"
 expect "buildkitd seen from a build step" "$(sed -n 's/.* buildkitd-visible //p' "$work/isolated.log")" 1
 expect "git token seen from a build step" "$(sed -n 's/.* git-token //p' "$work/isolated.log")" 0
 expect "docker config listed from a build step" "$(sed -n 's/.* docker-config //p' "$work/isolated.log")" 0
@@ -260,6 +261,7 @@ expect "docker config listed from a build step" "$(sed -n 's/.* docker-config //
 pulled=$(token pull "$pull_password" e2e-rival/app-web:pull,push)
 expect "node pull of a tenant image" "$(registry_status GET e2e-rival/app-web/tags/list "$pulled")" 200
 expect "node push" "$(registry_status POST e2e-rival/app-web/blobs/uploads/ "$pulled")" 401
+theirs=$(token "build-$own" "$own_password" e2e-rival/app-web:pull)
 expect "read of another org's image" "$(registry_status GET e2e-rival/app-web/tags/list "$theirs")" 401
 
 printf 'FROM %s/e2e-rival/app-web:latest\n' "$registry" > "$work/cross"

@@ -113,6 +113,9 @@ deploy. Once a day, and whenever a builder pod takes the `liftgate-registry-jani
 builder prunes the repositories Liftgate pushed to. It keeps:
 
 - the images of pending, releasing and running deployments;
+- while a service has no running deployment, the images of its rolled-back and failed
+  deployments, because the pods of the last rollout that succeeded keep serving until another
+  one does;
 - the images of queued and running builds;
 - the newest 10 successful builds of each service;
 - each service's `:cache`.

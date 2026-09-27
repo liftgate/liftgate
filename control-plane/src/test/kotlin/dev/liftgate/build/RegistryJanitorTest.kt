@@ -132,6 +132,7 @@ class RegistryJanitorTest {
         release(api, "old.registry/acme/shop-api:b00")
         val released = (1..12).map { release(api, "registry.test/acme/shop-api:b%02d".format(it)) }
         deployments.transition(deployments.rollback(released[1].id).id, DeploymentStatus.RUNNING)
+        deployments.transition(deployments.rollback(released[11].id).id, DeploymentStatus.FAILED)
         builds.request(api, "c00", null, "main")
         release(gone, "registry.test/acme/shop-gone:g1")
         services.delete(gone)
@@ -201,6 +202,7 @@ class RegistryJanitorTest {
             return succeed(build.id, "${TestRegistry.ADDRESS}/$repository:${sha(n)}")
         }
         val released = (1..30).map { deploy(api, "acme/store-api", it) }
+        deployments.transition(deployments.rollback(released[0].id).id, DeploymentStatus.RUNNING)
         deployments.transition(deployments.rollback(released[2].id).id, DeploymentStatus.RUNNING)
         (31..32).forEach { deploy(old, "acme/store-old", it) }
         services.delete(old)

@@ -11,6 +11,7 @@ import dev.liftgate.db.Services as ServicesTable
 import dev.liftgate.db.sql
 import dev.liftgate.deploy.Build
 import dev.liftgate.deploy.BuildStatus
+import dev.liftgate.deploy.DeploymentStatus
 import dev.liftgate.deploy.live
 import dev.liftgate.deploy.toBuild
 import dev.liftgate.http.json
@@ -47,6 +48,8 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.innerJoin
 import org.jetbrains.exposed.v1.core.isNotNull
+import org.jetbrains.exposed.v1.core.notInSubQuery
+import org.jetbrains.exposed.v1.core.or
 import org.jetbrains.exposed.v1.jdbc.JdbcTransaction
 import org.jetbrains.exposed.v1.jdbc.batchInsert
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
@@ -60,6 +63,7 @@ import kotlin.time.Duration.Companion.days
 
 private const val KEPT_BUILDS = 10
 private val building = listOf(BuildStatus.QUEUED, BuildStatus.RUNNING).map { it.sql }
+private val lingering = listOf(DeploymentStatus.ROLLED_BACK, DeploymentStatus.FAILED).map { it.sql }
 private val manifestTypes = listOf(
     "application/vnd.oci.image.index.v1+json",
     "application/vnd.oci.image.manifest.v1+json",
@@ -122,7 +126,10 @@ class RegistryJanitor(private val app: App, private val kube: KubernetesClient) 
             .orderBy(BuildsTable.createdAt, SortOrder.DESC)
             .forUpdate()
             .map { it.toBuild() }
-        val released = (DeploymentsTable innerJoin BuildsTable).select(BuildsTable.imageRef).where { DeploymentsTable.status inList live }.mapNotNull { it[BuildsTable.imageRef] }
+        val running = DeploymentsTable.select(DeploymentsTable.serviceId).where { DeploymentsTable.status eq DeploymentStatus.RUNNING.sql }
+        val released = (DeploymentsTable innerJoin BuildsTable).select(BuildsTable.imageRef)
+            .where { (DeploymentsTable.status inList live) or ((DeploymentsTable.status inList lingering) and (DeploymentsTable.serviceId notInSubQuery running)) }
+            .mapNotNull { it[BuildsTable.imageRef] }
         val keep = (inFlight + released + services.keys.mapNotNull { image(it, "cache") } +
             succeeded.groupBy { it.serviceId }.values.flatMap { builds -> builds.take(KEPT_BUILDS).mapNotNull { it.imageRef } }).toSet()
         return keep to succeeded.filter { it.imageRef !in keep }

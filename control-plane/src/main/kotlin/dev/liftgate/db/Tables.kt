@@ -34,6 +34,8 @@ object Users : Table("users") {
     val emailVerified = bool("email_verified").default(false)
     val avatarUrl = text("avatar_url").nullable()
     val createdAt = createdAtColumn()
+    val status = oneOf("status", "pending", "active", "suspended").default("active")
+    val termsAcceptedAt = timestampWithTimeZone("terms_accepted_at").nullable()
     override val primaryKey = PrimaryKey(id)
 
     init {
@@ -51,6 +53,8 @@ object Organizations : Table("organizations") {
     val name = text("name")
     val plan = text("plan").default("free")
     val createdAt = createdAtColumn()
+    val suspendedAt = timestampWithTimeZone("suspended_at").nullable()
+    val suspendedReason = text("suspended_reason").nullable()
     override val primaryKey = PrimaryKey(id)
 }
 

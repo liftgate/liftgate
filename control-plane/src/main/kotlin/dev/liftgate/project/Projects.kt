@@ -11,10 +11,12 @@ import dev.liftgate.events.enqueue
 import dev.liftgate.http.forbidden
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import org.jetbrains.exposed.v1.core.Op
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.innerJoin
+import org.jetbrains.exposed.v1.jdbc.JdbcTransaction
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.insertReturning
@@ -44,6 +46,9 @@ fun ResultRow.toEnvironment() = Environment(
 
 fun namespaceFor(environmentId: UUID) = "env-" + environmentId.toString().replace("-", "").take(12)
 
+fun JdbcTransaction.enqueueTeardown(where: () -> Op<Boolean>) = (Environments innerJoin ProjectsTable).select(Environments.namespace).where(where)
+    .forEach { enqueue(Subject.TEARDOWN_REQUESTED, buildJsonObject { put("namespace", it[Environments.namespace]) }) }
+
 /**
  * @author Dean
  * @date 9/17/2026
@@ -71,8 +76,7 @@ class Projects(private val db: Db) {
 
     suspend fun delete(id: UUID) {
         db.tx {
-            Environments.select(Environments.namespace).where { Environments.projectId eq id }
-                .forEach { enqueue(Subject.TEARDOWN_REQUESTED, buildJsonObject { put("namespace", it[Environments.namespace]) }) }
+            enqueueTeardown { ProjectsTable.id eq id }
             ProjectsTable.deleteWhere { ProjectsTable.id eq id }
         }
     }

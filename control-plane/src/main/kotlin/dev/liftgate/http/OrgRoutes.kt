@@ -4,11 +4,13 @@ import dev.liftgate.App
 import dev.liftgate.auth.OrgRole
 import dev.liftgate.org.Organization
 import dev.liftgate.org.User
+import dev.liftgate.org.UserStatus
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
+import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
@@ -48,6 +50,11 @@ private data class CreatedToken(val token: String)
 
 fun Route.orgRoutes(app: App) {
     get("/me") { call.respond(call.principal.user) }
+    delete("/me") {
+        app.orgs.deleteUser(call.sessionUser.id)
+        call.response.cookies.append(expired(SESSION_COOKIE))
+        call.respond(HttpStatusCode.NoContent)
+    }
     route("/orgs") {
         get {
             val principal = call.principal
@@ -55,6 +62,7 @@ fun Route.orgRoutes(app: App) {
         }
         post {
             if (call.principal.token) forbidden()
+            if (call.principal.user.status == UserStatus.PENDING) accountPending()
             val body = call.receive<CreateOrg>()
             requireSlug(body.slug, reservedOrgSlugs)
             if (body.name.isBlank()) invalid("name is required")
@@ -62,6 +70,11 @@ fun Route.orgRoutes(app: App) {
         }
         route("/{slug}") {
             get { call.respond(call.org(app)) }
+            delete {
+                if (call.principal.token) forbidden()
+                app.orgs.delete(call.org(app, OrgRole.OWNER).id)
+                call.respond(HttpStatusCode.NoContent)
+            }
             get("/members") { call.respond(app.orgs.members(call.org(app).id).map { (user, role) -> Member(user, role) }) }
             post("/tokens") {
                 val principal = call.principal

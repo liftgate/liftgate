@@ -211,7 +211,9 @@ class Sso(private val publicUrl: String, private val db: Db, private val cache: 
         val connection = connection(org)
         val login = verify(org, connection, encoded, browser)
         val domainVerified = login.email.substringAfter('@') in connection.settings.verifiedDomains
-        val signedIn = signIn.complete(VerifiedIdentity(SAML, "${connection.id}:${login.nameId}", login.email, emailVerified = domainVerified))
+        val signedIn = signIn.complete(
+            VerifiedIdentity(SAML, "${connection.id}:${login.nameId}", login.email, emailVerified = domainVerified, vouchedBy = connection.orgId.takeIf { domainVerified }),
+        )
         db.tx {
             Memberships.insertIgnore {
                 it[orgId] = connection.orgId

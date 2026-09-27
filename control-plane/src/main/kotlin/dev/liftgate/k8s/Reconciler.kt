@@ -50,6 +50,10 @@ class Reconciler(private val app: App, private val kube: KubernetesClient) {
         syncCustomDomains()
     }
 
+    suspend fun reapply(serviceId: UUID) {
+        app.deployments.current(serviceId)?.let { load(it) }?.let { apply(it) }
+    }
+
     suspend fun teardown(namespace: String, serviceId: UUID?) {
         withContext(Dispatchers.IO) {
             if (serviceId == null) kube.namespaces().withName(namespace).delete()

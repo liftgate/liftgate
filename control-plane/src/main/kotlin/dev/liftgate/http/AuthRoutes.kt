@@ -18,6 +18,7 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import io.ktor.util.date.GMTDate
+import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.Serializable
 
 private const val STATE_COOKIE = "liftgate_oauth_state"
@@ -34,9 +35,18 @@ private enum class Intent { SIGNIN, LINK, CONNECT }
  * @date 9/18/2026
  */
 @Serializable
-data class AuthProviders(val oauth: List<String>, val passkey: Boolean, val email: Boolean, val sso: Boolean)
+data class AuthProviders(
+    val oauth: List<String>,
+    val passkey: Boolean,
+    val email: Boolean,
+    val sso: Boolean,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val termsUrl: String? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val privacyUrl: String? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val aupUrl: String? = null,
+)
 
-fun App.authProviders() = AuthProviders(oauth.providers.keys.toList(), passkey = true, email = emailCodes != null, sso = true)
+fun App.authProviders() =
+    AuthProviders(oauth.providers.keys.toList(), passkey = true, email = emailCodes != null, sso = true, config.termsUrl, config.privacyUrl, config.aupUrl)
 
 fun safeNext(next: String?): String? = next?.takeIf { it.startsWith("/") && !it.startsWith("//") && '\\' !in it }
 

@@ -42,6 +42,8 @@ fun ResultRow.toService() = Service(
     this[ServicesTable.startCommand],
 )
 
+fun orgServiceIds(orgId: UUID) = (ServicesTable innerJoin Environments innerJoin Projects).select(ServicesTable.id).where { Projects.orgId eq orgId }
+
 /**
  * @author Dean
  * @date 9/17/2026
@@ -60,6 +62,8 @@ class Services(private val db: Db) {
             .where { ServicesTable.id eq id }
             .singleOrNull()?.let { ServiceScope(it.toService(), it.toEnvironment(), it.toProject(), it.toOrganization()) }
     }
+
+    suspend fun idsForOrg(orgId: UUID): List<UUID> = db.tx { orgServiceIds(orgId).map { it[ServicesTable.id] } }
 
     suspend fun forEnvironment(environmentId: UUID): List<Service> = db.tx {
         ServicesTable.selectAll().where { ServicesTable.environmentId eq environmentId }.orderBy(ServicesTable.slug).map { it.toService() }

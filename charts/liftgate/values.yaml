@@ -98,7 +98,12 @@ passkeys:
 secrets:
   masterKey: ""
 
-registry: registry.liftgate.internal
+registry:
+  host: registry.liftgate.internal
+  auth: shared
+  tokenKey: ""
+  tokenCertificate: ""
+  pullPassword: ""
 
 build:
   image: ""

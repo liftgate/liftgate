@@ -8,7 +8,6 @@ import dev.liftgate.db.sql
 import dev.liftgate.db.toEnum
 import dev.liftgate.events.Subject
 import dev.liftgate.events.enqueue
-import dev.liftgate.http.forbidden
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.jetbrains.exposed.v1.core.Op
@@ -18,7 +17,7 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.innerJoin
 import org.jetbrains.exposed.v1.jdbc.JdbcTransaction
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
-import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.insertIgnore
 import org.jetbrains.exposed.v1.jdbc.insertReturning
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
@@ -32,6 +31,7 @@ fun ResultRow.toProject() = Project(
     this[ProjectsTable.repoFullName],
     this[ProjectsTable.repoDefaultBranch],
     this[ProjectsTable.installationId],
+    this[ProjectsTable.importedByLogin],
 )
 
 fun ResultRow.toEnvironment() = Environment(
@@ -54,8 +54,12 @@ fun JdbcTransaction.enqueueTeardown(where: () -> Op<Boolean>) = (Environments in
  * @date 9/17/2026
  */
 class Projects(private val db: Db) {
-    suspend fun create(orgId: UUID, slug: String, name: String, repoFullName: String, installationId: Long): Project = db.tx {
-        claimInstallation(installationId, orgId, repoFullName.substringBefore('/'))
+    suspend fun create(orgId: UUID, slug: String, name: String, repoFullName: String, installationId: Long, importedByLogin: String? = null): Project = db.tx {
+        GitHubInstallations.insertIgnore {
+            it[id] = installationId
+            it[GitHubInstallations.orgId] = orgId
+            it[accountLogin] = repoFullName.substringBefore('/')
+        }
         val project = ProjectsTable.insertReturning {
             it[id] = UUID.randomUUID()
             it[ProjectsTable.orgId] = orgId
@@ -63,6 +67,7 @@ class Projects(private val db: Db) {
             it[ProjectsTable.name] = name
             it[ProjectsTable.repoFullName] = repoFullName
             it[ProjectsTable.installationId] = installationId
+            it[ProjectsTable.importedByLogin] = importedByLogin
         }.single().toProject()
         insertEnvironment(project.id, "production", "Production", EnvironmentKind.PRODUCTION, project.repoDefaultBranch)
         project
@@ -94,21 +99,6 @@ class Projects(private val db: Db) {
         (Environments innerJoin ProjectsTable).selectAll()
             .where { (ProjectsTable.installationId eq installationId) and (ProjectsTable.repoFullName eq repoFullName) and (Environments.branch eq branch) }
             .map { it.toEnvironment() }
-    }
-
-    private fun claimInstallation(installationId: Long, orgId: UUID, accountLogin: String) {
-        val owner = GitHubInstallations.select(GitHubInstallations.orgId)
-            .where { GitHubInstallations.id eq installationId }
-            .singleOrNull()?.get(GitHubInstallations.orgId)
-        when (owner) {
-            null -> GitHubInstallations.insert {
-                it[id] = installationId
-                it[GitHubInstallations.orgId] = orgId
-                it[GitHubInstallations.accountLogin] = accountLogin
-            }
-            orgId -> Unit
-            else -> forbidden()
-        }
     }
 
     private fun insertEnvironment(projectId: UUID, slug: String, name: String, kind: EnvironmentKind, branch: String): Environment {

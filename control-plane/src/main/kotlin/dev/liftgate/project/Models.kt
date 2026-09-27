@@ -21,6 +21,7 @@ data class Project(
     val repoFullName: String,
     val repoDefaultBranch: String,
     val installationId: Long,
+    val importedByLogin: String? = null,
 )
 
 /**

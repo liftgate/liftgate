@@ -1,0 +1,26 @@
+version: 0.1
+log:
+  fields:
+    service: registry
+storage:
+  cache:
+    blobdescriptor: inmemory
+  filesystem:
+    rootdirectory: /var/lib/registry
+  delete:
+    enabled: true
+http:
+  addr: 10.200.0.1:5050
+  headers:
+    X-Content-Type-Options: [nosniff]
+auth:
+  token:
+    realm: https://liftgate.dev/api/v1/registry/token
+    service: 10.200.0.1:5050
+    issuer: liftgate
+    rootcertbundle: /etc/docker/registry/token.crt
+health:
+  storagedriver:
+    enabled: true
+    interval: 10s
+    threshold: 3

@@ -182,7 +182,27 @@
         "masterKey": { "type": "string" }
       }
     },
-    "registry": { "type": "string", "minLength": 1 },
+    "registry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["host", "auth"],
+      "properties": {
+        "host": { "type": "string", "minLength": 1 },
+        "auth": { "type": "string", "enum": ["shared", "token"] },
+        "tokenKey": { "type": "string" },
+        "tokenCertificate": { "type": "string" },
+        "pullPassword": { "type": "string" }
+      },
+      "if": { "properties": { "auth": { "const": "token" } } },
+      "then": {
+        "required": ["tokenKey", "tokenCertificate", "pullPassword"],
+        "properties": {
+          "tokenKey": { "minLength": 1 },
+          "tokenCertificate": { "minLength": 1 },
+          "pullPassword": { "minLength": 1 }
+        }
+      }
+    },
     "build": {
       "type": "object",
       "additionalProperties": false,

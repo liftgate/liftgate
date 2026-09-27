@@ -72,7 +72,7 @@ Stack: Kotlin 2.4, Ktor 3.6, Exposed 1.5, Flyway, PostgreSQL 16, NATS JetStream,
 ### Prerequisites
 
 - A Kubernetes cluster with the baseline under `infra/`. Install k3s and gVisor by hand following `infra/k3s/install.md`, then run `LIFTGATE_INSTALL_CILIUM=1 LETSENCRYPT_EMAIL=you@example.com sh infra/install.sh` from a checkout of this repository, which installs the Gateway API CRDs, Cilium, the gVisor RuntimeClass, cert-manager, CloudNativePG with its Barman Cloud plugin and Prometheus in order. It skips whatever is already installed and stops before changing anything on a cluster that runs another CNI. On a cluster that already has a Gateway API implementation, leave `LIFTGATE_INSTALL_CILIUM` unset and set `gateway.className`. NATS comes with the Liftgate chart.
-- A container registry that build jobs can push to and the nodes can pull from: set `registry`, and `build.registryCredentials` when it needs a login. The default `registry.liftgate.internal` does not exist.
+- A container registry that build jobs can push to and the nodes can pull from: set `registry.host`, and `build.registryCredentials` when it needs a login, or `registry.auth: token` for a per-build login on a multi-tenant install. The default `registry.liftgate.internal` does not exist.
 - A TLS secret named `liftgate-wildcard-tls` in the release namespace for `*.<deployDomain>`, issued with a DNS-01 `Certificate` for your DNS provider; the `https-apps` listener reads it.
 - Helm (CI uses 4.3.0).
 - A wildcard DNS record for the app domain (`*.apps.example.net`) and a record for the control plane hostname (`liftgate.example.com`), both pointing at the gateway's address.

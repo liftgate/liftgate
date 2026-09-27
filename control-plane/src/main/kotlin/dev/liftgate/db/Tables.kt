@@ -189,7 +189,7 @@ object ApiTokens : Table("api_tokens") {
  */
 object GitHubInstallations : Table("github_installations") {
     val id = long("id")
-    val orgId = fk("org_id", Organizations.id, CASCADE)
+    val orgId = fk("org_id", Organizations.id, SET_NULL).nullable()
     val accountLogin = text("account_login")
     val createdAt = createdAtColumn()
     override val primaryKey = PrimaryKey(id)
@@ -208,6 +208,7 @@ object Projects : Table("projects") {
     val repoDefaultBranch = text("repo_default_branch").default("main")
     val installationId = fk("installation_id", GitHubInstallations.id)
     val createdAt = createdAtColumn()
+    val importedByLogin = text("imported_by_login").nullable()
     override val primaryKey = PrimaryKey(id)
 
     init {
@@ -296,6 +297,7 @@ object Builds : Table("builds") {
     val startedAt = timestampWithTimeZone("started_at").nullable()
     val finishedAt = timestampWithTimeZone("finished_at").nullable()
     val createdAt = createdAtColumn()
+    val registrySecretHash = text("registry_secret_hash").nullable()
     override val primaryKey = PrimaryKey(id)
 
     init {

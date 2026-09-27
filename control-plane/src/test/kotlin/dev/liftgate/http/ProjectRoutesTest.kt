@@ -1,0 +1,72 @@
+package dev.liftgate.http
+
+import dev.liftgate.App
+import dev.liftgate.TestDatabase
+import dev.liftgate.auth.Access
+import dev.liftgate.auth.GitConnection
+import dev.liftgate.auth.GitConnections
+import dev.liftgate.auth.Sessions
+import dev.liftgate.build.GitHubApp
+import dev.liftgate.org.Orgs
+import dev.liftgate.org.insertUser
+import dev.liftgate.project.Project
+import dev.liftgate.project.Projects
+import dev.liftgate.testConfig
+import io.ktor.client.request.cookie
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.contentType
+import io.ktor.server.testing.testApplication
+import io.micrometer.prometheusmetrics.PrometheusConfig
+import io.micrometer.prometheusmetrics.PrometheusMeterRegistry
+import io.mockk.coEvery
+import io.mockk.every
+import io.mockk.mockk
+import kotlinx.coroutines.runBlocking
+import java.time.Instant
+import kotlin.test.Test
+import kotlin.test.assertEquals
+
+/**
+ * @author Dean
+ * @date 9/27/2026
+ */
+class ProjectRoutesTest {
+    private val db = TestDatabase.clean()
+    private val user = runBlocking { db.tx { insertUser("dean", null, null, null) } }
+    private val orgs = Orgs(db)
+    private val app = mockk<App> {
+        every { config } returns testConfig()
+        every { metrics } returns PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
+        every { sessions } returns mockk<Sessions> { coEvery { resolve("s") } returns user }
+        every { access } returns mockk<Access>(relaxUnitFun = true)
+        every { orgs } returns this@ProjectRoutesTest.orgs
+        every { projects } returns Projects(this@ProjectRoutesTest.db)
+        every { gitConnections } returns mockk<GitConnections> {
+            coEvery { githubToken(user.id) } returns "ghu_dean"
+            coEvery { list(user.id) } returns listOf(GitConnection("github", "dean", Instant.now()))
+        }
+        every { github } returns mockk<GitHubApp> { coEvery { installation("ghu_dean", any()) } returns 42 }
+    }
+
+    @Test
+    fun `a second org imports from an installation another org already uses`() = testApplication {
+        orgs.create("acme", "Acme", user.id)
+        orgs.create("rival", "Rival", user.id)
+        application { liftgate(app) }
+        suspend fun import(org: String, repo: String) = client.post("/api/v1/orgs/$org/projects") {
+            cookie(SESSION_COOKIE, "s")
+            contentType(ContentType.Application.Json)
+            setBody("""{"slug":"shop","name":"Shop","repoFullName":"$repo"}""")
+        }
+        listOf("acme" to "acme/shop", "rival" to "acme/docs").forEach { (org, repo) ->
+            val response = import(org, repo)
+            assertEquals(HttpStatusCode.Created, response.status)
+            val project = json.decodeFromString(Project.serializer(), response.bodyAsText())
+            assertEquals(Triple(repo, 42L, "dean"), Triple(project.repoFullName, project.installationId, project.importedByLogin))
+        }
+    }
+}

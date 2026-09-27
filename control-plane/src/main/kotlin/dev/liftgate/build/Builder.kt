@@ -5,9 +5,7 @@ import dev.liftgate.deploy.BuildStatus
 import dev.liftgate.events.Subject
 import dev.liftgate.events.buildLogSubject
 import dev.liftgate.events.uuid
-import io.fabric8.kubernetes.api.model.Secret
 import io.fabric8.kubernetes.client.KubernetesClient
-import io.fabric8.kubernetes.client.dsl.NonDeletingOperation
 import io.fabric8.kubernetes.client.dsl.ScalableResource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -42,31 +40,50 @@ class Builder(private val app: App, private val kube: KubernetesClient) {
         if (scope.org.suspendedAt != null) return app.builds.markFailed(buildId, "the organization is suspended")
         val github = app.github ?: return app.builds.markFailed(buildId, "the GitHub App is not configured")
         val config = app.config
-        val image = BuildJobs.imageRef(config.registry, scope.org, scope.project, scope.service, build.commitSha)
-        val cache = BuildJobs.imageRef(config.registry, scope.org, scope.project, scope.service, "cache")
+        val project = scope.project
+        val image = BuildJobs.imageRef(config.registry, scope.org, project, scope.service, build.commitSha)
+        val cache = BuildJobs.imageRef(config.registry, scope.org, project, scope.service, "cache")
+        val jobs = kube.batch().v1().jobs().inNamespace(config.buildNamespace)
         app.builds.markRunning(buildId)
         val failure = try {
-            val token = github.installationToken(scope.project.installationId)
-            val spec = BuildJobSpec(build, scope.service, scope.project, token, image, cache, config.buildImage, config.buildNamespace, config.nodeSelector, config.registryInsecure)
-            "the build job failed".takeUnless { run(kube.batch().v1().jobs().inNamespace(config.buildNamespace).resource(BuildJobs.job(spec)), spec) }
+            val token = github.installationToken(project.installationId, project.repoFullName.substringAfter('/'))
+            if (project.importedByLogin?.let { github.canPush(token, project.repoFullName, it) } == false) {
+                "the GitHub account that imported ${project.repoFullName} no longer has write access; re-import it"
+            } else {
+                val spec = BuildJobSpec(
+                    build, scope.service, project, token, image, cache, config.buildImage, config.buildNamespace,
+                    config.buildNodeSelector, config.registryInsecure, config.registryTokenAuth, config.buildTolerations,
+                )
+                "the build job failed".takeUnless { run(jobs.resource(BuildJobs.job(spec)), spec) }
+            }
         } catch (e: Exception) {
             currentCoroutineContext().ensureActive()
             log.warn("build {} failed", buildId, e)
             e.message ?: "the build could not be run"
         }
-        if (failure == null) app.builds.markSucceeded(buildId, image) else app.builds.markFailed(buildId, failure)
+        if (failure == null) {
+            app.builds.markSucceeded(buildId, image)
+            runCatching { jobs.withName(BuildJobs.name(buildId)).delete() }
+        } else {
+            app.builds.markFailed(buildId, failure)
+        }
+        app.registryTokens.revoke(buildId)
     }
 
     fun start(): Job = app.nats.consume(Subject.BUILD_REQUESTED, "builder-build-requested", app.scope, Duration.ofSeconds(60), CONCURRENT_BUILDS) { build(it.uuid("buildId")) }
 
     private suspend fun run(job: ScalableResource<KubeJob>, spec: BuildJobSpec): Boolean = coroutineScope {
         val buildId = spec.build.id
-        runInterruptible(Dispatchers.IO) { kube.resource(BuildJobs.tokenSecret(spec, job.get() ?: job.create())).createOr(NonDeletingOperation<Secret>::update) }
+        val owner = runInterruptible(Dispatchers.IO) { job.get() ?: job.create() }
+        if (runInterruptible(Dispatchers.IO) { kube.secrets().inNamespace(spec.namespace).withName(BuildJobs.name(buildId)).get() } == null) {
+            val password = if (spec.registryTokenAuth) app.registryTokens.issue(buildId) else null
+            runInterruptible(Dispatchers.IO) { kube.resource(BuildJobs.tokenSecret(spec, owner, password)).create() }
+        }
         val logs = launch(Dispatchers.IO) { runInterruptible { stream(buildId) } }
         val finished = runInterruptible(Dispatchers.IO) { job.waitUntilCondition({ it?.status?.run { (succeeded ?: 0) > 0 || (failed ?: 0) > 0 } == true }, WAIT_MINUTES, TimeUnit.MINUTES) }
         withTimeoutOrNull(logDrain) { logs.join() }
         logs.cancel()
-        ((finished.status.succeeded ?: 0) > 0).also { succeeded -> if (succeeded) runCatching { job.delete() } }
+        (finished.status.succeeded ?: 0) > 0
     }
 
     private fun stream(buildId: UUID) = runCatching {

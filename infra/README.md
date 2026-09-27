@@ -54,5 +54,5 @@ on the chart.
 
 ## Not covered
 
-A container registry for build output (`registry` in the chart), DNS records, and backups for
-PostgreSQL and JetStream volumes.
+A container registry for build output (`registry.host` in the chart; [`registry/`](registry) has
+a token-auth configuration), DNS records, and backups for PostgreSQL and JetStream volumes.

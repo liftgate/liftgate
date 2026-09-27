@@ -35,12 +35,7 @@ fun Route.serviceRoutes(app: App) {
         post {
             val environment = call.environment(app, OrgRole.ADMIN)
             val service = app.services.create(environment.id, call.receive<ServiceSpec>().validated())
-            try {
-                app.claimPlatformDomain(app.services.scope(service.id) ?: notFound("service"))
-            } catch (e: LiftgateException) {
-                app.services.delete(service.id)
-                throw e
-            }
+            app.claimPlatformDomain(app.services.scope(service.id) ?: notFound("service"))
             call.respond(HttpStatusCode.Created, service)
         }
     }
@@ -94,5 +89,5 @@ private fun ServiceSpec.validated(): ServiceSpec {
 private fun String.isRepoPath() = repoPath.matches(this) && ".." !in split('/')
 
 private suspend fun App.claimPlatformDomain(scope: ServiceScope) {
-    if (scope.service.kind == ServiceKind.WEB) domains.ensurePlatform(scope.service, scope.project, scope.org)
+    if (scope.service.kind.servesHttp) domains.ensurePlatform(scope)
 }

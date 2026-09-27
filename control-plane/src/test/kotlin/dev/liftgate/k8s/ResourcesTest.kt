@@ -134,10 +134,19 @@ class ResourcesTest {
     }
 
     @Test
-    fun `only web services with a verified hostname are routable`() {
+    fun `only web and static services with a verified hostname are routable`() {
         assertTrue(release.routable)
+        assertTrue(testRelease(testService.copy(kind = ServiceKind.STATIC)).routable)
         assertFalse(release.copy(domains = emptyList()).routable)
         assertFalse(testRelease(testService.copy(kind = ServiceKind.WORKER)).routable)
+    }
+
+    @Test
+    fun `static service without a port gets PORT 8080, a service and a route`() {
+        val static = testRelease(testService.copy(kind = ServiceKind.STATIC, port = null))
+        assertEquals("8080", Resources.deployment(static, null).spec.template.spec.containers.single().env.single { it.name == "PORT" }.value)
+        assertEquals(8080, Resources.service(static).spec.ports.single().targetPort.intVal)
+        assertEquals(listOf("api-shop-acme.liftgate.app", "api.acme.dev"), Resources.httpRoute(static, "liftgate-system", "liftgate").spec.hostnames)
     }
 
     @Test

@@ -96,6 +96,7 @@ class Reconciler(private val app: App, private val kube: KubernetesClient) {
 
     private fun stopJobs(r: Release) = kube.batch().v1().jobs().inNamespace(r.namespace).list().items
         .filter { job -> job.metadata.ownerReferences.orEmpty().any { it.kind == "CronJob" && it.name == r.service.slug } }
+        .filter { job -> job.status?.conditions.orEmpty().none { it.status == "True" && it.type in setOf("Complete", "Failed") } }
         .forEach { kube.resource(it).delete() }
 
     private fun route(r: Release) = listOf(Resources.service(r), Resources.httpRoute(r, app.config.gatewayNamespace, app.config.gatewayName))

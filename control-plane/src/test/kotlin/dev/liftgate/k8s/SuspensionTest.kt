@@ -26,6 +26,7 @@ import dev.liftgate.testConfig
 import io.fabric8.kubernetes.api.model.StatusBuilder
 import io.fabric8.kubernetes.api.model.batch.v1.CronJob
 import io.fabric8.kubernetes.api.model.batch.v1.JobBuilder
+import io.fabric8.kubernetes.api.model.batch.v1.JobConditionBuilder
 import io.fabric8.kubernetes.api.model.batch.v1.JobListBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient
@@ -160,12 +161,14 @@ class SuspensionTest {
     }
 
     @Test
-    fun `suspending a cron service suspends its schedule and deletes the jobs it already started`() = runBlocking {
+    fun `suspending a cron service suspends its schedule and deletes the running jobs it started`() = runBlocking {
         val (orgId) = seed(ServiceSpec("nightly", "Nightly", ServiceKind.CRON, cronSchedule = "0 3 * * *"))
-        val jobs = listOf("nightly-1" to "nightly", "report-1" to "report").map { (name, owner) ->
+        val jobs = listOf("nightly-0" to "Complete", "nightly-1" to null, "report-1" to null).map { (name, condition) ->
             JobBuilder().withNewMetadata().withName(name).withNamespace(namespace)
-                .addNewOwnerReference().withApiVersion("batch/v1").withKind("CronJob").withName(owner).withUid(name).endOwnerReference()
-                .endMetadata().build()
+                .addNewOwnerReference().withApiVersion("batch/v1").withKind("CronJob").withName(name.substringBefore('-')).withUid(name).endOwnerReference()
+                .endMetadata()
+                .withNewStatus().withConditions(listOfNotNull(condition?.let { JobConditionBuilder().withType(it).withStatus("True").build() })).endStatus()
+                .build()
         }
         server.expect().get().withPath("/apis/batch/v1/namespaces/$namespace/jobs").andReturn(200, JobListBuilder().withItems(jobs).build()).always()
         jobs.forEach { accept("/apis/batch/v1/namespaces/$namespace/jobs/${it.metadata.name}") }

@@ -87,7 +87,9 @@ class Reconciler(private val app: App, private val kube: KubernetesClient) {
 
     private suspend fun apply(r: Release) = withContext(Dispatchers.IO) {
         val config = app.config
-        val workloads = listOf(Resources.deployment(r, config.runtimeClass, config.nodeSelector), Resources.cronJob(r, config.runtimeClass, config.nodeSelector))
+        val workloads = with(config) {
+            listOf(Resources.deployment(r, runtimeClass, workloadNodeSelector, workloadTolerations), Resources.cronJob(r, runtimeClass, workloadNodeSelector, workloadTolerations))
+        }
         val (workload, otherWorkload) = if (r.service.kind == ServiceKind.CRON) workloads.reversed() else workloads
         val setup = listOf(Resources.namespace(r), Resources.resourceQuota(r), Resources.secret(r)) + Resources.networkPolicies(r, config.gatewayNamespace)
         if (r.suspended) stop(r, workload) else (setup + workload).forEach { kube.resource(it).apply() }

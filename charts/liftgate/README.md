@@ -355,10 +355,13 @@ empty, neither appears.
 | `registry` | `registry.liftgate.internal` | `LIFTGATE_REGISTRY` |
 | `build.image` | `ghcr.io/liftgate/build-image:latest` | `LIFTGATE_BUILD_IMAGE` |
 | `build.namespace` | `liftgate-build` | `LIFTGATE_BUILD_NAMESPACE`; the chart creates it |
-| `build.allowedEgressCidrs` | `[]` | Private CIDRs build jobs may reach, for an in-cluster registry; everything else private is blocked |
+| `build.allowedEgressCidrs` | `[]` | Private addresses build jobs may reach, such as the registry, each as `{cidr: 10.0.0.5/32, ports: [5000]}` (TCP); everything else private is blocked. A bare CIDR string still works but opens every port, and the install notes warn about it |
 | `build.registryCredentials` | `""` | Docker `config.json` content; rendered as Secret `registry-credentials` in `build.namespace` and mounted by build jobs |
-| `runtimeClass` | `""` | `LIFTGATE_RUNTIME_CLASS`, set `gvisor` on shared clusters |
-| `nodeSelector` | `{}` | Node labels that pin the control plane, dashboard, CloudNativePG cluster, tenant pods and build jobs; rendered into `LIFTGATE_NODE_SELECTOR` as `key=value,key=value`. See [Node pinning](#node-pinning) for NATS |
+| `runtimeClass` | `gvisor` | `LIFTGATE_RUNTIME_CLASS`; the RuntimeClass of every tenant pod. The chart refuses to render when it is empty unless `allowUnsandboxedTenants=true` |
+| `allowUnsandboxedTenants` | `false` | With an empty `runtimeClass`, renders `LIFTGATE_ALLOW_RUNC=true` so tenant pods run under runc on the node kernel. Only for clusters where every tenant is trusted |
+| `workloads.nodeSelector` | `{}` | `LIFTGATE_WORKLOAD_NODE_SELECTOR`; node labels for tenant pods, `nodeSelector` when empty |
+| `workloads.tolerations` | `[]` | `LIFTGATE_WORKLOAD_TOLERATIONS`; taints tenant pods tolerate, written as for `kubectl taint`: `key=value:Effect`, `key:Effect` or `key` |
+| `nodeSelector` | `{}` | Node labels that pin the control plane, dashboard, CloudNativePG cluster and build jobs; rendered into `LIFTGATE_NODE_SELECTOR` as `key=value,key=value`, which tenant pods use when `workloads.nodeSelector` is empty. See [Node pools](#node-pools) for NATS |
 | `registryInsecure` | `false` | `LIFTGATE_REGISTRY_INSECURE`; build jobs push to `registry` over plain HTTP |
 | `prometheusUrl` | `http://prometheus.liftgate-system:9090` | `LIFTGATE_PROMETHEUS_URL` |
 | `signup.mode` | `approval` | `LIFTGATE_SIGNUP`: `open`, `approval` or `closed`; see [Sign-up and accounts](#sign-up-and-accounts) |
@@ -380,11 +383,14 @@ namespace, `LIFTGATE_LEADER_ELECTION` is `kubernetes` and `LIFTGATE_HTTP_PORT` i
 Empty optional values are left out of the ConfigMap and Secret so the control plane reports
 missing configuration instead of running with blank secrets.
 
-## Node pinning
+## Node pools
 
-`nodeSelector` covers everything this chart renders and everything the control plane
-schedules. The `nats` subchart reads its own values, and Helm cannot template one value from
-another, so repeat the selector under `nats.podTemplate.merge.spec.nodeSelector`:
+`nodeSelector` pins the platform (control plane, dashboard, CloudNativePG) and build jobs.
+Tenant pods are placed with `workloads.nodeSelector` and `workloads.tolerations`, and fall back
+to `nodeSelector` when `workloads.nodeSelector` is empty.
+
+The `nats` subchart reads its own values, and Helm cannot template one value from another, so
+repeat the platform selector under `nats.podTemplate.merge.spec.nodeSelector`:
 
 ```yaml
 nodeSelector:
@@ -396,6 +402,15 @@ nats:
         nodeSelector:
           kubernetes.io/hostname: node-1
 ```
+
+## Network policies
+
+The release namespace denies ingress by default. The control plane can reach every pod in it.
+The control plane's HTTP port, the dashboard and cert-manager's HTTP-01 solver pods accept
+traffic from anywhere; Hazelcast only from the control plane; NATS only from this release's
+pods; and PostgreSQL only from its own instances and the CloudNativePG operator. Anything else
+installed in the release namespace, such as the Prometheus from [`infra/`](../../infra), is
+reachable only from the control plane unless it brings its own NetworkPolicy.
 
 ## Build namespace
 

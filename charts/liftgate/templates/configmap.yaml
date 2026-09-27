@@ -43,15 +43,15 @@ data:
   LIFTGATE_REGISTRY: {{ .Values.registry | quote }}
   LIFTGATE_BUILD_IMAGE: {{ .Values.build.image | quote }}
   LIFTGATE_BUILD_NAMESPACE: {{ .Values.build.namespace | quote }}
-  {{- with .Values.runtimeClass }}
-  LIFTGATE_RUNTIME_CLASS: {{ . | quote }}
+  {{- if .Values.runtimeClass }}
+  LIFTGATE_RUNTIME_CLASS: {{ .Values.runtimeClass | quote }}
+  {{- else if .Values.allowUnsandboxedTenants }}
+  LIFTGATE_ALLOW_RUNC: "true"
+  {{- else }}
+  {{- fail "runtimeClass is empty: set it to a sandbox RuntimeClass such as gvisor (see infra/k3s/install.md), or set allowUnsandboxedTenants=true to run tenant code under runc on the node kernel" }}
   {{- end }}
   {{- with .Values.nodeSelector }}
-  {{- $pairs := list }}
-  {{- range $key, $value := . }}
-  {{- $pairs = append $pairs (printf "%s=%s" $key $value) }}
-  {{- end }}
-  LIFTGATE_NODE_SELECTOR: {{ join "," $pairs | quote }}
+  LIFTGATE_NODE_SELECTOR: {{ include "liftgate.nodeSelector" . | quote }}
   {{- end }}
   {{- if .Values.registryInsecure }}
   LIFTGATE_REGISTRY_INSECURE: "true"
@@ -85,6 +85,18 @@ data:
   {{- end }}
   {{- with .Values.controlPlane.trustedProxyCidrs }}
   LIFTGATE_TRUSTED_PROXY_CIDRS: {{ join "," . | quote }}
+  {{- end }}
+  {{- with .Values.workloads.nodeSelector }}
+  LIFTGATE_WORKLOAD_NODE_SELECTOR: {{ include "liftgate.nodeSelector" . | quote }}
+  {{- end }}
+  {{- with .Values.workloads.tolerations }}
+  LIFTGATE_WORKLOAD_TOLERATIONS: {{ join "," . | quote }}
+  {{- end }}
+  {{- with .Values.build.nodeSelector }}
+  LIFTGATE_BUILD_NODE_SELECTOR: {{ include "liftgate.nodeSelector" . | quote }}
+  {{- end }}
+  {{- with .Values.build.tolerations }}
+  LIFTGATE_BUILD_TOLERATIONS: {{ join "," . | quote }}
   {{- end }}
 {{- with include "liftgate.sharedSite" . }}
 {{- if not $.Values.allowSharedSite }}

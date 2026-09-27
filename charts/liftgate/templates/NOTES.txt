@@ -12,6 +12,19 @@ Keep secrets.masterKey safe: environment variables are encrypted with it and can
 
 WARNING: GitHub is not configured. The control plane refuses to start until github.appId, github.privateKey, github.webhookSecret, github.clientId and github.clientSecret are all set.
 {{- end }}
+{{- if .Values.runtimeClass }}
+
+Tenant pods run under RuntimeClass {{ .Values.runtimeClass }}. Every node that runs them needs its handler; for gvisor follow "gVisor on every node" in infra/k3s/install.md.
+{{- else }}
+
+WARNING: allowUnsandboxedTenants is true and runtimeClass is empty, so tenant code runs under runc on the node kernel. Use this only when every tenant is trusted.
+{{- end }}
+{{- range .Values.build.allowedEgressCidrs }}
+{{- if kindIs "string" . }}
+
+WARNING: build.allowedEgressCidrs entry {{ . }} opens every port to build jobs. Give it ports, for example {cidr: {{ . }}, ports: [5000]}.
+{{- end }}
+{{- end }}
 {{- if and (eq .Values.profile "ha") .Values.nats.managed (not .Values.nats.config.cluster.enabled) }}
 
 WARNING: profile ha is running a single NATS server. Install with -f values-ha.yaml, or set nats.config.cluster.enabled=true and nats.config.cluster.replicas=3.

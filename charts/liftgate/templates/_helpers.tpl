@@ -61,6 +61,14 @@ jdbc:postgresql://{{ include "liftgate.postgresCluster" . }}-rw.{{ .Release.Name
 {{- end -}}
 {{- end -}}
 
+{{- define "liftgate.nodeSelector" -}}
+{{- $pairs := list -}}
+{{- range $key, $value := . -}}
+{{- $pairs = append $pairs (printf "%s=%s" $key $value) -}}
+{{- end -}}
+{{- join "," $pairs -}}
+{{- end -}}
+
 {{- define "liftgate.natsUrl" -}}
 {{- if .Values.nats.managed -}}
 nats://{{ include "liftgate.natsService" . }}.{{ .Release.Namespace }}.svc:4222

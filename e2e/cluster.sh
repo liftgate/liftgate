@@ -14,7 +14,7 @@ networking:
 EOF
 kind load docker-image --name liftgate liftgate/control-plane:e2e liftgate/dashboard:e2e
 
-LETSENCRYPT_EMAIL=e2e@liftgate.test sh infra/install.sh
+LIFTGATE_INSTALL_CILIUM=1 LETSENCRYPT_EMAIL=e2e@liftgate.test sh infra/install.sh
 
 kubectl apply -f - <<EOF
 apiVersion: cert-manager.io/v1

@@ -72,7 +72,7 @@ private const val DRAIN_MILLIS = 5_000L
 class App(val config: Config) : AutoCloseable {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val db = Db(config)
-    private val hazelcast = lazy { Cache(config) }
+    private val hazelcast = lazy { Cache(config).also { metrics.gauge("liftgate.hazelcast.members", it) { cache -> cache.members.toDouble() } } }
     val cache by hazelcast
     val nats = Nats(config)
     val secrets by lazy { SecretBox(checkNotNull(config.secretsMasterKey)) }

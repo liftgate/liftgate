@@ -12,7 +12,6 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.SortOrder
-import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.JdbcTransaction
 import org.jetbrains.exposed.v1.jdbc.insertReturning
@@ -33,11 +32,6 @@ fun ResultRow.toBuild() = Build(
     this[BuildsTable.finishedAt]?.toInstant(),
     this[BuildsTable.createdAt].toInstant(),
 )
-
-fun startBuild(id: UUID) = BuildsTable.update({ (BuildsTable.id eq id) and (BuildsTable.status eq BuildStatus.QUEUED.sql) }) {
-    it[status] = BuildStatus.RUNNING.sql
-    it[startedAt] = now()
-}
 
 /**
  * @author Dean
@@ -64,7 +58,12 @@ class Builds(private val db: Db) {
     }
 
     suspend fun markRunning(id: UUID) {
-        db.tx { startBuild(id) }
+        db.tx {
+            BuildsTable.update({ BuildsTable.id eq id }) {
+                it[status] = BuildStatus.RUNNING.sql
+                it[startedAt] = now()
+            }
+        }
     }
 
     suspend fun markSucceeded(id: UUID, imageRef: String): Deployment = db.tx {

@@ -8,7 +8,6 @@ import dev.liftgate.db.sql
 import dev.liftgate.db.toEnum
 import dev.liftgate.deploy.Build
 import dev.liftgate.deploy.BuildStatus
-import dev.liftgate.deploy.startBuild
 import dev.liftgate.events.Redeliver
 import dev.liftgate.org.Plans
 import dev.liftgate.service.orgServiceIds
@@ -22,6 +21,7 @@ import org.jetbrains.exposed.v1.core.neq
 import org.jetbrains.exposed.v1.core.or
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.update
 import java.time.Duration
 import java.time.ZoneOffset
 import java.util.UUID
@@ -49,7 +49,10 @@ class BuildAdmission(private val db: Db, private val plans: Plans) {
                 "the $name plan's builds per hour limit is ${plan.buildsPerHour}"
             plan.concurrentBuilds?.let { others(Builds.status eq BuildStatus.RUNNING.sql) >= it } == true -> throw Redeliver(busyRetry)
             else -> {
-                startBuild(build.id)
+                Builds.update({ Builds.id eq build.id }) {
+                    it[Builds.status] = BuildStatus.RUNNING.sql
+                    it[startedAt] = now()
+                }
                 null
             }
         }

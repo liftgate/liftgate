@@ -29,13 +29,16 @@ EXTRA_IMAGES="$images" CHART="$previous/charts/liftgate" VALUES="$previous/e2e/v
   --set-string dashboard.tag="$version" \
   --set gateway.issuer=selfsigned
 sql < "$previous/e2e/fixture.sql"
+sql --command "insert into api_tokens (id, org_id, name, token_hash, created_by) values (gen_random_uuid(),
+  '00000000-0000-4000-8000-000000000002', 'upgrade', translate(rtrim(encode(sha256('lg_upgrade'), 'base64'), '='), '+/', '-_'),
+  '00000000-0000-4000-8000-000000000001')"
 for attempt in $(seq 60); do running && break; sleep 5; done
 running
 
 node="$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')"
 probe() {
   curl --silent --insecure --max-time 5 --output /dev/null --write-out '%{http_code}\n' \
-    --resolve "liftgate.test:443:$node" https://liftgate.test/api/v1/auth/providers "$@"
+    --resolve "liftgate.test:443:$node" --header 'Authorization: Bearer lg_upgrade' https://liftgate.test/api/v1/orgs/e2e/projects "$@"
 }
 probe --fail --retry 30 --retry-all-errors --retry-delay 2
 codes="$(mktemp)"

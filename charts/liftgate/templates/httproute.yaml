@@ -15,11 +15,9 @@ spec:
     - {{ $api | quote }}
   rules:
     - matches:
-        {{- range eq $api $dashboard | ternary (list "/api") (list "/") }}
         - path:
             type: PathPrefix
-            value: {{ . }}
-        {{- end }}
+            value: /api
       backendRefs:
         - name: {{ include "liftgate.fullname" . }}-control-plane
           port: 8080

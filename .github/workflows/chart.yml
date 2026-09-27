@@ -60,6 +60,19 @@ jobs:
           if render --set controlPlane.clientIpHeader=CF-Connecting-IP --set controlPlane.trustedProxyCidrs={10.0.0.0/8} 2> render.err; then exit 1; fi
           grep "upstreamOverwritesClientIpHeader=true" render.err
           render --set controlPlane.clientIpHeader=CF-Connecting-IP --set controlPlane.trustedProxyCidrs={10.0.0.0/8} --set controlPlane.upstreamOverwritesClientIpHeader=true | grep 'LIFTGATE_CLIENT_IP_HEADER: "CF-Connecting-IP"'
+      - name: control plane service accounts, probes, secrets and routes
+        run: |
+          set -o pipefail
+          helm template liftgate charts/liftgate ${{ matrix.args }} --set secrets.masterKey=key --set github.appId=1 --set github.privateKey=key \
+            --set dashboardUrl=https://dashboard.liftgate.dev | yq ea -o json '[.]' > rendered.json
+          jq -e '([.[] | select(.kind == "ServiceAccount")] | length) == ([.[] | select(.kind == "Deployment" and .metadata.labels["app.kubernetes.io/component"] == "control-plane")] | length)' rendered.json
+          jq -e '[.[] | select(.kind == "Deployment") | .spec.template.spec.containers[0]] | all(.readinessProbe and .livenessProbe)' rendered.json
+          jq -e '[.[] | select(.kind == "Deployment" and .metadata.labels["app.kubernetes.io/component"] == "control-plane") | .spec.template.spec] | all(.initContainers[0].env[0].value == "migrate" and .containers[0].startupProbe)' rendered.json
+          jq -e '[.[] | select(.spec.template.metadata.labels["liftgate.dev/hazelcast"] == "true") | .metadata.labels["liftgate.dev/role"]] | . == ["api"] or . == ["all"]' rendered.json
+          jq -e '(map(select(.kind == "Secret")) | INDEX(.metadata.name)) as $secrets
+            | [.[] | select(.kind == "Deployment" and .metadata.labels["liftgate.dev/role"] == "meter") | .spec.template.spec.containers[0].envFrom[].secretRef.name // empty | $secrets[.].stringData // {} | keys[]]
+            | index("LIFTGATE_SECRETS_MASTER_KEY") == null and index("LIFTGATE_GITHUB_APP_PRIVATE_KEY") == null' rendered.json
+          jq -e '.[] | select(.kind == "HTTPRoute" and .metadata.name == "liftgate-control-plane") | .spec.rules[0].matches == [{path: {type: "PathPrefix", value: "/api"}}]' rendered.json
 
   install-kindnet:
     runs-on: ubuntu-24.04

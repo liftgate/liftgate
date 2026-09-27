@@ -63,6 +63,8 @@ import java.util.concurrent.CountDownLatch
 import kotlin.system.exitProcess
 import kotlin.time.Duration.Companion.seconds
 
+private const val DRAIN_MILLIS = 5_000L
+
 /**
  * @author Dean
  * @date 9/17/2026
@@ -70,9 +72,10 @@ import kotlin.time.Duration.Companion.seconds
 class App(val config: Config) : AutoCloseable {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val db = Db(config)
-    val cache = Cache(config)
+    private val hazelcast = lazy { Cache(config).also { metrics.gauge("liftgate.hazelcast.members", it) { cache -> cache.members.toDouble() } } }
+    val cache by hazelcast
     val nats = Nats(config)
-    val secrets = SecretBox(config.secretsMasterKey)
+    val secrets by lazy { SecretBox(checkNotNull(config.secretsMasterKey)) }
     val http = HttpClient(CIO) {
         install(ContentNegotiation) { json(json) }
         install(UserAgent) { agent = "liftgate" }
@@ -81,36 +84,39 @@ class App(val config: Config) : AutoCloseable {
     val kube = KubernetesClientBuilder().build()
     private val limits = Limits(config.plans, config.customDomainsMax)
     val orgs = Orgs(db, limits)
-    val sessions = Sessions(db, cache, orgs)
-    val apiTokens = ApiTokens(db, cache)
+    val sessions by lazy { Sessions(db, cache, orgs) }
+    val apiTokens by lazy { ApiTokens(db, cache) }
     val access = Access(orgs)
     val projects = Projects(db, limits)
     val services = Services(db, limits)
-    val envVars = EnvVars(db, secrets)
+    val envVars by lazy { EnvVars(db, secrets) }
     val builds = Builds(db)
     val deployments = Deployments(db)
     val domains = Domains(db, config.deployDomain, limits)
-    val github = config.github?.let { GitHubApp(it, http) }
-    val oauth = OAuth(http, config.publicUrl, OAuthProviders.enabled(config))
-    val signIn = SignIn(db, sessions, config.signup, config.signupAllow, consent = config.termsUrl != null)
-    val gitConnections = GitConnections(db, secrets, oauth)
-    val passkeys = Passkeys(config, db, cache, signIn)
-    val emailCodes = config.email?.let { EmailCodes(db, cache, config.secretsMasterKey, Mailer(it), signIn) }
-    val sso = Sso(config.publicUrl, db, cache, signIn)
+    val github by lazy { config.github?.let { GitHubApp(it, http) } }
+    val oauth by lazy { OAuth(http, config.publicUrl, OAuthProviders.enabled(config)) }
+    val signIn by lazy { SignIn(db, sessions, config.signup, config.signupAllow, consent = config.termsUrl != null) }
+    val gitConnections by lazy { GitConnections(db, secrets, oauth) }
+    val passkeys by lazy { Passkeys(config, db, cache, signIn) }
+    val emailCodes by lazy { config.email?.let { EmailCodes(db, cache, checkNotNull(config.secretsMasterKey), Mailer(it), signIn) } }
+    val sso by lazy { Sso(config.publicUrl, db, cache, signIn) }
     val registryTokens = RegistryTokens(db, services, config)
     val buildAdmission = BuildAdmission(db, config.plans)
     private val stopped = CountDownLatch(1)
     private var server: EmbeddedServer<*, *>? = null
 
+    @Volatile
+    var stopping = false
+        private set
+
     fun runs(role: Role) = config.role == Role.ALL || config.role == role
 
     fun start() {
-        db.migrate()
         nats.ensureStream()
+        server = httpServer(this).start(wait = false)
         if (runs(Role.API)) {
             val relay = OutboxRelay(db, nats)
             LeaderElection(config, kube, "liftgate-outbox-relay").start(scope) { coroutineScope { relay.start(this); Housekeeping(db).start(this) } }
-            server = httpServer(this).start(wait = false)
             nats.consume(Subject.USER_UPDATED, "api-user-updated", scope) { sessions.evict(it.uuid("userId")) }
         }
         if (runs(Role.RECONCILER)) {
@@ -128,11 +134,13 @@ class App(val config: Config) : AutoCloseable {
     }
 
     override fun close() {
+        stopping = true
+        Thread.sleep(DRAIN_MILLIS)
         server?.stop(1000, 5000)
         runBlocking { withTimeoutOrNull(10.seconds) { scope.coroutineContext.job.cancelAndJoin() } }
         http.close()
         nats.close()
-        cache.close()
+        if (hazelcast.isInitialized()) cache.close()
         kube.close()
         db.close()
         stopped.countDown()
@@ -146,6 +154,7 @@ fun main(args: Array<String>) {
         result.onSuccess(::println).onFailure { System.err.println(it.message ?: it) }
         exitProcess(if (result.isSuccess) 0 else 1)
     }
+    if (config.role == Role.MIGRATE) return Db(config).use { it.migrate() }
     val app = App(config)
     app.start()
     app.awaitShutdown()

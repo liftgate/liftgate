@@ -1,9 +1,38 @@
-{{- $roles := dict "all" 1 }}
-{{- if eq (include "liftgate.ha" .) "true" }}
-{{- $roles = .Values.controlPlane.replicas }}
+{{- define "liftgate.controlPlaneContainer" }}
+{{- $root := index . 0 -}}
+image: "{{ $root.Values.controlPlane.image }}:{{ $root.Values.controlPlane.tag | default $root.Chart.AppVersion }}"
+imagePullPolicy: IfNotPresent
+env:
+  - name: LIFTGATE_ROLE
+    value: {{ index . 2 }}
+  - name: JAVA_TOOL_OPTIONS
+    value: {{ $root.Values.controlPlane.javaOpts | quote }}
+  {{- if $root.Values.postgres.managed }}
+  - name: LIFTGATE_DATABASE_USER
+    valueFrom:
+      secretKeyRef:
+        name: {{ include "liftgate.postgresCluster" $root }}-app
+        key: username
+  - name: LIFTGATE_DATABASE_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: {{ include "liftgate.postgresCluster" $root }}-app
+        key: password
+  {{- end }}
+envFrom:
+  - configMapRef:
+      name: {{ include "liftgate.fullname" $root }}
+  - secretRef:
+      name: {{ include "liftgate.roleName" (list $root (index . 1)) }}
+resources:
+  {{- toYaml $root.Values.controlPlane.resources | nindent 2 }}
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: [ALL]
 {{- end }}
-{{- range $role, $replicas := $roles }}
-{{- $serving := has $role (list "api" "all") }}
+{{- range $role, $replicas := include "liftgate.roles" . | fromJson }}
+{{- $hazelcast := has $role (list "api" "all") }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -25,11 +54,15 @@ spec:
         {{- include "liftgate.selectorLabels" $ | nindent 8 }}
         app.kubernetes.io/component: control-plane
         liftgate.dev/role: {{ $role }}
+        {{- if $hazelcast }}
+        liftgate.dev/hazelcast: "true"
+        {{- end }}
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") $ | sha256sum }}
         checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") $ | sha256sum }}
     spec:
-      serviceAccountName: {{ include "liftgate.fullname" $ }}
+      serviceAccountName: {{ include "liftgate.roleName" (list $ $role) }}
+      terminationGracePeriodSeconds: 60
       {{- with $.Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -56,38 +89,19 @@ spec:
                     {{- include "liftgate.selectorLabels" $ | nindent 20 }}
                     liftgate.dev/role: {{ $role }}
       {{- end }}
+      initContainers:
+        - name: migrate
+          {{- include "liftgate.controlPlaneContainer" (list $ $role "migrate") | nindent 10 }}
       containers:
         - name: control-plane
-          image: "{{ $.Values.controlPlane.image }}:{{ $.Values.controlPlane.tag | default $.Chart.AppVersion }}"
-          imagePullPolicy: IfNotPresent
-          env:
-            - name: LIFTGATE_ROLE
-              value: {{ $role }}
-            - name: JAVA_TOOL_OPTIONS
-              value: {{ $.Values.controlPlane.javaOpts | quote }}
-            {{- if $.Values.postgres.managed }}
-            - name: LIFTGATE_DATABASE_USER
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "liftgate.postgresCluster" $ }}-app
-                  key: username
-            - name: LIFTGATE_DATABASE_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "liftgate.postgresCluster" $ }}-app
-                  key: password
-            {{- end }}
-          envFrom:
-            - configMapRef:
-                name: {{ include "liftgate.fullname" $ }}
-            - secretRef:
-                name: {{ include "liftgate.fullname" $ }}
+          {{- include "liftgate.controlPlaneContainer" (list $ $role $role) | nindent 10 }}
           ports:
             - name: http
               containerPort: 8080
+            {{- if $hazelcast }}
             - name: hazelcast
               containerPort: 5701
-          {{- if $serving }}
+            {{- end }}
           startupProbe:
             httpGet:
               path: /healthz
@@ -104,11 +118,4 @@ spec:
               path: /healthz
               port: http
             periodSeconds: 20
-          {{- end }}
-          resources:
-            {{- toYaml $.Values.controlPlane.resources | nindent 12 }}
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop: [ALL]
 {{- end }}

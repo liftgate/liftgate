@@ -51,7 +51,8 @@ of `--set` in production.
 | Dashboard | 1 replica | 2 replicas |
 | PostgreSQL (`postgres.managed`) | 1 instance | 3 instances |
 | NATS (`nats.managed`) | 1 server | 3 servers via `values-ha.yaml` |
-| Hazelcast | local | Kubernetes discovery through the `<fullname>-hazelcast` headless Service |
+| Hazelcast | local | Kubernetes discovery through the `<fullname>-hazelcast` headless Service, `api` pods only |
+| ServiceAccount and Secret | `<fullname>` | `<fullname>-<role>` each, see [Control plane permissions](#control-plane-permissions) |
 
 The NATS replica count lives in the subchart and cannot follow `profile` on its own, which is
 why `values-ha.yaml` exists. The chart prints a warning when `profile=ha` runs one NATS server.
@@ -69,9 +70,9 @@ the release namespace with three kinds of listener:
 - one HTTPS listener per distinct host in `publicUrl` and `dashboardUrl`, each with a
   cert-manager `Certificate` from ClusterIssuer `gateway.issuer`.
 
-When `publicUrl` and `dashboardUrl` share a host, `/api` goes to the
-control plane and everything else to the dashboard. With different hosts each host routes
-`/` to its component, and the dashboard image must be built with
+The control plane receives only `/api`; everything else on a shared host goes to the dashboard,
+so `/healthz`, `/readyz` and `/metrics` stay inside the cluster. With different hosts the
+dashboard host routes `/` to the dashboard, and the dashboard image must be built with
 `--build-arg NEXT_PUBLIC_API_URL=<publicUrl>` because Next.js inlines that variable into the
 browser bundle at build time; the published image uses same-host relative URLs. The control
 plane then allows credentialed cross-origin requests from the `dashboardUrl` origin only.
@@ -366,6 +367,7 @@ empty, neither appears.
 | `controlPlane.clientIpHeader` | `""` | `LIFTGATE_CLIENT_IP_HEADER`, e.g. `CF-Connecting-IP`; read only on connections from `trustedProxyCidrs`, and only when every request passes through an upstream proxy that overwrites it. See [Client IP](#client-ip) |
 | `controlPlane.upstreamOverwritesClientIpHeader` | `false` | Required with `clientIpHeader`: confirms that an upstream proxy overwrites that header on every request |
 | `controlPlane.trustedProxyCidrs` | `[]` | `LIFTGATE_TRUSTED_PROXY_CIDRS`: CIDRs of the proxy that connects to the control plane |
+| `controlPlane.databasePoolSize` | `0` | `LIFTGATE_DATABASE_POOL_SIZE`: the most Postgres connections one control-plane pod holds; `0` keeps the role default of 10 for `api` and `all` and 3 for the other roles, each keeping 2 idle. Size `postgres.maxConnections` for the sum over every pod |
 | `controlPlane.javaOpts` | `-XX:MaxRAMPercentage=75.0` | `JAVA_TOOL_OPTIONS` |
 | `controlPlane.resources` | 250m / 768Mi, limit 1536Mi | |
 | `dashboard.image` | `ghcr.io/liftgate/dashboard` | |
@@ -395,7 +397,7 @@ empty, neither appears.
 | `gateway.namespace` | `""` | `LIFTGATE_GATEWAY_NAMESPACE` for an existing Gateway when `gateway.create=false`; empty or `gateway.create=true` means the release namespace |
 | `gateway.className` | `cilium` | |
 | `gateway.wildcardSecret` | `liftgate-wildcard-tls` | TLS secret for `*.deployDomain` |
-| `gateway.issuer` | `letsencrypt` | ClusterIssuer for the public hosts |
+| `gateway.issuer` | `letsencrypt` | ClusterIssuer for the public hosts and, through `LIFTGATE_CERT_ISSUER`, custom domains |
 | `deployDomain` | `liftgate.app` | `LIFTGATE_DEPLOY_DOMAIN`, at most 189 characters so every generated hostname fits in 253 |
 | `publicUrl` | `https://liftgate.dev` | `LIFTGATE_PUBLIC_URL` |
 | `dashboardUrl` | `""` | `LIFTGATE_DASHBOARD_URL`; empty means `publicUrl` |
@@ -501,6 +503,39 @@ nats:
         nodeSelector:
           kubernetes.io/hostname: node-1
 ```
+
+## Control plane permissions
+
+Every control plane pod first runs the `migrate` init container (`LIFTGATE_ROLE=migrate`), which
+applies pending database migrations with a 10 second `lock_timeout` and exits, so a long
+migration never trips a probe. Each role serves `/healthz`, which fails when a message consumer has
+not polled NATS for two minutes, and `/readyz`, which checks PostgreSQL, NATS and, for `api`,
+Hazelcast. On shutdown a pod reports unready for 5 seconds before it stops serving.
+
+The `ha` profile gives each role its own ServiceAccount and Secret:
+
+| Role | Kubernetes access | Secret values |
+|---|---|---|
+| `api` | Role in the release namespace: leases, endpoints, endpoint slices | master key, GitHub App key and webhook secret, OAuth client secrets, SMTP URL, registry signing key and pull password |
+| `reconciler` | ClusterRole `<fullname>`, the release namespace Role, and `bind` on ClusterRole `<fullname>-log-reader` | master key |
+| `builder` | Role `<fullname>-builder` in `build.namespace` (jobs, secrets, pods and their logs), the release namespace Role | GitHub App key |
+| `meter` | ClusterRole `<fullname>-meter` (list pods), the release namespace Role | none |
+
+The `single` profile binds all of them to one ServiceAccount. Database credentials reach every
+role. ClusterRole `<fullname>` writes namespaces and the tenant objects in them but cannot read
+Secrets anywhere, delete pods or read nodes.
+
+Because a ClusterRole cannot be limited to namespaces that do not exist yet, the chart also
+installs the `ValidatingAdmissionPolicy` `<fullname>`, bound to the control plane's
+ServiceAccounts. It rejects:
+
+- a namespace created or changed without `liftgate.dev/managed=true` and
+  `pod-security.kubernetes.io/enforce=restricted`, a label change on a namespace that was not
+  managed, and the deletion of an unmanaged namespace;
+- any other write outside managed namespaces, except leases in the release namespace, jobs and
+  secrets in `build.namespace`, and gateways and certificates in the gateway namespace;
+- a build job that uses host namespaces, `hostPath` volumes, privileged containers or added
+  capabilities.
 
 ## Network policies
 

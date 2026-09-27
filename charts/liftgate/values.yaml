@@ -22,6 +22,7 @@ controlPlane:
   clientIpHeader: ""
   upstreamOverwritesClientIpHeader: false
   trustedProxyCidrs: []
+  databasePoolSize: 0
 
 dashboard:
   image: ghcr.io/liftgate/dashboard

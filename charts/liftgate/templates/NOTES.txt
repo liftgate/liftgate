@@ -10,7 +10,7 @@ Keep secrets.masterKey safe: environment variables are encrypted with it and can
 {{- end }}
 {{- if not .Values.github.appId }}
 
-WARNING: GitHub is not configured. The control plane refuses to start until github.appId, github.privateKey, github.webhookSecret, github.clientId and github.clientSecret are all set.
+WARNING: the GitHub App is not configured, so repositories cannot be imported or built{{ if eq (include "liftgate.ha" .) "true" }} and the builder refuses to start{{ end }}. Set github.appId, github.privateKey and github.webhookSecret, and github.clientId and github.clientSecret for GitHub sign-in.
 {{- end }}
 {{- if .Values.runtimeClass }}
 

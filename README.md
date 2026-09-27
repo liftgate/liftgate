@@ -52,7 +52,7 @@ Open-source full-stack application hosting. Connect a GitHub repository and Lift
                           https://<service>-<project>-<org>.liftgate.app
 ```
 
-One Kotlin/JVM artifact runs every role; `LIFTGATE_ROLE` selects `api`, `reconciler`, `builder`, `meter` or `all`.
+One Kotlin/JVM artifact runs every role; `LIFTGATE_ROLE` selects `api`, `reconciler`, `builder`, `meter` or `all`, and `migrate` applies the database migrations and exits.
 
 | Role | Responsibility |
 |---|---|
@@ -142,10 +142,11 @@ Control plane:
 cd control-plane
 cp .env.example .env
 set -a; . ./.env; set +a
+LIFTGATE_ROLE=migrate ./gradlew run
 ./gradlew run
 ```
 
-Fill in the GitHub App values and generate `LIFTGATE_SECRETS_MASTER_KEY` with `openssl rand -base64 32` before starting. The private key is multi-line; because the file is sourced by the shell, `LIFTGATE_GITHUB_APP_PRIVATE_KEY="$(cat path/to/key.pem)"` is the easiest way to set it. Any IDE run configuration that sets the same variables works too.
+Run the `migrate` line again after pulling new migrations. Fill in the GitHub App values and generate `LIFTGATE_SECRETS_MASTER_KEY` with `openssl rand -base64 32` before starting. The private key is multi-line; because the file is sourced by the shell, `LIFTGATE_GITHUB_APP_PRIVATE_KEY="$(cat path/to/key.pem)"` is the easiest way to set it. Any IDE run configuration that sets the same variables works too.
 
 The other sign-in methods stay off while their variables are empty. Passkeys work on `http://localhost:3000` with no setup. Quote `LIFTGATE_EMAIL_FROM` in `.env` (`LIFTGATE_EMAIL_FROM="Liftgate <login@example.com>"`), because the shell reads `<` as a redirect. OAuth providers need `http://localhost:8080/api/v1/auth/<provider>/callback` registered as an extra redirect URI.
 

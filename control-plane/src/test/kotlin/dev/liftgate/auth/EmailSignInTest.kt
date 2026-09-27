@@ -43,7 +43,7 @@ class EmailSignInTest {
         EmailCodes(
             db,
             cache,
-            testConfig().secretsMasterKey,
+            checkNotNull(testConfig().secretsMasterKey),
             Mailer(EmailConfig("mail.example.com", 587, false, null, null, "login@liftgate.dev")) { sent += it },
             SignIn(db, mockk<Sessions> { coEvery { create(any()) } returns "session" }),
         )

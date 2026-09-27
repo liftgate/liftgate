@@ -35,7 +35,7 @@ class GitHubAppTest {
     private val requests = mutableListOf<HttpRequestData>()
 
     private fun app(privateKey: String = TestKeys.privateKeyPem) = GitHubApp(
-        GitHubConfig("12345", privateKey, "webhook", "client", "client-secret"),
+        GitHubConfig("12345", privateKey),
         HttpClient(MockEngine { request ->
             requests += request
             val headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())

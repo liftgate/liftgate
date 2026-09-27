@@ -17,7 +17,7 @@ const val WEBHOOK_BODY_LIMIT = 25L * 1024 * 1024
 fun Route.webhookRoutes(app: App) {
     val handler = WebhookHandler(app)
     post("/webhooks/github") {
-        val secret = app.config.github?.webhookSecret ?: notFound("webhook")
+        val secret = app.config.githubWebhookSecret ?: notFound("webhook")
         val body = call.receive<ByteArray>()
         if (!Webhooks.verify(secret, body, call.request.header("X-Hub-Signature-256"))) unauthorized()
         if (call.request.header("X-GitHub-Event") == "push") handler.handlePush(json.parseToJsonElement(body.decodeToString()).jsonObject) {

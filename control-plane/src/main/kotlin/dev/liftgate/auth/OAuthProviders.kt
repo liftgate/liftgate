@@ -1,7 +1,6 @@
 package dev.liftgate.auth
 
 import dev.liftgate.config.Config
-import dev.liftgate.config.GitHubConfig
 import dev.liftgate.config.OAuthClient
 import io.ktor.client.call.body
 import io.ktor.client.request.bearerAuth
@@ -16,14 +15,14 @@ import kotlinx.serialization.Serializable
  */
 object OAuthProviders {
     fun enabled(config: Config) = listOfNotNull(
-        config.github?.let(::github),
+        config.githubClient?.let(::github),
         config.google?.let(::google),
         config.gitlab?.let { gitlab(it, config.gitlabUrl, config.gitlabTrustEmail) },
         config.bitbucket?.let(::bitbucket),
     )
 
-    fun github(config: GitHubConfig) = OAuthProvider(
-        GITHUB, config.clientId, config.clientSecret,
+    fun github(client: OAuthClient) = OAuthProvider(
+        GITHUB, client.clientId, client.clientSecret,
         "https://github.com/login/oauth/authorize", "https://github.com/login/oauth/access_token", "read:user user:email",
     ) { token ->
         val user = get("https://api.github.com/user") { bearerAuth(token) }.body<GitHubUser>()

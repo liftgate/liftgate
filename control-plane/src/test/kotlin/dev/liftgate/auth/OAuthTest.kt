@@ -1,7 +1,6 @@
 package dev.liftgate.auth
 
 import dev.liftgate.TestDatabase
-import dev.liftgate.config.GitHubConfig
 import dev.liftgate.config.OAuthClient
 import dev.liftgate.http.LiftgateException
 import dev.liftgate.http.json
@@ -36,7 +35,7 @@ import kotlin.test.assertTrue
  */
 class OAuthTest {
     private val requests = mutableListOf<HttpRequestData>()
-    private val github = OAuthProviders.github(GitHubConfig("1", "pem", "webhook", "client", "secret"))
+    private val github = OAuthProviders.github(OAuthClient("client", "secret"))
     private val google = OAuthProviders.google(OAuthClient("client", "secret"))
     private val gitlab = OAuthProviders.gitlab(OAuthClient("client", "secret"), "https://git.example", trustEmail = true)
     private val unconfirmed = HttpStatusCode.OK to """[{"id":2,"email":"dean@x.dev","confirmed_at":null}]"""

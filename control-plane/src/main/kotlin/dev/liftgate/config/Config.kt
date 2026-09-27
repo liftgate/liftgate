@@ -17,19 +17,13 @@ private const val GITLAB_COM = "https://gitlab.com"
  * @author Dean
  * @date 9/17/2026
  */
-enum class Role { API, RECONCILER, BUILDER, METER, ALL }
+enum class Role { API, RECONCILER, BUILDER, METER, ALL, MIGRATE }
 
 /**
  * @author Dean
  * @date 9/17/2026
  */
-data class GitHubConfig(
-    val appId: String,
-    val privateKeyPem: String,
-    val webhookSecret: String,
-    val clientId: String,
-    val clientSecret: String,
-)
+data class GitHubConfig(val appId: String, val privateKeyPem: String)
 
 /**
  * @author Dean
@@ -68,7 +62,7 @@ data class Config(
     val webauthnRpId: String,
     val webauthnRpName: String,
     val email: EmailConfig?,
-    val secretsMasterKey: ByteArray,
+    val secretsMasterKey: ByteArray?,
     val registry: String,
     val buildImage: String,
     val buildNamespace: String,
@@ -97,6 +91,10 @@ data class Config(
     val buildTolerations: List<Toleration>,
     val plans: Plans,
     val customDomainsMax: Int?,
+    val githubWebhookSecret: String?,
+    val githubClient: OAuthClient?,
+    val certIssuer: String,
+    val databasePoolSize: Int,
 ) {
     companion object {
         private val taint = Regex("""([\w./-]+)(?:=([\w.-]*))?(?::(NoSchedule|PreferNoSchedule|NoExecute))?""")
@@ -105,7 +103,6 @@ data class Config(
             fun optional(name: String) = env["LIFTGATE_$name"]?.takeIf { it.isNotBlank() }
             fun required(name: String) = optional(name) ?: error("LIFTGATE_$name is required")
             fun text(name: String, default: String) = optional(name) ?: default
-            fun oauthClient(name: String) = optional("${name}_CLIENT_ID")?.let { OAuthClient(it, required("${name}_CLIENT_SECRET")) }
             fun tolerations(name: String) = optional(name)?.split(',')?.map {
                 val match = taint.matchEntire(it.trim()) ?: error("LIFTGATE_$name must be key[=value][:effect][,key[=value][:effect]]")
                 val value = match.groups[2]?.value
@@ -114,23 +111,20 @@ data class Config(
 
             val roleName = text("ROLE", "all")
             val role = Role.entries.firstOrNull { it.name.equals(roleName, ignoreCase = true) }
-                ?: error("LIFTGATE_ROLE must be one of api, reconciler, builder, meter, all")
+                ?: error("LIFTGATE_ROLE must be one of api, reconciler, builder, meter, all, migrate")
+            val serving = role in setOf(Role.API, Role.ALL)
+            fun oauthClient(name: String) = optional("${name}_CLIENT_ID")?.takeIf { serving }?.let { OAuthClient(it, required("${name}_CLIENT_SECRET")) }
             check(role !in setOf(Role.RECONCILER, Role.ALL) || optional("RUNTIME_CLASS") != null || text("ALLOW_RUNC", "false").toBoolean()) {
                 "LIFTGATE_RUNTIME_CLASS is required for the reconciler; set LIFTGATE_ALLOW_RUNC=true to run tenant pods under runc without a sandbox"
             }
-            val github = if (role in setOf(Role.API, Role.BUILDER, Role.ALL) || optional("GITHUB_APP_ID") != null) GitHubConfig(
-                appId = required("GITHUB_APP_ID"),
-                privateKeyPem = required("GITHUB_APP_PRIVATE_KEY"),
-                webhookSecret = required("GITHUB_WEBHOOK_SECRET"),
-                clientId = required("GITHUB_CLIENT_ID"),
-                clientSecret = required("GITHUB_CLIENT_SECRET"),
-            ) else null
+            val github = if (role == Role.BUILDER || serving && optional("GITHUB_APP_ID") != null) GitHubConfig(required("GITHUB_APP_ID"), required("GITHUB_APP_PRIVATE_KEY")) else null
             val dashboardUrl = text("DASHBOARD_URL", "http://localhost:3000")
             val gitlabUrl = text("GITLAB_URL", GITLAB_COM).trimEnd('/')
             check(gitlabUrl.startsWith("https://")) { "LIFTGATE_GITLAB_URL must start with https://, because GitLab access tokens are sent to it" }
-            val encodedKey = required("SECRETS_MASTER_KEY")
-            val masterKey = runCatching { Base64.getDecoder().decode(encodedKey) }.getOrNull()?.takeIf { it.size == 32 }
-                ?: error("LIFTGATE_SECRETS_MASTER_KEY must be the base64 of 32 random bytes")
+            val encodedKey = if (role in setOf(Role.API, Role.RECONCILER, Role.ALL)) required("SECRETS_MASTER_KEY") else optional("SECRETS_MASTER_KEY")
+            val masterKey = encodedKey?.let { key ->
+                runCatching { Base64.getDecoder().decode(key) }.getOrNull()?.takeIf { it.size == 32 } ?: error("LIFTGATE_SECRETS_MASTER_KEY must be the base64 of 32 random bytes")
+            }
             fun selector(name: String) = optional(name)?.split(',')?.associate { pair ->
                 pair.split('=', limit = 2).map(String::trim).takeIf { it.size == 2 && it[0].isNotEmpty() }?.let { (key, value) -> key to value }
                     ?: error("LIFTGATE_$name must be key=value[,key=value]")
@@ -151,17 +145,24 @@ data class Config(
                 else -> error("LIFTGATE_REGISTRY_AUTH must be shared or token")
             }
             val builtInPlans = Plans()
+            val leaderElection = when (text("LEADER_ELECTION", "kubernetes")) {
+                "kubernetes" -> true
+                "off" -> false
+                else -> error("LIFTGATE_LEADER_ELECTION must be kubernetes or off")
+            }
+            val publicUrl = text("PUBLIC_URL", "http://localhost:8080")
 
             return Config(
                 role = role,
                 httpPort = text("HTTP_PORT", "8080").toInt(),
                 databaseUrl = text("DATABASE_URL", "jdbc:postgresql://localhost:5432/liftgate"),
                 databaseUser = text("DATABASE_USER", "liftgate"),
-                databasePassword = text("DATABASE_PASSWORD", "liftgate"),
+                databasePassword = optional("DATABASE_PASSWORD")
+                    ?: if (publicUrl.startsWith("https:")) error("LIFTGATE_DATABASE_PASSWORD is required when LIFTGATE_PUBLIC_URL is https") else "liftgate",
                 natsUrl = text("NATS_URL", "nats://localhost:4222"),
                 hazelcastCluster = text("HAZELCAST_CLUSTER", "liftgate"),
                 hazelcastKubernetes = text("HAZELCAST_KUBERNETES", "false").toBoolean(),
-                publicUrl = text("PUBLIC_URL", "http://localhost:8080"),
+                publicUrl = publicUrl,
                 dashboardUrl = dashboardUrl,
                 trustedProxies = text("TRUSTED_PROXIES", "0").toIntOrNull()?.takeIf { it >= 0 } ?: error("LIFTGATE_TRUSTED_PROXIES must be a number of proxy hops"),
                 deployDomain = text("DEPLOY_DOMAIN", "liftgate.app").takeIf { it.length <= DomainNames.MAX_DEPLOY_DOMAIN }
@@ -184,7 +185,7 @@ data class Config(
                 gatewayNamespace = text("GATEWAY_NAMESPACE", "liftgate-system"),
                 gatewayName = text("GATEWAY_NAME", "liftgate"),
                 prometheusUrl = text("PROMETHEUS_URL", "http://prometheus.liftgate-system:9090"),
-                leaderElection = text("LEADER_ELECTION", "kubernetes") != "off",
+                leaderElection = leaderElection,
                 natsReplicas = text("NATS_REPLICAS", "1").toInt(),
                 signup = signup,
                 signupAllow = signupAllow,
@@ -198,7 +199,7 @@ data class Config(
                 workloadNodeSelector = selector("WORKLOAD_NODE_SELECTOR") ?: nodeSelector,
                 workloadTolerations = tolerations("WORKLOAD_TOLERATIONS"),
                 registryTokenAuth = registryTokenAuth,
-                registryTokens = if (registryTokenAuth && role in setOf(Role.API, Role.ALL)) RegistryTokenConfig(
+                registryTokens = if (registryTokenAuth && serving) RegistryTokenConfig(
                     privateKeyPem = required("REGISTRY_TOKEN_KEY"),
                     certificatePem = required("REGISTRY_TOKEN_CERTIFICATE"),
                     pullPassword = required("REGISTRY_PULL_PASSWORD"),
@@ -211,6 +212,10 @@ data class Config(
                     text("DEFAULT_PLAN", builtInPlans.default),
                 ),
                 customDomainsMax = optional("CUSTOM_DOMAINS_MAX")?.let { it.toIntOrNull()?.takeIf { max -> max >= 0 } ?: error("LIFTGATE_CUSTOM_DOMAINS_MAX must be a number") },
+                githubWebhookSecret = if (serving && github != null) required("GITHUB_WEBHOOK_SECRET") else null,
+                githubClient = oauthClient("GITHUB"),
+                certIssuer = text("CERT_ISSUER", "letsencrypt"),
+                databasePoolSize = text("DATABASE_POOL_SIZE", if (serving) "10" else "3").toInt(),
             )
         }
     }

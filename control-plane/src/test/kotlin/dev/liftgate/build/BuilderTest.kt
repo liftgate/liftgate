@@ -61,7 +61,7 @@ class BuilderTest {
     private val image = "registry.liftgate.internal/acme/shop-api:abc123"
     private var permission = HttpStatusCode.OK to """{"permission":"write"}"""
     private val github = GitHubApp(
-        GitHubConfig("1", TestKeys.privateKeyPem, "webhook", "client", "client-secret"),
+        GitHubConfig("1", TestKeys.privateKeyPem),
         HttpClient(MockEngine { request ->
             val headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
             when (request.url.encodedPath) {

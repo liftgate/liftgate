@@ -43,6 +43,8 @@ class Cache(config: Config) : AutoCloseable {
     val samlRequests: IMap<String, String> = hazelcast.getMap("saml-requests")
     val samlAssertions: IMap<String, String> = hazelcast.getMap("saml-assertions")
     private val rateLimits: IMap<String, Int> = hazelcast.getMap("rate-limits")
+    val running get() = hazelcast.lifecycleService.isRunning
+    val members get() = hazelcast.cluster.members.size
 
     fun allow(key: String, limit: Int, window: Duration = 1.hours): Boolean =
         rateLimits.merge("$key:${System.currentTimeMillis() / window.inWholeMilliseconds}", 1, Int::plus)!! <= limit

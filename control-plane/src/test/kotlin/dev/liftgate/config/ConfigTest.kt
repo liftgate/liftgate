@@ -35,7 +35,7 @@ class ConfigTest {
         assertEquals("nats://localhost:4222", config.natsUrl)
         assertEquals("liftgate.app", config.deployDomain)
         assertEquals("liftgate-system", config.gatewayNamespace)
-        assertEquals(32, config.secretsMasterKey.size)
+        assertEquals(32, config.secretsMasterKey?.size)
         assertTrue(config.leaderElection)
         assertFalse(config.hazelcastKubernetes)
         assertNull(config.github)
@@ -43,6 +43,8 @@ class ConfigTest {
         assertTrue(config.nodeSelector.isEmpty())
         assertTrue(config.workloadTolerations.isEmpty() && config.buildTolerations.isEmpty())
         assertFalse(config.registryInsecure)
+        assertEquals("letsencrypt", config.certIssuer)
+        assertEquals(3, config.databasePoolSize)
     }
 
     @Test
@@ -85,9 +87,53 @@ class ConfigTest {
     }
 
     @Test
-    fun `api role requires github credentials`() {
-        val error = assertFailsWith<IllegalStateException> { Config.fromEnv(minimalEnv + ("LIFTGATE_ROLE" to "api")) }
-        assertTrue("LIFTGATE_GITHUB_APP_ID" in error.message.orEmpty())
+    fun `only the roles that open sealed values need the master key`() {
+        val keyless = minimalEnv - "LIFTGATE_SECRETS_MASTER_KEY"
+        mapOf("builder" to github, "meter" to emptyMap(), "migrate" to emptyMap()).forEach { (role, extra) ->
+            assertNull(Config.fromEnv(keyless + extra + ("LIFTGATE_ROLE" to role)).secretsMasterKey)
+        }
+        listOf("api", "all").forEach { role ->
+            val error = assertFailsWith<IllegalStateException> { Config.fromEnv(keyless + ("LIFTGATE_ROLE" to role)) }
+            assertTrue("LIFTGATE_SECRETS_MASTER_KEY" in error.message.orEmpty())
+        }
+    }
+
+    @Test
+    fun `the builder needs the GitHub App, the api runs without it, and only the api reads GitHub secrets`() {
+        val builderError = assertFailsWith<IllegalStateException> { Config.fromEnv(minimalEnv + ("LIFTGATE_ROLE" to "builder")) }
+        assertTrue("LIFTGATE_GITHUB_APP_ID" in builderError.message.orEmpty())
+        val api = Config.fromEnv(minimalEnv + ("LIFTGATE_ROLE" to "api"))
+        assertEquals(listOf(null, null, null), listOf(api.github, api.githubWebhookSecret, api.githubClient))
+        val builder = Config.fromEnv(minimalEnv + github - "LIFTGATE_GITHUB_WEBHOOK_SECRET" - "LIFTGATE_GITHUB_CLIENT_SECRET" + ("LIFTGATE_ROLE" to "builder"))
+        assertEquals(GitHubConfig("1", "pem"), builder.github)
+        assertEquals(listOf(null, null), listOf(builder.githubWebhookSecret, builder.githubClient))
+        val reconciler = Config.fromEnv(minimalEnv + github - "LIFTGATE_GITHUB_APP_PRIVATE_KEY" - "LIFTGATE_GITHUB_CLIENT_SECRET" + ("LIFTGATE_GOOGLE_CLIENT_ID" to "g"))
+        assertEquals(listOf(null, null, null), listOf(reconciler.github, reconciler.githubClient, reconciler.google))
+        val apiError = assertFailsWith<IllegalStateException> { Config.fromEnv(minimalEnv + github - "LIFTGATE_GITHUB_WEBHOOK_SECRET" + ("LIFTGATE_ROLE" to "api")) }
+        assertTrue("LIFTGATE_GITHUB_WEBHOOK_SECRET" in apiError.message.orEmpty())
+    }
+
+    @Test
+    fun `leader election is kubernetes or off`() {
+        assertFalse(Config.fromEnv(minimalEnv + ("LIFTGATE_LEADER_ELECTION" to "off")).leaderElection)
+        val error = assertFailsWith<IllegalStateException> { Config.fromEnv(minimalEnv + ("LIFTGATE_LEADER_ELECTION" to "false")) }
+        assertTrue("LIFTGATE_LEADER_ELECTION" in error.message.orEmpty())
+    }
+
+    @Test
+    fun `an https public url needs a database password`() {
+        val https = minimalEnv + ("LIFTGATE_PUBLIC_URL" to "https://liftgate.example.com")
+        val error = assertFailsWith<IllegalStateException> { Config.fromEnv(https) }
+        assertTrue("LIFTGATE_DATABASE_PASSWORD" in error.message.orEmpty())
+        assertEquals("s3cret", Config.fromEnv(https + ("LIFTGATE_DATABASE_PASSWORD" to "s3cret")).databasePassword)
+        assertEquals("liftgate", Config.fromEnv(minimalEnv).databasePassword)
+    }
+
+    @Test
+    fun `the api gets the larger connection pool and the issuer is configurable`() {
+        assertEquals(10, Config.fromEnv(minimalEnv + ("LIFTGATE_ROLE" to "api")).databasePoolSize)
+        val config = Config.fromEnv(minimalEnv + mapOf("LIFTGATE_DATABASE_POOL_SIZE" to "5", "LIFTGATE_CERT_ISSUER" to "zerossl"))
+        assertEquals(5 to "zerossl", config.databasePoolSize to config.certIssuer)
     }
 
     @Test
@@ -165,7 +211,8 @@ class ConfigTest {
             ),
         )
         assertEquals(Role.ALL, config.role)
-        assertEquals(GitHubConfig("1", "pem", "wh", "cid", "cs"), config.github)
+        assertEquals(GitHubConfig("1", "pem"), config.github)
+        assertEquals("wh" to OAuthClient("cid", "cs"), config.githubWebhookSecret to config.githubClient)
         assertFalse(config.leaderElection)
         assertEquals("runsc-debug", config.runtimeClass)
     }
@@ -187,12 +234,13 @@ class ConfigTest {
 
     @Test
     fun `oauth providers exist only when their client is configured`() {
-        val none = Config.fromEnv(minimalEnv)
+        val api = minimalEnv + ("LIFTGATE_ROLE" to "api")
+        val none = Config.fromEnv(api)
         assertEquals(listOf(null, null, null), listOf(none.google, none.gitlab, none.bitbucket))
         assertEquals("https://gitlab.com", none.gitlabUrl)
         assertTrue(none.gitlabTrustEmail)
         val config = Config.fromEnv(
-            minimalEnv + mapOf(
+            api + mapOf(
                 "LIFTGATE_GOOGLE_CLIENT_ID" to "g",
                 "LIFTGATE_GOOGLE_CLIENT_SECRET" to "gs",
                 "LIFTGATE_GITLAB_CLIENT_ID" to "l",
@@ -206,7 +254,7 @@ class ConfigTest {
         assertFalse(config.gitlabTrustEmail)
         assertTrue(Config.fromEnv(minimalEnv + mapOf("LIFTGATE_GITLAB_URL" to "https://git.example", "LIFTGATE_GITLAB_TRUST_EMAIL" to "true")).gitlabTrustEmail)
         assertNull(config.bitbucket)
-        val error = assertFailsWith<IllegalStateException> { Config.fromEnv(minimalEnv + ("LIFTGATE_BITBUCKET_CLIENT_ID" to "b")) }
+        val error = assertFailsWith<IllegalStateException> { Config.fromEnv(api + ("LIFTGATE_BITBUCKET_CLIENT_ID" to "b")) }
         assertTrue("LIFTGATE_BITBUCKET_CLIENT_SECRET" in error.message.orEmpty())
     }
 

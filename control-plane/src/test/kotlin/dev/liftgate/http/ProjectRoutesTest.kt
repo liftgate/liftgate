@@ -87,4 +87,18 @@ class ProjectRoutesTest {
         assertEquals(ErrorBody("plan_limit", "the free plan's projects limit is 1"), json.decodeFromString(ErrorBody.serializer(), refused.bodyAsText()))
         assertEquals(1L, db.tx { ProjectsTable.selectAll().count() })
     }
+
+    @Test
+    fun `import answers 409 while the GitHub App is not configured`() = testApplication {
+        orgs.create("acme", "Acme", user.id)
+        every { app.github } returns null
+        application { liftgate(app) }
+        val response = client.post("/api/v1/orgs/acme/projects") {
+            session()
+            contentType(ContentType.Application.Json)
+            setBody("""{"slug":"shop","name":"Shop","repoFullName":"acme/shop"}""")
+        }
+        assertEquals(HttpStatusCode.Conflict, response.status)
+        assertEquals("""{"error":"conflict","message":"the GitHub App is not configured"}""", response.bodyAsText())
+    }
 }

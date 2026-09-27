@@ -194,8 +194,8 @@ class ResourcesTest {
     }
 
     @Test
-    fun `certificate requests the custom hostname from the letsencrypt issuer beside the gateway`() {
-        val certificate = Resources.certificate(release.domains.last(), "liftgate-system")
+    fun `certificate requests the custom hostname from the configured issuer beside the gateway`() {
+        val certificate = Resources.certificate(release.domains.last(), "liftgate-system", "zerossl")
         val spec = certificate.additionalProperties.getValue("spec") as Map<*, *>
         assertEquals("cert-manager.io/v1" to "Certificate", certificate.apiVersion to certificate.kind)
         assertEquals("api.acme.dev", certificate.metadata.name)
@@ -203,7 +203,7 @@ class ResourcesTest {
         assertEquals(mapOf(MANAGED_LABEL to "true", SERVICE_ID_LABEL to testService.id.toString()), certificate.metadata.labels)
         assertEquals(listOf("api.acme.dev"), spec["dnsNames"])
         assertEquals("api.acme.dev-tls", spec["secretName"])
-        assertEquals(mapOf("name" to "letsencrypt", "kind" to "ClusterIssuer", "group" to "cert-manager.io"), spec["issuerRef"])
+        assertEquals(mapOf("name" to "zerossl", "kind" to "ClusterIssuer", "group" to "cert-manager.io"), spec["issuerRef"])
     }
 
     @Test

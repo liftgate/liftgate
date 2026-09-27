@@ -192,7 +192,7 @@ object Resources {
         .withNewSpec().withListeners(domains.map { listener(it) }).endSpec()
         .build()
 
-    fun certificate(domain: Domain, gatewayNamespace: String): GenericKubernetesResource = GenericKubernetesResourceBuilder()
+    fun certificate(domain: Domain, gatewayNamespace: String, issuer: String): GenericKubernetesResource = GenericKubernetesResourceBuilder()
         .withApiVersion("${certificateContext.group}/${certificateContext.version}")
         .withKind(certificateContext.kind)
         .withMetadata(meta(domain.hostname, gatewayNamespace, mapOf(MANAGED_LABEL to "true", SERVICE_ID_LABEL to domain.serviceId.toString())))
@@ -201,7 +201,7 @@ object Resources {
             mapOf(
                 "secretName" to domain.tlsSecret(),
                 "dnsNames" to listOf(domain.hostname),
-                "issuerRef" to mapOf("name" to "letsencrypt", "kind" to "ClusterIssuer", "group" to "cert-manager.io"),
+                "issuerRef" to mapOf("name" to issuer, "kind" to "ClusterIssuer", "group" to "cert-manager.io"),
             ),
         )
         .build()

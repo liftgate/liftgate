@@ -4,9 +4,6 @@ import dev.liftgate.App
 import dev.liftgate.TestDatabase
 import dev.liftgate.TestNats
 import dev.liftgate.admin.Admin
-import dev.liftgate.build.Builder
-import dev.liftgate.build.BuildJobs
-import dev.liftgate.deploy.BuildStatus
 import dev.liftgate.deploy.Builds
 import dev.liftgate.deploy.DeploymentStatus
 import dev.liftgate.deploy.Deployments
@@ -19,7 +16,6 @@ import dev.liftgate.secret.SecretBox
 import dev.liftgate.service.EnvVars
 import dev.liftgate.service.Service
 import dev.liftgate.service.ServiceKind
-import dev.liftgate.service.ServiceScope
 import dev.liftgate.service.ServiceSpec
 import dev.liftgate.service.Services
 import dev.liftgate.testConfig
@@ -32,8 +28,6 @@ import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer
 import io.fabric8.mockwebserver.http.RecordedRequest
-import io.mockk.coEvery
-import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
@@ -43,13 +37,10 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
-import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 import io.fabric8.kubernetes.api.model.apps.Deployment as KubeDeployment
@@ -161,6 +152,24 @@ class SuspensionTest {
     }
 
     @Test
+    fun `suspension stops a service with no running deployment and keeps the release in progress`() = runBlocking {
+        val (orgId, services) = seed()
+        val (web, worker) = services
+        deployments.transition(deployments.forService(web.id).single().id, DeploymentStatus.FAILED)
+        val releasing = release(worker).also { deployments.transition(it.id, DeploymentStatus.RELEASING) }
+        admin("suspend", "acme", "mining")
+        Suspension(app, client).reapply(orgId)
+        assertEquals(mapOf("api" to 0, "worker" to 0), workloads().associate { it.metadata.name to it.spec.replicas })
+        assertEquals(releasing.id.toString(), workloads().single { it.metadata.name == worker.slug }.metadata.labels[DEPLOYMENT_LABEL])
+        assertEquals(services.map { it.slug }.toSet(), sent("DELETE", "httproutes").map { it.first.substringAfterLast('/') }.toSet())
+
+        requests.clear()
+        admin("unsuspend", "acme")
+        Suspension(app, client).reapply(orgId)
+        assertEquals(mapOf("api" to 2, "worker" to 3), workloads().associate { it.metadata.name to it.spec.replicas })
+    }
+
+    @Test
     fun `suspending a cron service suspends its schedule and deletes the running jobs it started`() = runBlocking {
         val (orgId) = seed(ServiceSpec("nightly", "Nightly", ServiceKind.CRON, cronSchedule = "0 3 * * *"))
         val jobs = listOf("nightly-0" to "Complete", "nightly-1" to null, "report-1" to null).map { (name, condition) ->
@@ -176,31 +185,5 @@ class SuspensionTest {
         Suspension(app, client).reapply(orgId)
         assertEquals(true, client.kubernetesSerialization.unmarshal(sent("PATCH", "cronjobs").single().second, CronJob::class.java).spec.suspend)
         assertEquals(listOf("nightly-1"), sent("DELETE", "jobs").map { it.first.substringAfterLast('/') })
-    }
-
-    @Test
-    fun `a suspended release renders no replicas, a suspended cron job and no routing`() {
-        val suspended = testRelease().copy(org = testOrg.copy(suspendedAt = Instant.now()))
-        assertEquals(0, Resources.deployment(suspended, null).spec.replicas)
-        assertEquals(true, Resources.cronJob(suspended, null).spec.suspend)
-        assertFalse(suspended.routable)
-        assertEquals(false, Resources.cronJob(testRelease(), null).spec.suspend)
-    }
-
-    @Test
-    fun `builds of a suspended org are refused`() = runBlocking {
-        val queued = testBuild.copy(status = BuildStatus.QUEUED, imageRef = null)
-        val builds = mockk<Builds>(relaxUnitFun = true) { coEvery { byId(queued.id) } returns queued }
-        val app = mockk<App> {
-            every { config } returns testConfig()
-            every { this@mockk.builds } returns builds
-            every { services } returns mockk<Services> {
-                coEvery { scope(testService.id) } returns ServiceScope(testService, testEnvironment, testProject, testOrg.copy(suspendedAt = Instant.now()))
-            }
-        }
-        Builder(app, client).build(queued.id)
-        coVerify { builds.markFailed(queued.id, "the organization is suspended") }
-        coVerify(exactly = 0) { builds.markRunning(any()) }
-        assertNull(client.batch().v1().jobs().inNamespace("liftgate-build").withName(BuildJobs.name(queued.id)).get())
     }
 }

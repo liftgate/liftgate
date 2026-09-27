@@ -51,7 +51,8 @@ class Reconciler(private val app: App, private val kube: KubernetesClient) {
     }
 
     suspend fun reapply(serviceId: UUID) {
-        app.deployments.current(serviceId)?.let { load(it) }?.let { apply(it) }
+        val latest = app.deployments.forService(serviceId, limit = 1).singleOrNull() ?: return
+        load(latest.takeIf { it.status == DeploymentStatus.RELEASING } ?: app.deployments.current(serviceId) ?: latest)?.let { apply(it) }
     }
 
     suspend fun teardown(namespace: String, serviceId: UUID?) {

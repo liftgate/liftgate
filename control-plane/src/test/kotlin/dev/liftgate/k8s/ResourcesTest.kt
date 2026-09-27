@@ -3,6 +3,7 @@ package dev.liftgate.k8s
 import dev.liftgate.service.ServiceKind
 import io.fabric8.kubernetes.api.model.PodSpec
 import io.fabric8.kubernetes.api.model.Quantity
+import java.time.Instant
 import java.util.Base64
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -202,6 +203,15 @@ class ResourcesTest {
         val quota = Resources.resourceQuota(release)
         assertEquals(release.namespace, quota.metadata.namespace)
         assertEquals(setOf("pods", "limits.cpu", "limits.memory"), quota.spec.hard.keys)
+    }
+
+    @Test
+    fun `a suspended release renders no replicas, a suspended cron job and no routing`() {
+        val suspended = release.copy(org = testOrg.copy(suspendedAt = Instant.now()))
+        assertEquals(0, Resources.deployment(suspended, null).spec.replicas)
+        assertEquals(true, Resources.cronJob(suspended, null).spec.suspend)
+        assertFalse(suspended.routable)
+        assertEquals(false, Resources.cronJob(release, null).spec.suspend)
     }
 
     private fun assertRestricted(pod: PodSpec) {

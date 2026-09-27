@@ -6,6 +6,7 @@ import dev.liftgate.org.UserStatus
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.URLProtocol
 import io.ktor.http.Url
 import io.ktor.http.protocolWithAuthority
 import io.ktor.server.application.ApplicationCall
@@ -15,7 +16,7 @@ import io.ktor.server.request.header
 import io.ktor.server.request.httpMethod
 import io.ktor.util.AttributeKey
 
-const val SESSION_COOKIE = "__Host-liftgate_session"
+const val SESSION_COOKIE = "liftgate_session"
 val safeMethods = setOf(HttpMethod.Get, HttpMethod.Head, HttpMethod.Options)
 private val principalKey = AttributeKey<Principal>("liftgate.principal")
 
@@ -24,6 +25,12 @@ val ApplicationCall.principal: Principal
 
 val ApplicationCall.principalOrNull: Principal?
     get() = attributes.getOrNull(principalKey)
+
+val App.localHttp: Boolean
+    get() = Url(config.publicUrl).run { protocol == URLProtocol.HTTP && host in setOf("localhost", "127.0.0.1") }
+
+val App.sessionCookie: String
+    get() = if (localHttp) SESSION_COOKIE else "__Host-$SESSION_COOKIE"
 
 fun authPlugin(app: App) = createApplicationPlugin("LiftgateAuth") {
     val origins = setOf(app.config.dashboardUrl, app.config.publicUrl).map { Url(it).protocolWithAuthority }
@@ -40,5 +47,5 @@ fun authPlugin(app: App) = createApplicationPlugin("LiftgateAuth") {
 private suspend fun App.resolve(call: ApplicationCall): Principal? {
     val bearer = call.request.authorization()?.removePrefix("Bearer ")?.takeIf { it.startsWith("lg_") }
     if (bearer != null) return apiTokens.resolve(bearer)?.let { (orgId, userId) -> orgs.user(userId)?.let { Principal(it, token = true, orgId = orgId) } }
-    return call.request.cookies[SESSION_COOKIE]?.let { sessions.resolve(it) }?.let { Principal(it, token = false) }
+    return call.request.cookies[sessionCookie]?.let { sessions.resolve(it) }?.let { Principal(it, token = false) }
 }

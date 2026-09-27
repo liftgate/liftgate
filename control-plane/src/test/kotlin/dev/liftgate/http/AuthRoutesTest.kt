@@ -129,7 +129,7 @@ class AuthRoutesTest {
         assertEquals(HttpStatusCode.Found, callback.status)
         assertEquals("http://localhost:3000/acme", callback.headers[HttpHeaders.Location])
         assertEquals(authorize.parameters["code_challenge"], pkceChallenge(verifier!!))
-        assertTrue(callback.headers.getAll(HttpHeaders.SetCookie).orEmpty().any { it.startsWith("$SESSION_COOKIE=session-1") && "Secure" in it })
+        assertTrue(callback.headers.getAll(HttpHeaders.SetCookie).orEmpty().any { it.startsWith("$SESSION_COOKIE=session-1") })
         coVerify { gitConnections.store(user.id, "dean", OAuthTokens("ghu_token", null, null)) }
     }
 

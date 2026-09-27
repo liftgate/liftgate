@@ -23,7 +23,7 @@ npm install
 npm run dev
 ```
 
-The dashboard runs on `http://localhost:3000` and expects the control plane on `http://localhost:8080`. In development `next.config.ts` rewrites `/api/*` (including the log WebSockets) to that address, so the `__Host-liftgate_session` cookie is same-origin and no CORS setup is needed.
+The dashboard runs on `http://localhost:3000` and expects the control plane on `http://localhost:8080`. In development `next.config.ts` rewrites `/api/*` (including the log WebSockets) to that address, so the `liftgate_session` cookie is same-origin and no CORS setup is needed.
 
 `npm run lint` and `npm run build` must both pass before a change is merged.
 

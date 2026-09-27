@@ -15,16 +15,23 @@ import io.ktor.client.request.post
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.response.respond
+import io.ktor.server.routing.get
+import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
 import io.micrometer.prometheusmetrics.PrometheusConfig
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry
+import io.mockk.Runs
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
+import io.mockk.just
 import io.mockk.mockk
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * @author Dean
@@ -86,5 +93,43 @@ class AuthTest {
         coEvery { sessions.resolve("stale") } returns null
         application { liftgate(app) }
         assertEquals(HttpStatusCode.Unauthorized, client.get("/api/v1/me") { cookie(SESSION_COOKIE, "stale") }.status)
+    }
+
+    @Test
+    fun `the session cookie drops its host prefix and secure flag only for a plain http localhost api`() {
+        coEvery { sessions.resolve("session-1") } returns User(UUID.randomUUID(), "dean", null, null, null)
+        coEvery { sessions.delete("session-1") } just Runs
+        val cases = mapOf(
+            "https://liftgate.example.com" to "__Host-liftgate_session",
+            "http://liftgate.example.com" to "__Host-liftgate_session",
+            "http://localhost:8080" to "liftgate_session",
+            "http://127.0.0.1:8080" to "liftgate_session",
+        )
+        cases.forEach { (publicUrl, name) ->
+            val secure = name != SESSION_COOKIE
+            every { app.config } returns testConfig(mapOf("LIFTGATE_PUBLIC_URL" to publicUrl, "LIFTGATE_DATABASE_PASSWORD" to "secret"))
+            testApplication {
+                application {
+                    liftgate(app)
+                    routing {
+                        get("/start") {
+                            call.startSession(app, "session-1")
+                            call.respond(HttpStatusCode.NoContent)
+                        }
+                    }
+                }
+                val started = client.get("/start").headers[HttpHeaders.SetCookie].orEmpty()
+                assertTrue(started.startsWith("$name=session-1;") && ("Secure" in started) == secure, started)
+                assertEquals(HttpStatusCode.OK, client.get("/api/v1/me") { cookie(name, "session-1") }.status)
+                if (secure) assertEquals(HttpStatusCode.Unauthorized, client.get("/api/v1/me") { cookie(SESSION_COOKIE, "session-1") }.status)
+                val logout = client.post("/api/v1/auth/logout") {
+                    cookie(name, "session-1")
+                    header(HttpHeaders.Origin, "http://localhost:3000")
+                }
+                val cleared = logout.headers[HttpHeaders.SetCookie].orEmpty()
+                assertTrue(cleared.startsWith("$name=;") && ("Secure" in cleared) == secure, cleared)
+            }
+        }
+        coVerify(exactly = cases.size) { sessions.delete("session-1") }
     }
 }

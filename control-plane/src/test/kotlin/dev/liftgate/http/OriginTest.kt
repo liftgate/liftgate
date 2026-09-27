@@ -94,14 +94,14 @@ class OriginTest {
     }
 
     @Test
-    fun `logout needs the dashboard origin and clears the secure host-only cookie`() = testApplication {
+    fun `logout needs the dashboard origin and clears the session cookie`() = testApplication {
         application { liftgate(app) }
         assertEquals(HttpStatusCode.Forbidden, client.post("/api/v1/auth/logout") { session(origin = EVIL) }.status)
         coVerify(exactly = 0) { sessions.delete(any()) }
         val response = client.post("/api/v1/auth/logout") { session() }
         assertEquals(HttpStatusCode.NoContent, response.status)
         val cleared = response.headers[HttpHeaders.SetCookie].orEmpty()
-        assertTrue(cleared.startsWith("__Host-liftgate_session=;") && "Secure" in cleared && "Path=/" in cleared, cleared)
+        assertTrue(cleared.startsWith("$SESSION_COOKIE=;") && "Path=/" in cleared, cleared)
     }
 
     @Test

@@ -53,7 +53,7 @@ During an upgrade the previous release keeps serving while the new one migrates 
 - Contract: drop or rename only what the previous release no longer reads, one release after the code stopped reading it, in a pull request of its own.
 - Never edit a migration that has been merged; add the next version instead.
 
-The `migrations` job in `upgrade.yml` fails when a pull request adds or changes a migration containing `DROP` or `RENAME`. A contract pull request fails it on purpose, and a maintainer merges it after checking that the latest release does not read what it removes. The `upgrade` job installs the previous release, seeds it, upgrades it to the pull request's build while requests keep flowing, and fails on any error response.
+The `migrations` job in `upgrade.yml` fails when a pull request adds or changes a migration containing `DROP` or `RENAME`. A contract pull request fails it on purpose, and a maintainer merges it after checking that the latest release does not read what it removes. The `upgrade` job installs the previous release, seeds it, upgrades it to the pull request's build while requests keep flowing, and fails on any error response except those sent while the previous release's pods shut down, which the build under test cannot change.
 
 ## Commit messages
 

@@ -47,8 +47,9 @@ kubectl -n "$NAMESPACE" rollout status deployment/liftgate-control-plane --timeo
 handover="$(date -d '1 second ago' +%T.%3N)"
 kubectl -n "$NAMESPACE" wait --for=delete $old --timeout=5m
 drained="$(date +%T.%3N)"
+for attempt in $(seq 20); do probe --fail > /dev/null; done
 kubectl -n "$NAMESPACE" rollout status deployment/liftgate-dashboard --timeout=5m
-kubectl get --raw "/api/v1/namespaces/$NAMESPACE/services/liftgate-control-plane:http/proxy/readyz"
+kubectl get --raw "/api/v1/namespaces/$NAMESPACE/services/liftgate-control-plane:http/proxy/readyz" > /dev/null
 running
 test "$(sql --command 'select version from flyway_schema_history where success order by installed_rank desc limit 1')" = \
   "$(ls control-plane/src/main/resources/db/migration | sed -n 's/^V\([0-9]*\)__.*/\1/p' | sort -n | tail -1)"

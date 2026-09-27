@@ -59,6 +59,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 private const val LAYER = "layer"
@@ -113,7 +114,7 @@ class RegistryJanitorTest {
     }
 
     private suspend fun succeed(buildId: UUID, image: String): Deployment =
-        builds.markSucceeded(buildId, image).also { deployments.transition(it.id, DeploymentStatus.RUNNING) }
+        assertNotNull(builds.markSucceeded(buildId, image)).also { deployments.transition(it.id, DeploymentStatus.RUNNING) }
 
     private suspend fun release(serviceId: UUID, image: String) = succeed(builds.request(serviceId, image.substringAfterLast(':'), null, "main").id, image)
 
@@ -187,7 +188,7 @@ class RegistryJanitorTest {
     fun `a service whose deploys all fail keeps its newest ten builds and the cache`() = runBlocking {
         val api = services.create(environment(), ServiceSpec("api", "API", ServiceKind.WEB)).id
         (1..30).forEach {
-            val deployment = builds.markSucceeded(builds.request(api, sha(it), null, "main").id, "registry.test/acme/shop-api:${sha(it)}")
+            val deployment = assertNotNull(builds.markSucceeded(builds.request(api, sha(it), null, "main").id, "registry.test/acme/shop-api:${sha(it)}"))
             deployments.transition(deployment.id, DeploymentStatus.FAILED)
         }
         registry["acme/shop-api"] = ((1..30).associate { sha(it) to "sha256:d%02d".format(it) } + ("cache" to "sha256:dcache")).toMutableMap()
@@ -196,6 +197,19 @@ class RegistryJanitorTest {
 
         assertEquals((21..30).map(::sha).toSet() + "cache", registry.getValue("acme/shop-api").keys)
         assertEquals((1..20).map(::sha).toSet(), pruned())
+    }
+
+    @Test
+    fun `a pending rollback to a build older than the newest ten keeps that build's image`() = runBlocking {
+        val api = services.create(environment(), ServiceSpec("api", "API", ServiceKind.WEB)).id
+        val released = (1..15).map { release(api, "registry.test/acme/shop-api:${sha(it)}") }
+        assertEquals(DeploymentStatus.PENDING, deployments.rollback(released[1].id).status)
+        registry["acme/shop-api"] = ((1..15).associate { sha(it) to "sha256:d%02d".format(it) } + ("cache" to "sha256:dcache")).toMutableMap()
+
+        assertEquals(4, janitor(testConfig().copy(registry = "registry.test")).runOnce())
+
+        assertEquals((6..15).map(::sha).toSet() + sha(2) + "cache", registry.getValue("acme/shop-api").keys)
+        assertEquals(listOf(1, 3, 4, 5).map(::sha).toSet(), pruned())
     }
 
     @Test

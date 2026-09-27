@@ -357,11 +357,13 @@ empty, neither appears.
 | `build.namespace` | `liftgate-build` | `LIFTGATE_BUILD_NAMESPACE`; the chart creates it |
 | `build.allowedEgressCidrs` | `[]` | Private addresses build jobs may reach, such as the registry, each as `{cidr: 10.0.0.5/32, ports: [5000]}` (TCP); everything else private is blocked. A bare CIDR string still works but opens every port, and the install notes warn about it |
 | `build.registryCredentials` | `""` | Docker `config.json` content; rendered as Secret `registry-credentials` in `build.namespace` and mounted by build jobs. `registryAuth: shared` only |
+| `build.nodeSelector` | `{}` | `LIFTGATE_BUILD_NODE_SELECTOR`; node labels for build jobs, `nodeSelector` when empty |
+| `build.tolerations` | `[]` | `LIFTGATE_BUILD_TOLERATIONS`; taints build jobs tolerate, in the same form as `workloads.tolerations` |
 | `runtimeClass` | `gvisor` | `LIFTGATE_RUNTIME_CLASS`; the RuntimeClass of every tenant pod. The chart refuses to render when it is empty unless `allowUnsandboxedTenants=true` |
 | `allowUnsandboxedTenants` | `false` | With an empty `runtimeClass`, renders `LIFTGATE_ALLOW_RUNC=true` so tenant pods run under runc on the node kernel. Only for clusters where every tenant is trusted |
 | `workloads.nodeSelector` | `{}` | `LIFTGATE_WORKLOAD_NODE_SELECTOR`; node labels for tenant pods, `nodeSelector` when empty |
 | `workloads.tolerations` | `[]` | `LIFTGATE_WORKLOAD_TOLERATIONS`; taints tenant pods tolerate, written as for `kubectl taint`: `key=value:Effect`, `key:Effect` or `key` |
-| `nodeSelector` | `{}` | Node labels that pin the control plane, dashboard, CloudNativePG cluster and build jobs; rendered into `LIFTGATE_NODE_SELECTOR` as `key=value,key=value`, which tenant pods use when `workloads.nodeSelector` is empty. See [Node pools](#node-pools) for NATS |
+| `nodeSelector` | `{}` | Node labels that pin the control plane, dashboard and CloudNativePG cluster; rendered into `LIFTGATE_NODE_SELECTOR` as `key=value,key=value`, which tenant pods and build jobs use when `workloads.nodeSelector` or `build.nodeSelector` is empty. See [Node pools](#node-pools) for NATS |
 | `registryInsecure` | `false` | `LIFTGATE_REGISTRY_INSECURE`; build jobs push to `registry` over plain HTTP |
 | `registryAuth` | `shared` | `LIFTGATE_REGISTRY_AUTH`: `shared` or `token`, see [Registry authentication](#registry-authentication) |
 | `registryTokenKey` | `""` | `LIFTGATE_REGISTRY_TOKEN_KEY`, Secret; RSA private key in PEM that signs registry tokens. Required with `token` |
@@ -389,9 +391,10 @@ missing configuration instead of running with blank secrets.
 
 ## Node pools
 
-`nodeSelector` pins the platform (control plane, dashboard, CloudNativePG) and build jobs.
-Tenant pods are placed with `workloads.nodeSelector` and `workloads.tolerations`, and fall back
-to `nodeSelector` when `workloads.nodeSelector` is empty.
+`nodeSelector` pins the platform (control plane, dashboard, CloudNativePG). Tenant pods are
+placed with `workloads.nodeSelector` and `workloads.tolerations`, build jobs with
+`build.nodeSelector` and `build.tolerations`, and each falls back to `nodeSelector` when its
+own selector is empty.
 
 The `nats` subchart reads its own values, and Helm cannot template one value from another, so
 repeat the platform selector under `nats.podTemplate.merge.spec.nodeSelector`:

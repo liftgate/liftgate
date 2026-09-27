@@ -170,6 +170,22 @@ class BuilderTest {
     }
 
     @Test
+    fun `build jobs run on the build pool`() {
+        val config = testConfig(
+            mapOf(
+                "LIFTGATE_NODE_SELECTOR" to "liftgate.dev/pool=platform",
+                "LIFTGATE_BUILD_NODE_SELECTOR" to "liftgate.dev/pool=build",
+                "LIFTGATE_BUILD_TOLERATIONS" to "liftgate.dev/pool=build:NoSchedule",
+            ),
+        )
+        every { app.config } returns config
+        build(JobStatusBuilder().withFailed(1).build())
+        val pod = job().get().spec.template.spec
+        assertEquals(mapOf("liftgate.dev/pool" to "build"), pod.nodeSelector)
+        assertEquals(config.buildTolerations, pod.tolerations)
+    }
+
+    @Test
     fun `a build without the github app fails immediately`() = runBlocking {
         every { app.github } returns null
         Builder(app, client).build(queued.id)

@@ -105,7 +105,8 @@ kubectl -n "$ns" create secret generic liftgate-postgres-backup \
 
 helm upgrade liftgate charts/liftgate --namespace "$ns" --reuse-values \
   --set postgres.backup.enabled=true \
-  --set postgres.backup.endpointUrl=http://garage.garage.svc:3900
+  --set postgres.backup.endpointUrl=http://garage.garage.svc:3900 \
+  --set postgres.backup.destinationPath=s3://liftgate-pg/
 kubectl -n "$ns" get objectstore/liftgate-postgres scheduledbackup/liftgate-postgres
 eventually sidecar
 kubectl -n "$ns" wait pod/liftgate-postgres-1 --for=condition=Ready --timeout=5m
@@ -131,9 +132,13 @@ wal="$(sql "select pg_walfile_name(pg_switch_wal())")"
 eventually archived
 
 test "$(kubectl -n "$ns" get pvc --selector cnpg.io/cluster=liftgate-postgres --output name)" = persistentvolumeclaim/liftgate-postgres-1
+pv="$(kubectl -n "$ns" get pvc --selector cnpg.io/cluster=liftgate-postgres --output jsonpath='{.items[*].spec.volumeName}')"
+test "$(kubectl get pv "$pv" --output jsonpath='{.spec.persistentVolumeReclaimPolicy}')" = Delete
+kubectl patch pv "$pv" --patch '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
 kubectl -n "$ns" delete cluster liftgate-postgres
 kubectl -n "$ns" wait pvc --selector cnpg.io/cluster=liftgate-postgres --for=delete --timeout=5m
 kubectl -n "$ns" wait secret/liftgate-postgres-app --for=delete --timeout=5m
+kubectl wait pv "$pv" --for=jsonpath='{.status.phase}'=Released --timeout=5m
 
 helm upgrade liftgate charts/liftgate --namespace "$ns" --reuse-values \
   --set postgres.backup.recoverFrom=liftgate-postgres \
@@ -143,6 +148,8 @@ kubectl -n "$ns" wait cluster/liftgate-postgres --for=condition=Ready --timeout=
 test "$(sql "select count(*) from projects where slug = 'hello'")" = 1
 test "$(sql "select name from organizations where slug = 'e2e'")" = "End to end"
 eventually backed_up liftgate-postgres-restored
+kubectl patch pv "$pv" --patch '{"spec":{"persistentVolumeReclaimPolicy":"Delete"}}'
+kubectl wait pv "$pv" --for=delete --timeout=5m
 
 kubectl -n "$ns" rollout restart deployment/liftgate-control-plane
 kubectl -n "$ns" rollout status deployment/liftgate-control-plane --timeout=5m

@@ -30,7 +30,8 @@ the first restore, then the value of `postgres.backup.serverName`.
 ## Restore
 
 A restore replaces the `Cluster` in place. It keeps its name, Services and Secret name, recovers
-into new volumes from the object store, and archives to a new folder from then on.
+into new volumes from the object store, and archives to a new folder from then on. The old
+volumes are kept until the restored database has been checked.
 
 1. Pick the target time in RFC 3339, for example `2026-09-27T10:00:00Z`, or leave `recoverTo`
    out to replay everything that was archived. A completed backup must be older than the target:
@@ -48,16 +49,32 @@ into new volumes from the object store, and archives to a new folder from then o
    kubectl -n liftgate-system exec "$PRIMARY" -c postgres -- psql -U postgres -Atc 'select last_archived_wal from pg_stat_archiver'
    ```
 
-3. Delete the `Cluster`. This removes the Postgres pods, their volumes and the
-   `liftgate-postgres-app` Secret; the object store is untouched.
+3. Keep the old volumes. Deleting the `Cluster` deletes its PVCs, and a dynamically provisioned
+   volume with the default `Delete` reclaim policy is deleted with its data. Switch them to
+   `Retain` and note the names this prints:
+
+   ```sh
+   for pv in $(kubectl -n liftgate-system get pvc --selector cnpg.io/cluster=liftgate-postgres -o jsonpath='{.items[*].spec.volumeName}'); do
+     kubectl patch pv "$pv" -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
+   done
+   ```
+
+   Until step 8 they hold the old data directory, including any WAL the archive is missing
+   because step 2 could not run. They are the only way back if the restore fails; without them
+   step 4 is irreversible.
+
+4. Delete the `Cluster`. This removes the Postgres pods, their PVCs and the
+   `liftgate-postgres-app` Secret; the volumes from step 3 stay `Released` and the object store
+   is untouched.
 
    ```sh
    kubectl -n liftgate-system delete cluster liftgate-postgres
    kubectl -n liftgate-system wait pvc --selector cnpg.io/cluster=liftgate-postgres --for=delete --timeout=10m
    kubectl -n liftgate-system wait secret/liftgate-postgres-app --for=delete --timeout=10m
+   kubectl get pv <names from step 3>
    ```
 
-4. Recreate it from the archive. `recoverFrom` is the folder the lost cluster archived to:
+5. Recreate it from the archive. `recoverFrom` is the folder the lost cluster archived to:
    `liftgate-postgres`, or the current `serverName` after an earlier restore. `serverName` must
    be a folder that has never been used: CloudNativePG refuses to archive into one that already
    holds WAL, and the chart refuses to render when the two are equal. Write the new values into
@@ -72,7 +89,7 @@ into new volumes from the object store, and archives to a new folder from then o
    kubectl -n liftgate-system wait cluster/liftgate-postgres --for=condition=Ready --timeout=60m
    ```
 
-5. Restart the control plane. The restore generates a new password for the `liftgate` role,
+6. Restart the control plane. The restore generates a new password for the `liftgate` role,
    and running pods still hold the old one.
 
    ```sh
@@ -80,12 +97,20 @@ into new volumes from the object store, and archives to a new folder from then o
    kubectl -n liftgate-system rollout status deployment --selector app.kubernetes.io/component=control-plane
    ```
 
-6. The `ScheduledBackup` is named after `serverName`, so the restored cluster takes its first
+7. The `ScheduledBackup` is named after `serverName`, so the restored cluster takes its first
    base backup as soon as it is ready. Point-in-time restores of the new folder work once it has
    completed:
 
    ```sh
    kubectl -n liftgate-system get backups --selector cnpg.io/scheduled-backup=liftgate-postgres-20260927
+   ```
+
+8. Once the restored data checks out, switch each volume from step 3 back to `Delete`; the
+   provisioner then deletes it and its data:
+
+   ```sh
+   kubectl patch pv <name> -p '{"spec":{"persistentVolumeReclaimPolicy":"Delete"}}'
+   kubectl wait pv <name> --for=delete --timeout=10m
    ```
 
 A restore rewinds only the database. Namespaces, Deployments, routes and registry images created

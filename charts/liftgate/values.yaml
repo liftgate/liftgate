@@ -42,7 +42,7 @@ postgres:
   backup:
     enabled: false
     endpointUrl: ""
-    destinationPath: s3://liftgate-pg/
+    destinationPath: ""
     credentialsSecret: liftgate-postgres-backup
     retention: 30d
     schedule: "0 0 3 * * *"

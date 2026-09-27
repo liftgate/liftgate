@@ -168,7 +168,7 @@ Chart:
 ```sh
 helm dependency update charts/liftgate
 helm lint charts/liftgate --set profile=single
-helm template liftgate charts/liftgate --values charts/liftgate/values-ha.yaml
+helm template liftgate charts/liftgate --values charts/liftgate/values-ha.yaml --set postgres.backup.destinationPath=s3://liftgate-pg/
 ```
 
 ## Repository layout

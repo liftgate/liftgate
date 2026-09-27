@@ -26,7 +26,7 @@ jobs:
           - profile: single
             args: --set profile=single
           - profile: ha
-            args: --values charts/liftgate/values-ha.yaml
+            args: --values charts/liftgate/values-ha.yaml --set postgres.backup.destinationPath=s3://liftgate-pg/
     steps:
       - uses: actions/checkout@v7
       - uses: azure/setup-helm@v5

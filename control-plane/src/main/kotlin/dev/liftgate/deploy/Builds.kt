@@ -48,6 +48,7 @@ fun ResultRow.toBuild() = Build(
     this[BuildsTable.startedAt]?.toInstant(),
     this[BuildsTable.finishedAt]?.toInstant(),
     this[BuildsTable.createdAt].toInstant(),
+    this[BuildsTable.imagePruned],
 )
 
 /**

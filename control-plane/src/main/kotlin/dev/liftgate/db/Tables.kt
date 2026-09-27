@@ -299,6 +299,7 @@ object Builds : Table("builds") {
     val finishedAt = timestampWithTimeZone("finished_at").nullable()
     val createdAt = createdAtColumn()
     val registrySecretHash = text("registry_secret_hash").nullable()
+    val imagePruned = bool("image_pruned").default(false)
     override val primaryKey = PrimaryKey(id)
 
     init {
@@ -398,4 +399,13 @@ object Outbox : Table("outbox") {
     init {
         index("outbox_unpublished", false, id) { publishedAt.isNull() }
     }
+}
+
+/**
+ * @author Dean
+ * @date 9/27/2026
+ */
+object RegistryOrphans : Table("registry_orphans") {
+    val repository = text("repository")
+    override val primaryKey = PrimaryKey(repository)
 }

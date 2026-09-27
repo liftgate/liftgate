@@ -1,6 +1,7 @@
 package dev.liftgate.org
 
 import dev.liftgate.auth.OrgRole
+import dev.liftgate.build.orphanRepositories
 import dev.liftgate.db.ApiTokens
 import dev.liftgate.db.Db
 import dev.liftgate.db.Memberships
@@ -121,6 +122,7 @@ class Orgs(private val db: Db, private val limits: Limits = Limits()) {
 
     private fun JdbcTransaction.deleteOrgs(ids: List<UUID>) {
         enqueueTeardown { Projects.orgId inList ids }
+        orphanRepositories(Projects.orgId inList ids)
         Organizations.deleteWhere { Organizations.id inList ids }
     }
 }

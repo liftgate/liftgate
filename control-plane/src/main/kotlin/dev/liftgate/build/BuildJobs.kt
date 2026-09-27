@@ -52,7 +52,7 @@ object BuildJobs {
     private const val RETENTION_SECONDS = 24 * 60 * 60
     private const val BUILDER_UID = 1000L
     private const val DOCKER_CONFIG = "/home/user/.docker"
-    private const val DOCKER_CONFIG_KEY = ".dockerconfigjson"
+    const val DOCKER_CONFIG_KEY = ".dockerconfigjson"
     private const val WORKSPACE = "/workspace"
     private const val TOKEN_KEY = "token"
     private const val EPHEMERAL_STORAGE = "20Gi"

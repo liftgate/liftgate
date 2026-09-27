@@ -58,7 +58,7 @@ export function DeploymentsTab({ service }: { service: Service }) {
                         <span title={deployment.createdAt}>{timeAgo(deployment.createdAt)}</span>
                       </Cell>
                       <Cell className="text-right">
-                        {i > 0 && (
+                        {i > 0 && !build?.imagePruned && (
                           <Button
                             disabled={rollback.pending}
                             pending={rollback.pending && target === deployment.id}

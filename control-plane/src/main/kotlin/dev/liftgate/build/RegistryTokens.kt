@@ -24,6 +24,7 @@ import java.util.UUID
 
 const val REGISTRY_TOKEN_SECONDS = 300L
 private const val PULL_ACCOUNT = "pull"
+private const val JANITOR_ACCOUNT = "janitor"
 private const val ISSUER = "liftgate"
 
 /**
@@ -50,6 +51,8 @@ class RegistryTokens(private val db: Db, private val services: Services, private
         }
         return sign(account, access)
     }
+
+    fun janitor(repository: String): String = sign(JANITOR_ACCOUNT, listOf(mapOf("type" to "repository", "name" to repository, "actions" to listOf("pull", "delete"))))
 
     private suspend fun grant(account: String, password: String): Pair<String?, Set<String>>? =
         if (account == PULL_ACCOUNT) {

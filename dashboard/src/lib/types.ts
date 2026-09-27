@@ -67,6 +67,7 @@ export type Build = {
   startedAt: string | null;
   finishedAt: string | null;
   createdAt: string;
+  imagePruned: boolean;
 };
 
 export type DeploymentStatus = "pending" | "releasing" | "running" | "failed" | "superseded" | "rolled_back";

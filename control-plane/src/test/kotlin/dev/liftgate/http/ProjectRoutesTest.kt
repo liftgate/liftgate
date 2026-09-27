@@ -3,7 +3,6 @@ package dev.liftgate.http
 import dev.liftgate.App
 import dev.liftgate.TestDatabase
 import dev.liftgate.auth.Access
-import dev.liftgate.auth.GitConnection
 import dev.liftgate.auth.GitConnections
 import dev.liftgate.auth.Sessions
 import dev.liftgate.build.GitHubApp
@@ -26,7 +25,6 @@ import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
-import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -45,10 +43,7 @@ class ProjectRoutesTest {
         every { access } returns mockk<Access>(relaxUnitFun = true)
         every { orgs } returns this@ProjectRoutesTest.orgs
         every { projects } returns Projects(this@ProjectRoutesTest.db)
-        every { gitConnections } returns mockk<GitConnections> {
-            coEvery { githubToken(user.id) } returns "ghu_dean"
-            coEvery { list(user.id) } returns listOf(GitConnection("github", "dean", Instant.now()))
-        }
+        every { gitConnections } returns mockk<GitConnections> { coEvery { github(user.id) } returns ("ghu_dean" to "dean") }
         every { github } returns mockk<GitHubApp> { coEvery { installation("ghu_dean", any()) } returns 42 }
     }
 

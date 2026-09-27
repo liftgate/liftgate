@@ -467,9 +467,9 @@ A limit that is left out is unlimited, so `unlimited: {}` limits nothing.
 | `ownedOrgs` | Organizations one user can own, taken from `defaultPlan` |
 | `projects`, `services`, `customDomains` | Per organization |
 | `environmentsPerProject` | Per project |
-| `replicas`, `cpuMillis`, `memoryMb` | Sums of `replicas`, `replicas × cpuMillis` and `replicas × memoryMb` over the organization's services |
-| `concurrentBuilds` | Running builds per organization; further builds wait in the queue |
-| `buildsPerHour` | Builds started per organization in the last hour; further builds fail |
+| `replicas`, `cpuMillis`, `memoryMb` | Sums of pods, pods × `cpuMillis` and pods × `memoryMb` over the organization's services, where a service's pods are its `replicas` and a cron service counts as one pod |
+| `concurrentBuilds` | Running builds per organization; further builds wait in the queue. Needs `buildsPerHour` |
+| `buildsPerHour` | Builds per organization started in the last hour or waiting in the queue; further builds fail |
 | `cpuRequestRatio` | CPU request as a share of the limit (default `1`) |
 | `ephemeralMb` | Disk per container (default `2048`) |
 | `egressBandwidth` | `kubernetes.io/egress-bandwidth` of tenant pods, such as `20M`; needs the Cilium bandwidth manager |

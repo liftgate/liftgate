@@ -27,6 +27,7 @@ data class Plan(
         require(listOfNotNull(ownedOrgs, projects, environmentsPerProject, services, cpuMillis, memoryMb, replicas, customDomains, concurrentBuilds, buildsPerHour).all { it >= 0 }) {
             "plan limits cannot be negative"
         }
+        require(concurrentBuilds == null || buildsPerHour != null) { "a plan that limits concurrentBuilds must also limit buildsPerHour" }
         require(cpuRequestRatio > 0 && cpuRequestRatio <= 1) { "cpuRequestRatio must be above 0 and at most 1" }
         require(ephemeralMb > 0) { "ephemeralMb must be positive" }
         require(egressBandwidth?.matches(Regex("[0-9]+[kMG]?")) != false) { "egressBandwidth must be a rate such as 20M" }

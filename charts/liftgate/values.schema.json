@@ -321,7 +321,8 @@
         "buildsPerHour": { "$ref": "#/definitions/limit" },
         "egressBandwidth": { "type": "string", "pattern": "^[0-9]+[kMG]?$" },
         "udp": { "type": "boolean" }
-      }
+      },
+      "dependencies": { "concurrentBuilds": ["buildsPerHour"] }
     }
   },
   "allOf": [

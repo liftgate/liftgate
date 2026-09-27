@@ -5,6 +5,7 @@ import dev.liftgate.TestNats
 import dev.liftgate.db.Builds as BuildsTable
 import dev.liftgate.db.Organizations
 import dev.liftgate.db.now
+import dev.liftgate.db.sql
 import dev.liftgate.deploy.Build
 import dev.liftgate.deploy.BuildStatus
 import dev.liftgate.deploy.Builds
@@ -42,7 +43,7 @@ import kotlin.time.Duration.Companion.seconds
  */
 class BuildAdmissionTest {
     private val db = TestDatabase.clean()
-    private val admission = BuildAdmission(db, Plans(mapOf("free" to Plan(concurrentBuilds = 1, buildsPerHour = 10)), "free"))
+    private val admission = admission(Plan(concurrentBuilds = 1, buildsPerHour = 10))
     private val builds = Builds(db)
     private var installation = 0L
 
@@ -52,6 +53,8 @@ class BuildAdmissionTest {
         val project = projects.create(orgId, "shop", "Shop", "$org/shop", ++installation)
         return orgId to Services(db).create(projects.environments(project.id).single().id, ServiceSpec("web", "Web", ServiceKind.WEB)).id
     }
+
+    private fun admission(plan: Plan) = BuildAdmission(db, Plans(mapOf("free" to plan), "free"))
 
     private suspend fun admit(build: Build, orgId: UUID) = admission.admit(requireNotNull(builds.byId(build.id)), orgId)
 
@@ -70,6 +73,21 @@ class BuildAdmissionTest {
         builds.markFailed(first.id, "the build job failed")
         assertNull(admit(second, orgId))
         assertEquals(BuildStatus.RUNNING, status(second))
+    }
+
+    @Test
+    fun `a stale read neither restarts a running build nor starts a cancelled one`() = runBlocking {
+        val (orgId, serviceId) = service("acme")
+        val running = builds.request(serviceId, "aaa", null, "main")
+        assertNull(admit(running, orgId))
+        val startedAt = builds.byId(running.id)?.startedAt
+        assertNull(admission.admit(running, orgId))
+        assertEquals(startedAt, builds.byId(running.id)?.startedAt)
+
+        val cancelled = builds.request(serviceId, "bbb", null, "main")
+        db.tx { BuildsTable.update({ BuildsTable.id eq cancelled.id }) { it[status] = BuildStatus.CANCELLED.sql } }
+        assertEquals(Duration.ZERO, assertFailsWith<Redeliver> { admission.admit(cancelled, orgId) }.delay)
+        assertEquals(BuildStatus.CANCELLED, status(cancelled))
     }
 
     @Test
@@ -97,16 +115,26 @@ class BuildAdmissionTest {
     }
 
     @Test
+    fun `builds waiting behind a running one count against the hourly limit`() = runBlocking {
+        val (orgId, serviceId) = service("acme")
+        val requested = (0..10).map { builds.request(serviceId, "sha$it", null, "main") }
+        assertNull(admit(requested.first(), orgId))
+        requested.subList(1, 10).forEach { assertFailsWith<Redeliver> { admit(it, orgId) } }
+        assertEquals("the free plan's builds per hour limit is 10", admit(requested.last(), orgId))
+    }
+
+    @Test
     fun `org B's build starts while org A holds twenty queued builds`() = runBlocking {
         val nats = TestNats.clean()
         val (acme, acmeService) = service("acme")
         val (rival, rivalService) = service("rival")
         val queued = (0..20).map { builds.request(acmeService, "sha$it", null, "main") }
         val theirs = builds.request(rivalService, "sha", null, "main")
+        val roomy = admission(Plan(concurrentBuilds = 1, buildsPerHour = 25))
         val started = CompletableDeferred<Unit>()
         val consumer = nats.consume(Subject.BUILD_REQUESTED, "fairness-test", this, concurrency = 4) {
             val build = requireNotNull(builds.byId(it.uuid("buildId")))
-            admission.admit(build, if (build.serviceId == acmeService) acme else rival)?.let(::error)
+            roomy.admit(build, if (build.serviceId == acmeService) acme else rival)?.let(::error)
             if (build.id == theirs.id) started.complete(Unit) else awaitCancellation()
         }
         (queued + theirs).forEachIndexed { i, build -> nats.publish(Subject.BUILD_REQUESTED.value, i + 1L, buildJsonObject { put("buildId", build.id.toString()) }) }

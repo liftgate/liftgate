@@ -11,8 +11,10 @@ import dev.liftgate.db.Users
 import dev.liftgate.db.sql
 import dev.liftgate.domain.DomainKind
 import dev.liftgate.http.planLimit
+import dev.liftgate.service.ServiceKind
 import dev.liftgate.service.ServiceSpec
 import dev.liftgate.service.toService
+import org.jetbrains.exposed.v1.core.LongColumnType
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.innerJoin
@@ -64,7 +66,7 @@ class Limits(private val plans: Plans = Plans(), private val customDomainsMax: I
         val (name, plan) = lock(orgId)
         count(name, plan.customDomains, "custom domains", customDomains(orgId))
         customDomainsMax?.let { max ->
-            TransactionManager.current().exec("select pg_advisory_xact_lock($CUSTOM_DOMAINS_LOCK)")
+            TransactionManager.current().exec("select pg_advisory_xact_lock(?)", listOf(LongColumnType() to CUSTOM_DOMAINS_LOCK))
             if (Domains.selectAll().where { Domains.kind eq DomainKind.CUSTOM.sql }.count() >= max) planLimit("this installation allows $max custom domains in total and all of them are in use")
         }
     }
@@ -94,8 +96,10 @@ class Limits(private val plans: Plans = Plans(), private val customDomainsMax: I
         .where { Projects.orgId eq orgId }
         .associate { it[Services.id] to it.toService().spec() }
 
+    private val ServiceSpec.pods get() = if (kind == ServiceKind.CRON) 1 else replicas
+
     private fun reserved(specs: Collection<ServiceSpec>) =
-        Triple(specs.sumOf { it.replicas }, specs.sumOf { it.replicas * it.cpuMillis }, specs.sumOf { it.replicas * it.memoryMb })
+        Triple(specs.sumOf { it.pods }, specs.sumOf { it.pods * it.cpuMillis }, specs.sumOf { it.pods * it.memoryMb })
 
     private fun reserve(name: String, plan: Plan, before: Collection<ServiceSpec>, after: Collection<ServiceSpec>) {
         val was = reserved(before).toList()

@@ -117,6 +117,17 @@ class LimitsTest {
     }
 
     @Test
+    fun `a cron service counts as one pod whatever its replicas`() = runBlocking {
+        val production = production("acme")
+        val cron = spec("job", replicas = 0, cpuMillis = 2000).copy(kind = ServiceKind.CRON, cronSchedule = "* * * * *")
+        assertEquals("the free plan's cpuMillis limit is 1000 across the organization, and this change needs 2000", refused { services.create(production, cron) })
+        assertEquals(0L, rows(ServicesTable))
+        val job = services.create(production, cron.copy(cpuMillis = 500))
+        assertEquals("the free plan's cpuMillis limit is 1000 across the organization, and this change needs 1500", refused { services.update(job.id, cron.copy(cpuMillis = 1500)) })
+        assertEquals(500, services.scope(job.id)?.service?.cpuMillis)
+    }
+
+    @Test
     fun `two concurrent service creates cannot both take the last slot`() = runBlocking {
         repeat(5) { round ->
             val production = production("org-$round")

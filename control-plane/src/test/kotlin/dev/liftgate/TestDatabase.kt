@@ -10,7 +10,7 @@ import org.testcontainers.utility.DockerImageName
  * @date 9/27/2026
  */
 object TestDatabase {
-    private val postgres = PostgreSQLContainer<Nothing>(DockerImageName.parse("postgres:16-alpine")).apply { start() }
+    val postgres = PostgreSQLContainer<Nothing>(DockerImageName.parse("postgres:16-alpine")).apply { start() }
     private val db = Db(
         testConfig(
             mapOf(

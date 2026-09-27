@@ -103,6 +103,10 @@ class Nats(private val config: Config, private val retryDelay: Duration = Durati
         }
     }
 
+    fun backlog(subject: Subject): Long = connection.jetStreamManagement().getConsumers(STREAM)
+        .filter { it.consumerConfiguration.filterSubject == subject.value }
+        .sumOf { it.numPending + it.numAckPending }
+
     fun publishLog(subject: String, line: String) = connection.publish(subject, line.toByteArray())
 
     fun logs(subject: String): Flow<String> = callbackFlow {

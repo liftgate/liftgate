@@ -15,7 +15,10 @@ import dev.liftgate.testConfig
 import io.fabric8.kubernetes.api.model.GenericKubernetesResourceList
 import io.fabric8.kubernetes.api.model.HasMetadata
 import io.fabric8.kubernetes.api.model.StatusBuilder
+import io.fabric8.kubernetes.client.ConfigBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
+import io.fabric8.kubernetes.client.KubernetesClientBuilder
+import io.fabric8.kubernetes.client.KubernetesClientException
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer
 import io.mockk.coEvery
@@ -26,7 +29,9 @@ import kotlinx.coroutines.runBlocking
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
+import io.fabric8.kubernetes.api.model.apps.Deployment as KubeDeployment
 
 /**
  * @author Dean
@@ -96,6 +101,9 @@ class ReconcilerTest {
         server.expect().get().withPath("$certificatesPath?labelSelector=liftgate.dev%2Fmanaged%3Dtrue").andReturn(200, certificates).always()
     }
 
+    private fun reject(code: Int) = server.expect().patch().withPath(namespacePath + apply)
+        .andReturn(code, StatusBuilder().withCode(code).withMessage("the namespace was rejected").build()).always()
+
     private fun sent() = List(server.requestCount) { server.takeRequest() }
 
     private fun paths(method: String) = sent().filter { it.method == method }.map { it.path.removeSuffix(apply) }
@@ -106,7 +114,7 @@ class ReconcilerTest {
         Reconciler(app, client).release(testDeployment.id)
 
         val applied = sent().filter { it.method == "PATCH" }
-        assertEquals((listOf(namespacePath, quotaPath, secretPath) + policyPaths + deploymentPath + servicePath + routePath + certificatePath + gatewayPath).map { it + apply }, applied.map { it.path })
+        assertEquals((listOf(namespacePath, quotaPath) + policyPaths + secretPath + deploymentPath + servicePath + routePath + certificatePath + gatewayPath).map { it + apply }, applied.map { it.path })
         assertTrue("\"hostname\":\"api.acme.dev\"" in applied.last().utf8Body)
         assertTrue(applied.all { it.getHeader("Content-Type").startsWith("application/apply-patch+yaml") })
         val pod = applied.single { it.path.startsWith(deploymentPath) }.utf8Body
@@ -118,8 +126,56 @@ class ReconcilerTest {
 
     @Test
     fun `a rejected apply fails the deployment`() = runBlocking {
+        reject(422)
         Reconciler(app, client).release(testDeployment.id)
-        coVerify { deployments.transition(testDeployment.id, DeploymentStatus.FAILED, 0, any()) }
+        coVerify { deployments.transition(testDeployment.id, DeploymentStatus.FAILED, 0, "the namespace was rejected") }
+    }
+
+    @Test
+    fun `a server error on apply keeps the deployment releasing and fails the delivery so it is redelivered`() = runBlocking {
+        reject(503)
+        val noRetries = KubernetesClientBuilder().withConfig(ConfigBuilder(client.configuration).withRequestRetryBackoffLimit(0).build()).build()
+        noRetries.use { assertEquals(503, assertFailsWith<KubernetesClientException> { Reconciler(app, it).release(testDeployment.id) }.code) }
+        coVerify { deployments.transition(testDeployment.id, DeploymentStatus.RELEASING) }
+        coVerify(exactly = 0) { deployments.transition(testDeployment.id, DeploymentStatus.FAILED, any(), any()) }
+    }
+
+    @Test
+    fun `a release retried after its workload rolled out still applies the route`() = runBlocking {
+        server.expect().patch().withPath(routePath + apply).andReturn(503, StatusBuilder().withCode(503).withMessage("unavailable").build()).once()
+        acceptAll()
+        val noRetries = KubernetesClientBuilder().withConfig(ConfigBuilder(client.configuration).withRequestRetryBackoffLimit(0).build()).build()
+        noRetries.use { assertEquals(503, assertFailsWith<KubernetesClientException> { Reconciler(app, it).release(testDeployment.id) }.code) }
+        coEvery { deployments.byId(testDeployment.id) } returns testDeployment.copy(status = DeploymentStatus.RUNNING)
+        Reconciler(app, client).release(testDeployment.id)
+        assertEquals(listOf(routePath, routePath), paths("PATCH").filter { it == routePath })
+        coVerify(exactly = 1) { deployments.transition(testDeployment.id, DeploymentStatus.RELEASING) }
+        coVerify(exactly = 0) { deployments.transition(testDeployment.id, DeploymentStatus.FAILED, any(), any()) }
+    }
+
+    @Test
+    fun `a release is superseded without applying when the cluster already runs a newer deployment`() = runBlocking {
+        val newer = testDeployment.copy(id = UUID.randomUUID(), createdAt = testDeployment.createdAt.plusSeconds(1))
+        coEvery { deployments.byId(newer.id) } returns newer
+        server.expect().get().withPath(deploymentPath).andReturn(200, Resources.deployment(release.copy(deployment = newer), null)).always()
+        Reconciler(app, client).release(testDeployment.id)
+        assertTrue(paths("PATCH").isEmpty())
+        coVerify { deployments.transition(testDeployment.id, DeploymentStatus.SUPERSEDED) }
+        coVerify(exactly = 0) { deployments.transition(testDeployment.id, DeploymentStatus.RELEASING) }
+    }
+
+    @Test
+    fun `an apply that lands after a newer release re-applies the newer one and is superseded`() = runBlocking {
+        acceptAll()
+        val newer = testDeployment.copy(id = UUID.randomUUID(), status = DeploymentStatus.RUNNING, createdAt = testDeployment.createdAt.plusSeconds(1))
+        coEvery { deployments.forService(testService.id, 1) } returnsMany listOf(listOf(testDeployment), listOf(newer))
+        Reconciler(app, client).release(testDeployment.id)
+
+        val labels = sent().filter { it.method == "PATCH" && it.path.startsWith(deploymentPath) }
+            .map { client.kubernetesSerialization.unmarshal(it.utf8Body, KubeDeployment::class.java).metadata.labels[DEPLOYMENT_LABEL] }
+        assertEquals(listOf(testDeployment.id, newer.id).map { it.toString() }, labels)
+        coVerify { deployments.transition(testDeployment.id, DeploymentStatus.SUPERSEDED) }
+        coVerify(exactly = 0) { deployments.transition(newer.id, any(), any(), any()) }
     }
 
     @Test
@@ -131,8 +187,19 @@ class ReconcilerTest {
     }
 
     @Test
-    fun `finished deployments are ignored`() = runBlocking {
+    fun `a release of a deleted service is acknowledged without touching the cluster`() = runBlocking {
+        coEvery { services.scope(testService.id) } returns null
+        Reconciler(app, client).release(testDeployment.id)
+        assertEquals(0, server.requestCount)
+        coVerify(exactly = 0) { deployments.transition(any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `finished deployments and a running one that is no longer the newest are ignored`() = runBlocking {
         coEvery { deployments.byId(testDeployment.id) } returns testDeployment.copy(status = DeploymentStatus.SUPERSEDED)
+        Reconciler(app, client).release(testDeployment.id)
+        coEvery { deployments.forService(testService.id, 1) } returns listOf(testDeployment.copy(id = UUID.randomUUID()))
+        coEvery { deployments.byId(testDeployment.id) } returns testDeployment.copy(status = DeploymentStatus.RUNNING)
         Reconciler(app, client).release(testDeployment.id)
         assertEquals(0, server.requestCount)
         coVerify(exactly = 0) { deployments.transition(any(), any(), any(), any()) }
@@ -164,8 +231,8 @@ class ReconcilerTest {
     @Test
     fun `teardown of a deleted service removes what carries its id and of a deleted project the namespace`() = runBlocking {
         acceptAll()
-        val kinds = listOf("apis/apps/v1/$namespaced/deployments", "apis/batch/v1/$namespaced/cronjobs", "api/v1/$namespaced/services", "api/v1/$namespaced/secrets")
-        val labelled = (kinds + "apis/gateway.networking.k8s.io/v1/$namespaced/httproutes")
+        val kinds = listOf("apis/apps/v1/$namespaced/deployments", "apis/batch/v1/$namespaced/cronjobs", "api/v1/$namespaced/services")
+        val labelled = (kinds + "apis/gateway.networking.k8s.io/v1/$namespaced/httproutes" + "api/v1/$namespaced/secrets")
             .map { "/$it?labelSelector=liftgate.dev%2Fservice-id%3D${testService.id}" }
         labelled.forEach { server.expect().delete().withPath(it).andReturn(200, StatusBuilder().build()).always() }
         server.expect().delete().withPath(namespacePath).andReturn(200, StatusBuilder().build()).always()

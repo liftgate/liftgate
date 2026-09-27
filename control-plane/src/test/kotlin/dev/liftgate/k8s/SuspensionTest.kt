@@ -45,6 +45,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 import io.fabric8.kubernetes.api.model.apps.Deployment as KubeDeployment
@@ -103,7 +104,7 @@ class SuspensionTest {
         return org.id to services
     }
 
-    private suspend fun release(service: Service) = builds.markSucceeded(builds.request(service.id, "abc123", null, "main").id, "registry/acme/shop-${service.slug}:abc123")
+    private suspend fun release(service: Service) = assertNotNull(builds.markSucceeded(builds.request(service.id, "abc123", null, "main").id, "registry/acme/shop-${service.slug}:abc123"))
 
     private fun accept(path: String) = server.expect().delete().withPath(path).andReply(200) { record(it).let { StatusBuilder().build() } }.always()
 

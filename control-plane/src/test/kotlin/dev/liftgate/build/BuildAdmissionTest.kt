@@ -64,7 +64,7 @@ class BuildAdmissionTest {
     fun `with one concurrent build a second stays queued until the first finishes`() = runBlocking {
         val (orgId, serviceId) = service("acme")
         val first = builds.request(serviceId, "aaa", null, "main")
-        val second = builds.request(serviceId, "bbb", null, "main")
+        val second = builds.request(serviceId, "bbb", null, "preview")
         assertNull(admit(first, orgId))
         assertEquals(Duration.ofSeconds(15), assertFailsWith<Redeliver> { admit(second, orgId) }.delay)
         assertEquals(BuildStatus.QUEUED, status(second))
@@ -117,7 +117,7 @@ class BuildAdmissionTest {
     @Test
     fun `builds waiting behind a running one count against the hourly limit`() = runBlocking {
         val (orgId, serviceId) = service("acme")
-        val requested = (0..10).map { builds.request(serviceId, "sha$it", null, "main") }
+        val requested = (0..10).map { builds.request(serviceId, "sha$it", null, "b$it") }
         assertNull(admit(requested.first(), orgId))
         requested.subList(1, 10).forEach { assertFailsWith<Redeliver> { admit(it, orgId) } }
         assertEquals("the free plan's builds per hour limit is 10", admit(requested.last(), orgId))
@@ -128,7 +128,7 @@ class BuildAdmissionTest {
         val nats = TestNats.clean()
         val (acme, acmeService) = service("acme")
         val (rival, rivalService) = service("rival")
-        val queued = (0..20).map { builds.request(acmeService, "sha$it", null, "main") }
+        val queued = (0..20).map { builds.request(acmeService, "sha$it", null, "b$it") }
         val theirs = builds.request(rivalService, "sha", null, "main")
         val roomy = admission(Plan(concurrentBuilds = 1, buildsPerHour = 25))
         val started = CompletableDeferred<Unit>()

@@ -77,8 +77,8 @@ class AdminTest {
         val acme = service(owner, "acme", 1)
         val other = service(owner, "other", 2)
         val builds = Builds(db)
-        val queued = builds.request(acme.id, "aaa", null, "main")
         val running = builds.request(acme.id, "bbb", null, "main").also { builds.markRunning(it.id) }
+        val queued = builds.request(acme.id, "aaa", null, "main")
         val elsewhere = builds.request(other.id, "aaa", null, "main")
 
         assertEquals("acme is suspended", exec("suspend", "acme", "crypto", "mining"))

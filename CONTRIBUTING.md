@@ -33,7 +33,7 @@ The date is the day the file was created, written `M/D/YYYY` without leading zer
 - At most two levels of nesting inside a function; extract or invert instead of indenting further.
 - No redundant locals, no speculative parameters, no abstraction with a single user: no interface with one implementation, no factory for one product.
 - Small related declarations may share a file; a substantial class gets its own file. Annotation classes live in a dedicated `Annotations.kt` per package, never beside the code they configure.
-- Verify library APIs against the versions pinned in `control-plane/gradle/libs.versions.toml`. Several are newer than most examples online: Exposed 1.5 lives in `org.jetbrains.exposed.v1.*`, and Ktor 3.6, fabric8 7.9 and Hazelcast 5.7 differ from their predecessors.
+- Verify library APIs against the versions pinned in `control-plane/gradle/libs.versions.toml`. Several are newer than most examples online: Exposed 1.5 lives in `org.jetbrains.exposed.v1.*`, and Ktor 3.6, fabric8 8.0 and Hazelcast 5.7 differ from their predecessors.
 
 Code is judged by how it reads, not only by whether it works.
 

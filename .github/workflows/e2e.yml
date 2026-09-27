@@ -58,4 +58,5 @@ jobs:
           kubectl -n liftgate-system logs deployment/liftgate-control-plane --tail=400 || true
           kubectl -n env-e2e describe pods || true
           kubectl get gateways,httproutes --all-namespaces -o yaml || true
+          kubectl -n kube-system exec ds/cilium -c cilium-agent -- hubble observe --verdict DROPPED --last 100 || true
           kubectl -n liftgate-system get events --sort-by=.lastTimestamp | tail -60

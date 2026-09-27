@@ -1,0 +1,16 @@
+{{- if eq .Values.gateway.className "cilium" }}
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: {{ include "liftgate.fullname" . }}-gateway-to-services
+  labels:
+    {{- include "liftgate.labels" . | nindent 4 }}
+spec:
+  endpointSelector:
+    matchExpressions:
+      - key: liftgate.dev/service-id
+        operator: Exists
+  ingress:
+    - fromEntities:
+        - ingress
+{{- end }}

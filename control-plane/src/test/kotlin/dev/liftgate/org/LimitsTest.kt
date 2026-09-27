@@ -86,6 +86,14 @@ class LimitsTest {
     }
 
     @Test
+    fun `a plan without environments refuses the project that would need one`() = runBlocking {
+        val none = Limits(Plans(mapOf("none" to Plan(environmentsPerProject = 0)), "none"))
+        val org = Orgs(db, none).create("acme", "Acme", db.tx { insertUser("dean", null, null, null) }.id)
+        assertEquals("the none plan's environments per project limit is 0", refused { Projects(db, none).create(org.id, "shop", "Shop", "acme/shop", 1) })
+        assertEquals(0L, rows(ProjectsTable))
+    }
+
+    @Test
     fun `a patch over the org's cpu budget is refused and leaves the service unchanged, while shrinking always passes`() = runBlocking {
         val production = production("acme")
         val web = services.create(production, spec("web"))

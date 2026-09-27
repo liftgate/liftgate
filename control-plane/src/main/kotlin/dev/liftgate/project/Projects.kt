@@ -71,6 +71,7 @@ class Projects(private val db: Db, private val limits: Limits = Limits()) {
             it[ProjectsTable.installationId] = installationId
             it[ProjectsTable.importedByLogin] = importedByLogin
         }.single().toProject()
+        limits.environment(project.id)
         insertEnvironment(project.id, "production", "Production", EnvironmentKind.PRODUCTION, project.repoDefaultBranch)
         project
     }

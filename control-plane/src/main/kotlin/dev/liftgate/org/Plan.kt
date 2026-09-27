@@ -22,4 +22,10 @@ data class Plan(
     val buildsPerHour: Int? = null,
     val egressBandwidth: String? = null,
     val udp: Boolean = true,
-)
+) {
+    init {
+        require(cpuRequestRatio > 0 && cpuRequestRatio <= 1) { "cpuRequestRatio must be above 0 and at most 1" }
+        require(ephemeralMb > 0) { "ephemeralMb must be positive" }
+        require(egressBandwidth?.matches(Regex("[0-9]+[kMG]?")) != false) { "egressBandwidth must be a rate such as 20M" }
+    }
+}

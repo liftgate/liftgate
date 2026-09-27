@@ -61,6 +61,9 @@ class ConfigTest {
         assertEquals(100, config.customDomainsMax)
         listOf(
             mapOf("LIFTGATE_PLANS" to """{"free":{"project":3}}""", "LIFTGATE_DEFAULT_PLAN" to "free") to "LIFTGATE_PLANS",
+            mapOf("LIFTGATE_PLANS" to """{"free":{"cpuRequestRatio":2}}""", "LIFTGATE_DEFAULT_PLAN" to "free") to "cpuRequestRatio",
+            mapOf("LIFTGATE_PLANS" to """{"free":{"egressBandwidth":"fast"}}""", "LIFTGATE_DEFAULT_PLAN" to "free") to "egressBandwidth",
+            mapOf("LIFTGATE_PLANS" to """{"free":{},"default":{}}""", "LIFTGATE_DEFAULT_PLAN" to "free") to "LIFTGATE_PLANS",
             mapOf("LIFTGATE_PLANS" to """{"free":{}}""") to "LIFTGATE_DEFAULT_PLAN",
             mapOf("LIFTGATE_DEFAULT_PLAN" to "free") to "LIFTGATE_DEFAULT_PLAN",
             mapOf("LIFTGATE_CUSTOM_DOMAINS_MAX" to "lots") to "LIFTGATE_CUSTOM_DOMAINS_MAX",

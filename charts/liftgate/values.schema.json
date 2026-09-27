@@ -293,7 +293,7 @@
         "tolerations": { "$ref": "#/definitions/tolerations" }
       }
     },
-    "plans": { "type": "object", "minProperties": 1, "additionalProperties": { "$ref": "#/definitions/plan" } },
+    "plans": { "type": "object", "minProperties": 1, "propertyNames": { "not": { "const": "default" } }, "additionalProperties": { "$ref": "#/definitions/plan" } },
     "defaultPlan": { "type": "string", "minLength": 1 }
   },
   "definitions": {

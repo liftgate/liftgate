@@ -153,8 +153,8 @@ against the same image after 30 deploys and checks that the kept images and cach
 
 On 2.8.3 garbage collection keeps only the manifests a tag points at, so it also removes the
 manifests that a tagged OCI index or manifest list lists, with their config and layers. While the
-timer runs, this registry must hold no index or list whose entries are manifests. Builds push
-their image and `:cache` as single OCI manifests (checked on 2026-09-27 by running
+timer runs, this registry must hold no index or list whose entries are manifests. A Dockerfile
+build pushes its image and `:cache` as single OCI manifests (checked on 2026-09-27 by running
 `build-image/build.sh` with buildctl v0.33.0 against a scratch registry). The platform's own
 images are indexes: on 2026-09-27, `HEAD` with an `Accept` of the OCI index and manifest types and
 the Docker list and manifest types answered `application/vnd.oci.image.index.v1+json` for

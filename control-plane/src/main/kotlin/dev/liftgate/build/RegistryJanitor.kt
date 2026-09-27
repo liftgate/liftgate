@@ -61,7 +61,7 @@ import kotlin.time.Duration.Companion.days
 
 private const val KEPT_BUILDS = 10
 private val building = listOf(BuildStatus.QUEUED, BuildStatus.RUNNING).map { it.sql }
-private val manifestTypes = listOf(
+internal val manifestTypes = listOf(
     "application/vnd.oci.image.index.v1+json",
     "application/vnd.oci.image.manifest.v1+json",
     "application/vnd.docker.distribution.manifest.list.v2+json",

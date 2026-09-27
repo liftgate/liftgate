@@ -66,7 +66,21 @@ have them.
          password: <contents of pull-password>
    ```
 
-4. Replace the container with one that reads `config.yml` and the certificate:
+4. Re-push the platform images as their amd64 manifests, which the garbage collection under
+   [Image retention](#image-retention) needs and which no account can push once authentication
+   is on:
+
+   ```sh
+   for r in build-image control-plane dashboard; do
+     m=http://10.200.0.1:5050/v2/liftgate/$r/manifests
+     d=$(curl -sf -H 'Accept: application/vnd.oci.image.index.v1+json' "$m/0.1.0-alpha.6" |
+       jq -r '.manifests[] | select(.platform.architecture == "amd64") | .digest')
+     curl -sf -H 'Accept: application/vnd.oci.image.manifest.v1+json' "$m/$d" |
+       curl -sf -X PUT -H 'Content-Type: application/vnd.oci.image.manifest.v1+json' --data-binary @- "$m/0.1.0-alpha.6"
+   done
+   ```
+
+   Then replace the container with one that reads `config.yml` and the certificate:
 
    ```sh
    install -m 644 infra/registry/config.yml /etc/liftgate-registry/config.yml
@@ -136,6 +150,19 @@ registry in read-only mode while it runs. Checked on 2026-09-27: `registry:2.8.3
 `REGISTRY_STORAGE_MAINTENANCE_READONLY='{"enabled":true}'` answers uploads with 405 and still
 serves `GET /v2/`, so nodes keep pulling. `RegistryJanitorTest` runs this garbage collection
 against the same image after 30 deploys and checks that the kept images and cache survive it.
+
+On 2.8.3 garbage collection keeps only the manifests a tag points at, so it also removes the
+manifests that a tagged OCI index or manifest list lists, with their config and layers. While the
+timer runs, this registry must hold no index or list whose entries are manifests. Builds push
+their image and `:cache` as single OCI manifests (checked on 2026-09-27 by running
+`build-image/build.sh` with buildctl v0.33.0 against a scratch registry). The platform's own
+images are indexes: on 2026-09-27, `HEAD` with an `Accept` of the OCI index and manifest types and
+the Docker list and manifest types answered `application/vnd.oci.image.index.v1+json` for
+`liftgate/build-image`, `liftgate/control-plane` and `liftgate/dashboard` at `0.1.0-alpha.6`,
+each listing an amd64 manifest and an attestation manifest, and nodes pull them from here. On a
+copy of `/srv/liftgate-registry`, garbage collection left their amd64 manifests unfetchable and
+shrank the copy from 414 MB to 1 MB; after the re-push in step 4 of the switch-over it kept all
+three with every layer. `RegistryJanitorTest` checks both shapes.
 
 Install it only after the switch-over above, because it starts the registry from `config.yml`.
 `/usr/local/sbin/liftgate-registry-gc`, mode 755:

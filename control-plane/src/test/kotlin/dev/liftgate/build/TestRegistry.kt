@@ -37,6 +37,7 @@ object TestRegistry {
         HttpRequest.newBuilder(URI(if (target.startsWith("http")) target else "http://${container.host}:${container.getMappedPort(5000)}$target"))
             .method(method, body?.let { HttpRequest.BodyPublishers.ofString(it) } ?: HttpRequest.BodyPublishers.noBody())
             .header("Authorization", "Bearer $token")
+            .header("Accept", manifestTypes)
             .apply { type?.let { header("Content-Type", it) } }
             .build(),
         HttpResponse.BodyHandlers.ofString(),

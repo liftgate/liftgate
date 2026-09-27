@@ -62,6 +62,8 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 private const val LAYER = "layer"
+private const val OCI_MANIFEST = "application/vnd.oci.image.manifest.v1+json"
+private const val OCI_INDEX = "application/vnd.oci.image.index.v1+json"
 
 /**
  * @author Dean
@@ -214,7 +216,7 @@ class RegistryJanitorTest {
     }
 
     @Test
-    fun `thirty deploys on distribution keep ten sha tags, the cache and the running image through garbage collection`() = runBlocking {
+    fun `thirty deploys on distribution keep ten sha tags, the cache and the running image through garbage collection, which breaks a tagged index`() = runBlocking {
         val tokens = RegistryTokens(db, services, TestRegistry.config)
         val environment = environment("store")
         val api = services.create(environment, ServiceSpec("api", "API", ServiceKind.WEB)).id
@@ -266,10 +268,21 @@ class RegistryJanitorTest {
         assertPruned(released[0])
         assertEquals(0L, orphans())
 
+        val platform = builds.request(services.create(environment("control", "liftgate"), ServiceSpec("plane", "Plane", ServiceKind.WEB)).id, sha(40), null, "main").also { builds.markRunning(it.id) }
+        val push = requireNotNull(tokens.token(BuildJobs.name(platform.id), tokens.issue(platform.id), listOf("repository:liftgate/control-plane:pull,push")))
+        val (indexed, single) = listOf(40, 41).map { """{"schemaVersion":2,"mediaType":"$OCI_MANIFEST","config":${descriptor("application/vnd.oci.image.config.v1+json", image(it))},"layers":[${descriptor("application/vnd.oci.image.layer.v1.tar+gzip", LAYER)}]}""" }
+        listOf(LAYER, image(40), image(41)).forEach { upload("liftgate/control-plane", push, it) }
+        manifest("liftgate/control-plane", digest(indexed), push, OCI_MANIFEST, indexed)
+        manifest("liftgate/control-plane", "0.1.0", push, OCI_INDEX, """{"schemaVersion":2,"mediaType":"$OCI_INDEX","manifests":[${descriptor(OCI_MANIFEST, indexed)}]}""")
+        manifest("liftgate/control-plane", "0.1.1", push, OCI_MANIFEST, single)
+        fun fetch(content: String) = TestRegistry.send("GET", "/v2/liftgate/control-plane/manifests/${digest(content)}", push).statusCode()
+        assertEquals(200, fetch(indexed))
+
         val gc = TestRegistry.container.execInContainer("env", "REGISTRY_STORAGE_MAINTENANCE_READONLY={\"enabled\":true}", "registry", "garbage-collect", "--delete-untagged", "/etc/docker/registry/config.yml")
         assertEquals(0, gc.exitCode, gc.stderr)
-        listOf(image(3), image(30), cache(30), LAYER).forEach { assertTrue(stored(it), it) }
-        listOf(image(1), image(20), cache(29), image(31)).forEach { assertFalse(stored(it), it) }
+        listOf(image(3), image(30), cache(30), LAYER, image(41)).forEach { assertTrue(stored(it), it) }
+        listOf(image(1), image(20), cache(29), image(31), image(40)).forEach { assertFalse(stored(it), it) }
+        assertEquals(404 to 200, fetch(indexed) to fetch(single))
     }
 
     private fun sha(n: Int) = "%040x".format(n)

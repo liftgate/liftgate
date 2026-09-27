@@ -38,12 +38,28 @@ where d.hostname = :'host' and d.verified_at is not null;
 SQL
 ```
 
-For mining, scanning, proxying or floods reported by IP address, list the busiest tenant pods
-and read the organization off their namespace. This only names candidates: CPU does not tie the
-reported traffic to a pod, so confirm it in step 3 before suspending anyone.
+For scanning, proxying or floods reported by IP address, the address does not name an app:
+Cilium masquerades traffic that leaves the cluster to the node's address, which every app on the
+node shares. With the Cilium that `infra/install.sh` installs, Hubble keeps the last 4095 flows
+on each node. List the ones to the reported destination while the traffic goes on; each names
+the sending pod as `<namespace>/<pod>`:
+
+```sh
+for pod in $(kubectl -n kube-system get pods -l k8s-app=cilium -o name); do
+  kubectl -n kube-system exec "$pod" -c cilium-agent -- hubble observe --to-ip <destination> --last 1000
+done
+```
+
+For mining, list the busiest tenant pods. This only names candidates: CPU does not show what a
+pod runs, so confirm it in step 3 before suspending anyone.
 
 ```sh
 kubectl top pods -A -l liftgate.dev/managed=true --sort-by=cpu | head
+```
+
+Either way, read the organization off the namespace:
+
+```sh
 kubectl get namespace <namespace> -L liftgate.dev/org
 ```
 
@@ -64,9 +80,11 @@ thread:
 
 - Web content: `curl -sS -D - -o page.html https://<host>/`, with the time in UTC. Do not enter
   credentials, run downloads or open attachments.
-- Mining, scanning or proxying: find the miner, scanner or proxy in
-  `kubectl -n <namespace> logs deploy/<service> --tail=200` or in the repository at the running
-  commit. High CPU alone is not enough.
+- Scanning, proxying or floods: Hubble lines from the pod to the reported destination and ports.
+  A tool in the repository without matching traffic is not enough. If the traffic has stopped,
+  ask the reporter to write again when it recurs.
+- Mining: find the miner in `kubectl -n <namespace> logs deploy/<service> --tail=200` or in the
+  repository at the running commit. High CPU alone is not enough.
 - Illegal content, such as child sexual abuse material: do not download, copy or keep it.
   Record only the URL and the time, suspend at once, and report it to the authority your
   jurisdiction requires.

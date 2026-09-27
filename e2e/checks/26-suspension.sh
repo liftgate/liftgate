@@ -18,6 +18,12 @@ stopped() {
 }
 
 test "$(page)" = liftgate-b
+kubectl -n $ns exec deploy/web -- nc -z -w 5 1.1.1.1 443
+flow="$(for pod in $(kubectl -n kube-system get pods -l k8s-app=cilium -o name); do
+  kubectl -n kube-system exec "$pod" -c cilium-agent -- hubble observe --to-ip 1.1.1.1 --last 1000
+done | grep "$ns/web-" | tail -1)"
+test -n "$flow" || { echo "FAIL: hubble lists no flow from $ns to 1.1.1.1"; exit 1; }
+echo "$flow"
 admin suspend e2e-b abuse drill
 start=$(date +%s)
 until stopped; do

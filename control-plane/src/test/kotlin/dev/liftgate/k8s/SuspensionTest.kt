@@ -25,11 +25,14 @@ import io.fabric8.kubernetes.api.model.batch.v1.JobBuilder
 import io.fabric8.kubernetes.api.model.batch.v1.JobConditionBuilder
 import io.fabric8.kubernetes.api.model.batch.v1.JobListBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
+import io.fabric8.kubernetes.client.KubernetesClientException
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer
 import io.fabric8.mockwebserver.http.RecordedRequest
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.spyk
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -41,6 +44,7 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 import io.fabric8.kubernetes.api.model.apps.Deployment as KubeDeployment
@@ -167,6 +171,17 @@ class SuspensionTest {
         admin("unsuspend", "acme")
         Suspension(app, client).reapply(orgId)
         assertEquals(mapOf("api" to 2, "worker" to 3), workloads().associate { it.metadata.name to it.spec.replicas })
+    }
+
+    @Test
+    fun `a service that cannot be applied does not keep the rest of the org running`() = runBlocking {
+        val (orgId, services) = seed()
+        val broken = Services(db).create(services.first().environmentId, ServiceSpec("broken", "Broken", ServiceKind.WORKER))
+        deployments.transition(release(broken).id, DeploymentStatus.RUNNING)
+        every { app.services } returns spyk(Services(db)) { coEvery { idsForOrg(orgId) } returns listOf(broken.id) + services.map { it.id } }
+        admin("suspend", "acme", "mining")
+        assertFailsWith<KubernetesClientException> { Suspension(app, client).reapply(orgId) }
+        assertEquals(mapOf("api" to 0, "worker" to 0), workloads().associate { it.metadata.name to it.spec.replicas })
     }
 
     @Test

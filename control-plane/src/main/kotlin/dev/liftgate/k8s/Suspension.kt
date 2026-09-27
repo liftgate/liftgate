@@ -13,7 +13,10 @@ import java.util.UUID
 class Suspension(private val app: App, kube: KubernetesClient) {
     private val reconciler = Reconciler(app, kube)
 
-    suspend fun reapply(orgId: UUID) = app.services.idsForOrg(orgId).forEach { reconciler.reapply(it) }
+    suspend fun reapply(orgId: UUID) {
+        app.services.idsForOrg(orgId).mapNotNull { runCatching { reconciler.reapply(it) }.exceptionOrNull() }
+            .reduceOrNull { first, next -> first.apply { addSuppressed(next) } }?.let { throw it }
+    }
 
     fun start() = mapOf(Subject.ORG_SUSPENDED to "reconciler-org-suspended", Subject.ORG_UNSUSPENDED to "reconciler-org-unsuspended")
         .map { (subject, durable) -> app.nats.consume(subject, durable, app.scope) { reapply(it.uuid("orgId")) } }

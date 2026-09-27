@@ -4,7 +4,7 @@ Liftgate is pre-alpha and moving quickly. Open an issue before a large change so
 
 ## Setup
 
-Java 21, Node 22, Docker with Compose v2, and Helm (CI uses 4.3.0). The README's local development section brings up PostgreSQL and NATS with Compose, the control plane with Gradle and the dashboard with npm.
+Java 21, Node 24 (`dashboard/.nvmrc`), Docker with Compose v2, and Helm (CI uses 4.3.0). The README's local development section brings up PostgreSQL and NATS with Compose, the control plane with Gradle and the dashboard with npm.
 
 ## House rules
 
@@ -44,6 +44,16 @@ Strict mode, function components, no `any`, no barrel files. Read `dashboard/AGE
 ### Tests
 
 Every non-trivial branch, parser, state machine or security path leaves one runnable test. Unit tests use JUnit 5 with `kotlin.test` assertions and MockK. Repository and HTTP tests use Testcontainers PostgreSQL and skip when Docker is not available; Kubernetes code is tested against the fabric8 mock server.
+
+### Migrations
+
+During an upgrade the previous release keeps serving while the new one migrates the database, so every migration is expand/contract:
+
+- Expand: add tables, nullable columns or columns with defaults, and indexes. The previous release ignores them.
+- Contract: drop or rename only what the previous release no longer reads, one release after the code stopped reading it, in a pull request of its own.
+- Never edit a migration that has been merged; add the next version instead.
+
+The `migrations` job in `upgrade.yml` fails when a pull request adds or changes a migration containing `DROP` or `RENAME`. A contract pull request fails it on purpose, and a maintainer merges it after checking that the latest release does not read what it removes. The `upgrade` job installs the previous release, seeds it, upgrades it to the pull request's build while requests keep flowing, and fails on any error response.
 
 ## Commit messages
 

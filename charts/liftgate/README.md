@@ -473,7 +473,7 @@ A limit that is left out is unlimited, so `unlimited: {}` limits nothing.
 | `cpuRequestRatio` | CPU request as a share of the limit (default `1`) |
 | `ephemeralMb` | Disk per container (default `2048`) |
 | `egressBandwidth` | `kubernetes.io/egress-bandwidth` of tenant pods, such as `20M`; needs the Cilium bandwidth manager |
-| `udp` | `false` allows UDP only for DNS to `kube-system` (default `true`) |
+| `udp` | `false` closes UDP to the internet, leaving DNS to `kube-system` and traffic inside the environment (default `true`) |
 
 Creating or resizing past a limit answers `409 plan_limit` naming it, and nothing is written;
 changes that do not add to an organization that is already over a limit still pass. Each

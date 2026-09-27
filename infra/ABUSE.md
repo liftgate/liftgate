@@ -39,7 +39,8 @@ SQL
 ```
 
 For mining, scanning, proxying or floods reported by IP address, list the busiest tenant pods
-and read the organization off their namespace:
+and read the organization off their namespace. This only names candidates: CPU does not tie the
+reported traffic to a pod, so confirm it in step 3 before suspending anyone.
 
 ```sh
 kubectl top pods -A -l liftgate.dev/managed=true --sort-by=cpu | head
@@ -63,8 +64,9 @@ thread:
 
 - Web content: `curl -sS -D - -o page.html https://<host>/`, with the time in UTC. Do not enter
   credentials, run downloads or open attachments.
-- Mining, scanning or proxying: the `kubectl top` output above and
-  `kubectl -n <namespace> logs deploy/<service> --tail=200`.
+- Mining, scanning or proxying: find the miner, scanner or proxy in
+  `kubectl -n <namespace> logs deploy/<service> --tail=200` or in the repository at the running
+  commit. High CPU alone is not enough.
 - Illegal content, such as child sexual abuse material: do not download, copy or keep it.
   Record only the URL and the time, suspend at once, and report it to the authority your
   jurisdiction requires.

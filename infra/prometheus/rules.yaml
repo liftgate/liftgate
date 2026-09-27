@@ -1,0 +1,163 @@
+groups:
+  - name: liftgate
+    rules:
+      - alert: NodeFilesystemLow
+        expr: node_filesystem_avail_bytes{fstype!~"tmpfs|ramfs"} / node_filesystem_size_bytes{fstype!~"tmpfs|ramfs"} < 0.15
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.mountpoint }} on {{ $labels.node }} has {{ $value | humanizePercentage }} free"
+          description: "Runbook: https://github.com/liftgate/liftgate/blob/main/infra/RUNBOOK.md#nodefilesystemlow"
+
+      - alert: NodeMemoryLow
+        expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.10
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.node }} has {{ $value | humanizePercentage }} of its memory available"
+          description: "Runbook: https://github.com/liftgate/liftgate/blob/main/infra/RUNBOOK.md#nodememorylow"
+
+      - alert: VolumeFilling
+        expr: kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes > 0.80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PVC {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} is {{ $value | humanizePercentage }} full"
+          description: "Runbook: https://github.com/liftgate/liftgate/blob/main/infra/RUNBOOK.md#volumefilling"
+
+      - alert: NodeRequestsHigh
+        expr: |
+          sum by (node, resource) (
+            kube_pod_container_resource_requests{resource=~"cpu|memory"}
+            * on (namespace, pod) group_left () (kube_pod_status_phase{phase=~"Pending|Running"} == 1)
+          )
+          / sum by (node, resource) (kube_node_status_allocatable{resource=~"cpu|memory"}) > 0.85
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Pods on {{ $labels.node }} request {{ $value | humanizePercentage }} of its allocatable {{ $labels.resource }}"
+          description: "Runbook: https://github.com/liftgate/liftgate/blob/main/infra/RUNBOOK.md#noderequestshigh"
+
+      - alert: PodCrashLooping
+        expr: max_over_time(kube_pod_container_status_waiting_reason{reason="CrashLoopBackOff", namespace!~"env-.+"}[5m]) >= 1
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.namespace }}/{{ $labels.pod }} container {{ $labels.container }} is crash looping"
+          description: "Runbook: https://github.com/liftgate/liftgate/blob/main/infra/RUNBOOK.md#podcrashlooping"
+
+      - alert: ControlPlaneDown
+        expr: |
+          max by (liftgate_dev_role) (up{app_kubernetes_io_name="liftgate", app_kubernetes_io_component="control-plane"}) == 0
+          or absent(up{app_kubernetes_io_name="liftgate", app_kubernetes_io_component="control-plane"} == 1)
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No control plane pod{{ with $labels.liftgate_dev_role }} with role {{ . }}{{ end }} answers on /metrics"
+          description: "Runbook: https://github.com/liftgate/liftgate/blob/main/infra/RUNBOOK.md#controlplanedown"
+
+      - alert: ApiErrors
+        expr: |
+          sum(rate(ktor_http_server_requests_seconds_count{status=~"5..", route!~"/(healthz|readyz|metrics)"}[5m]))
+          / sum(rate(ktor_http_server_requests_seconds_count{route!~"/(healthz|readyz|metrics)"}[5m])) > 0.05
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $value | humanizePercentage }} of API requests fail with a 5xx"
+          description: "Runbook: https://github.com/liftgate/liftgate/blob/main/infra/RUNBOOK.md#apierrors"
+
+      - alert: PostgresDown
+        expr: count by (namespace) (kube_persistentvolumeclaim_labels{label_cnpg_io_cluster!=""}) unless on (namespace) (cnpg_collector_up == 1)
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No PostgreSQL instance in {{ $labels.namespace }} is running"
+          description: "Runbook: https://github.com/liftgate/liftgate/blob/main/infra/RUNBOOK.md#postgresdown"
+
+      - alert: WalArchivingFailing
+        expr: cnpg_pg_stat_archiver_last_failed_time > cnpg_pg_stat_archiver_last_archived_time
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.pod }} fails to archive WAL"
+          description: "Runbook: https://github.com/liftgate/liftgate/blob/main/infra/RUNBOOK.md#walarchivingfailing"
+
+      - alert: BackupTooOld
+        expr: time() - max by (namespace, cluster) (barman_cloud_cloudnative_pg_io_last_available_backup_timestamp) > 26 * 3600
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "The newest backup of {{ $labels.namespace }}/{{ $labels.cluster }} is more than 26 hours old"
+          description: "Runbook: https://github.com/liftgate/liftgate/blob/main/infra/RUNBOOK.md#backuptooold"
+
+      - alert: JetStreamStorageHigh
+        expr: nats_server_total_message_bytes / (nats_server_max_storage > 0) > 0.80
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "JetStream on {{ $labels.server_name }} uses {{ $value | humanizePercentage }} of its storage"
+          description: "Runbook: https://github.com/liftgate/liftgate/blob/main/infra/RUNBOOK.md#jetstreamstoragehigh"
+
+      - alert: OutboxStuck
+        expr: max(liftgate_outbox_oldest_pending_seconds) > 120 or absent(liftgate_outbox_oldest_pending_seconds)
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Events wait in the outbox for more than 2 minutes, or no control plane pod relays them"
+          description: "Runbook: https://github.com/liftgate/liftgate/blob/main/infra/RUNBOOK.md#outboxstuck"
+
+      - alert: MessageRedeliveries
+        expr: sum by (consumer) (increase(liftgate_messages_total{outcome="failed"}[15m])) > 10
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Consumer {{ $labels.consumer }} keeps failing and redelivering messages"
+          description: "Runbook: https://github.com/liftgate/liftgate/blob/main/infra/RUNBOOK.md#messageredeliveries"
+
+      - alert: BuildQueueBacklog
+        expr: max(liftgate_builds{status="queued"}) > 20
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $value }} builds have been queued for 15 minutes"
+          description: "Runbook: https://github.com/liftgate/liftgate/blob/main/infra/RUNBOOK.md#buildqueuebacklog"
+
+      - alert: CertificateExpiring
+        expr: certmanager_certificate_expiration_timestamp_seconds - time() < 14 * 86400
+        for: 1h
+        labels:
+          severity: critical
+        annotations:
+          summary: "Certificate {{ $labels.namespace }}/{{ $labels.name }} expires in {{ $value | humanizeDuration }}"
+          description: "Runbook: https://github.com/liftgate/liftgate/blob/main/infra/RUNBOOK.md#certificateexpiring"
+
+      - alert: OrgCpuSaturated
+        expr: |
+          sum by (label_liftgate_dev_org_id) (
+            sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace=~"env-.+", container="", pod!=""}[5m]))
+            * on (namespace, pod) group_left (label_liftgate_dev_org_id) kube_pod_labels{namespace=~"env-.+", label_liftgate_dev_org_id!=""}
+          )
+          / sum by (label_liftgate_dev_org_id) (
+            sum by (namespace, pod) (kube_pod_container_resource_limits{namespace=~"env-.+", resource="cpu"})
+            * on (namespace, pod) group_left (label_liftgate_dev_org_id) kube_pod_labels{namespace=~"env-.+", label_liftgate_dev_org_id!=""}
+          ) >= 0.90
+        for: 2h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Org {{ $labels.label_liftgate_dev_org_id }} has used {{ $value | humanizePercentage }} of its CPU limits for 2 hours"
+          description: "Runbook: https://github.com/liftgate/liftgate/blob/main/infra/RUNBOOK.md#orgcpusaturated"

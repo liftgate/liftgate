@@ -12,7 +12,7 @@ Everything the Liftgate chart expects from a cluster, in install order:
 | 6 | cert-manager with Gateway API support and ClusterIssuer `letsencrypt` | v1.21.2 | [`cert-manager/clusterissuer.yaml`](cert-manager/clusterissuer.yaml) |
 | 7 | CloudNativePG operator | 0.29.0 (operator 1.30) | [`cnpg/README.md`](cnpg/README.md) |
 | 8 | Barman Cloud plugin for CloudNativePG backups | chart 0.8.0 (plugin 0.15.0) | [`cnpg/README.md`](cnpg/README.md) |
-| 9 | Prometheus as `prometheus.liftgate-system:9090` | chart 29.30.1 | [`prometheus/values.yaml`](prometheus/values.yaml) |
+| 9 | Prometheus as `prometheus.liftgate-system:9090`, with Alertmanager and the alert rules | chart 29.30.1 | [`prometheus/README.md`](prometheus/README.md) |
 
 Steps 1 and 2 run on each node by hand. Steps 3 to 9 are [`install.sh`](install.sh), which needs
 `kubectl`, `helm` and `LETSENCRYPT_EMAIL` in the environment:
@@ -70,4 +70,5 @@ on the chart.
 A container registry for build output (`registry` in the chart; [`registry/`](registry) has
 a token-auth configuration), DNS records, the object store for PostgreSQL backups, and backups
 of JetStream volumes. PostgreSQL backup, restore and the upgrade procedure are in
-[`cnpg/README.md`](cnpg/README.md) and [`UPGRADE.md`](UPGRADE.md).
+[`cnpg/README.md`](cnpg/README.md) and [`UPGRADE.md`](UPGRADE.md). What to do when an alert
+fires is in [`RUNBOOK.md`](RUNBOOK.md).

@@ -89,6 +89,7 @@ echo "==> Prometheus $PROMETHEUS_VERSION"
 found service prometheus -n liftgate-system || helm install prometheus prometheus --repo https://prometheus-community.github.io/helm-charts --version "$PROMETHEUS_VERSION" \
   --namespace liftgate-system --create-namespace \
   -f prometheus/values.yaml \
+  --set-file ruleFiles.liftgate=prometheus/rules.yaml \
   --wait --timeout 10m
 
 echo "==> Baseline ready. Install the chart: helm install liftgate oci://ghcr.io/liftgate/charts/liftgate --version <version> -n liftgate-system"

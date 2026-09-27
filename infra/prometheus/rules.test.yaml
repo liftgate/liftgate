@@ -1,0 +1,96 @@
+rule_files:
+  - rules.yaml
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    input_series:
+      - series: liftgate_outbox_oldest_pending_seconds{pod="liftgate-api-0"}
+        values: 0 0 60 120 180 240 300
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: OutboxStuck
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: OutboxStuck
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: Events wait in the outbox for more than 2 minutes, or no control plane pod relays them
+              description: "Runbook: https://github.com/liftgate/liftgate/blob/main/infra/RUNBOOK.md#outboxstuck"
+
+  - interval: 1m
+    input_series: []
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: OutboxStuck
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: Events wait in the outbox for more than 2 minutes, or no control plane pod relays them
+              description: "Runbook: https://github.com/liftgate/liftgate/blob/main/infra/RUNBOOK.md#outboxstuck"
+
+  - interval: 1m
+    input_series:
+      - series: kube_persistentvolumeclaim_labels{namespace="liftgate-system", persistentvolumeclaim="liftgate-postgres-1", label_cnpg_io_cluster="liftgate-postgres"}
+        values: 1x10
+      - series: cnpg_collector_up{namespace="liftgate-system", pod="liftgate-postgres-1"}
+        values: 1 1 stale
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: PostgresDown
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: PostgresDown
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              namespace: liftgate-system
+            exp_annotations:
+              summary: No PostgreSQL instance in liftgate-system is running
+              description: "Runbook: https://github.com/liftgate/liftgate/blob/main/infra/RUNBOOK.md#postgresdown"
+
+  - interval: 1m
+    input_series:
+      - series: kubelet_volume_stats_used_bytes{namespace="default", persistentvolumeclaim="fill"}
+        values: 100 900x10
+      - series: kubelet_volume_stats_capacity_bytes{namespace="default", persistentvolumeclaim="fill"}
+        values: 1000x11
+    alert_rule_test:
+      - eval_time: 7m
+        alertname: VolumeFilling
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              namespace: default
+              persistentvolumeclaim: fill
+            exp_annotations:
+              summary: PVC default/fill is 90% full
+              description: "Runbook: https://github.com/liftgate/liftgate/blob/main/infra/RUNBOOK.md#volumefilling"
+
+  - interval: 1m
+    input_series:
+      - series: container_cpu_usage_seconds_total{namespace="env-acme", pod="web-1", container=""}
+        values: 0+57x150
+      - series: container_cpu_usage_seconds_total{namespace="env-acme", pod="web-1", container="web"}
+        values: 0+57x150
+      - series: kube_pod_container_resource_limits{namespace="env-acme", pod="web-1", container="web", resource="cpu", unit="core"}
+        values: 1x150
+      - series: kube_pod_labels{namespace="env-acme", pod="web-1", label_liftgate_dev_org_id="org-1"}
+        values: 1x150
+    alert_rule_test:
+      - eval_time: 1h
+        alertname: OrgCpuSaturated
+        exp_alerts: []
+      - eval_time: 2h10m
+        alertname: OrgCpuSaturated
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              label_liftgate_dev_org_id: org-1
+            exp_annotations:
+              summary: Org org-1 has used 95% of its CPU limits for 2 hours
+              description: "Runbook: https://github.com/liftgate/liftgate/blob/main/infra/RUNBOOK.md#orgcpusaturated"

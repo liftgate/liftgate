@@ -1,15 +1,55 @@
 server:
   fullnameOverride: prometheus
-  retention: 7d
+  retention: 15d
+  retentionSize: 6GB
   persistentVolume:
     size: 8Gi
   service:
     servicePort: 9090
+serverFiles:
+  prometheus.yml:
+    rule_files:
+      - /etc/config/liftgate
+extraScrapeConfigs: |
+  - job_name: cnpg
+    kubernetes_sd_configs:
+      - role: pod
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_cnpg_io_cluster, __meta_kubernetes_pod_container_port_name, __meta_kubernetes_pod_phase]
+        regex: .+;metrics;Running
+        action: keep
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+      - source_labels: [__meta_kubernetes_pod_label_cnpg_io_cluster]
+        target_label: cluster
 alertmanager:
-  enabled: false
+  enabled: true
+  extraSecretMounts:
+    - name: receivers
+      mountPath: /etc/alertmanager/receivers
+      secretName: liftgate-alerts
+      readOnly: true
+      optional: true
+  config:
+    receivers:
+      - name: none
+      - name: discord
+        discord_configs:
+          - webhook_url_file: /etc/alertmanager/receivers/discord-webhook-url
+      - name: ntfy
+        webhook_configs:
+          - url_file: /etc/alertmanager/receivers/ntfy-url
+    route:
+      receiver: none
+      group_by: [alertname]
 kube-state-metrics:
-  enabled: false
+  enabled: true
+  metricLabelsAllowlist:
+    - pods=[liftgate.dev/service-id,liftgate.dev/org-id]
+    - persistentvolumeclaims=[cnpg.io/cluster]
 prometheus-node-exporter:
-  enabled: false
+  enabled: true
 prometheus-pushgateway:
   enabled: false

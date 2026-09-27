@@ -60,12 +60,15 @@ fun removeSignInMethod(userId: UUID, delete: () -> Int) {
     if (signInMethods(userId) == 0L) throw LiftgateException(HttpStatusCode.Conflict, "last_method", "add another sign-in method before removing this one")
 }
 
-fun audit(userId: UUID, action: String, provider: String) = AuditLog.insert {
-    it[actorUserId] = userId
+fun audit(userId: UUID, action: String, provider: String) = audit(userId, action, "user", userId, "provider" to provider)
+
+fun audit(actor: UUID, action: String, targetType: String, targetId: UUID, detail: Pair<String, String>, orgId: UUID? = null) = AuditLog.insert {
+    it[AuditLog.orgId] = orgId
+    it[actorUserId] = actor
     it[AuditLog.action] = action
-    it[targetType] = "user"
-    it[targetId] = userId.toString()
-    it[details] = JsonObject(mapOf("provider" to JsonPrimitive(provider)))
+    it[AuditLog.targetType] = targetType
+    it[AuditLog.targetId] = targetId.toString()
+    it[details] = JsonObject(mapOf(detail.first to JsonPrimitive(detail.second)))
 }
 
 /**

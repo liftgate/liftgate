@@ -128,3 +128,12 @@ export type SsoConnection = {
 export type SsoServiceProvider = { entityId: string; acsUrl: string };
 
 export type UserStatus = "pending" | "active" | "suspended";
+
+export type ApiToken = {
+  id: string;
+  name: string;
+  createdBy: User;
+  createdAt: string;
+  lastUsedAt: string | null;
+  expiresAt: string | null;
+};

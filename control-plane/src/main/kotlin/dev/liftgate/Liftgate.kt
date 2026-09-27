@@ -78,7 +78,7 @@ class App(val config: Config) : AutoCloseable {
     val kube = KubernetesClientBuilder().build()
     val orgs = Orgs(db)
     val sessions = Sessions(db, cache, orgs)
-    val apiTokens = ApiTokens(db)
+    val apiTokens = ApiTokens(db, cache)
     val access = Access(orgs)
     val projects = Projects(db)
     val services = Services(db)

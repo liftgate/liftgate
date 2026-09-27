@@ -7,6 +7,8 @@ export function timeAgo(iso: string) {
   return new Date(iso).toLocaleDateString();
 }
 
+export const lastUsed = (iso: string | null) => (iso ? timeAgo(iso) : "Never");
+
 export const shortSha = (sha: string) => sha.slice(0, 7);
 
 export const slugify = (value: string) =>

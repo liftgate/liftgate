@@ -76,3 +76,6 @@ data:
   {{- with .Values.legal.aupUrl }}
   LIFTGATE_AUP_URL: {{ . | quote }}
   {{- end }}
+  {{- if .Values.gitlab.trustEmail }}
+  LIFTGATE_GITLAB_TRUST_EMAIL: "true"
+  {{- end }}

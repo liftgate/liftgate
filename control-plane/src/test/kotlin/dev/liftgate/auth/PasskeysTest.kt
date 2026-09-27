@@ -9,8 +9,11 @@ import com.yubico.webauthn.data.ByteArray as Bytes
 import com.yubico.webauthn.data.PublicKeyCredential
 import com.yubico.webauthn.data.PublicKeyCredentialDescriptor
 import com.yubico.webauthn.exception.AssertionFailedException
+import dev.liftgate.TestDatabase
 import dev.liftgate.cache.Cache
 import dev.liftgate.db.Db
+import dev.liftgate.db.Passkeys as PasskeysTable
+import dev.liftgate.db.Users
 import dev.liftgate.http.LiftgateException
 import dev.liftgate.http.json
 import dev.liftgate.org.User
@@ -22,6 +25,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.jetbrains.exposed.v1.jdbc.insert
 import org.junit.jupiter.api.AfterAll
 import java.nio.ByteBuffer
 import java.security.KeyPairGenerator
@@ -72,7 +76,7 @@ class PasskeysTest {
         assertEquals(user.id.userHandle.base64Url, options.text("user", "id"))
         assertEquals("dean@liftgate.dev", options.text("user", "name"))
         assertEquals("required", options.text("authenticatorSelection", "residentKey"))
-        assertEquals("preferred", options.text("authenticatorSelection", "userVerification"))
+        assertEquals("required", options.text("authenticatorSelection", "userVerification"))
         assertEquals(listOf(existing.base64Url), options.getValue("excludeCredentials").jsonArray.map { it.jsonObject.text("id") })
         assertTrue(cache.passkeyChallenges.containsKey(challenge))
     }
@@ -82,7 +86,7 @@ class PasskeysTest {
         val options = publicKey(passkeys.assertionOptions().second)
         assertNull(options["allowCredentials"])
         assertEquals("localhost", options.text("rpId"))
-        assertEquals("preferred", options.text("userVerification"))
+        assertEquals("required", options.text("userVerification"))
         assertTrue(Bytes.fromBase64Url(options.text("challenge")!!).size() >= 16)
     }
 
@@ -104,30 +108,60 @@ class PasskeysTest {
         assertFailsWith<AssertionFailedException> { assertion(stored = 5, counter = 0) }
     }
 
+    @Test
+    fun `an assertion without user verification is rejected`() = runBlocking {
+        val database = TestDatabase.clean()
+        database.tx {
+            Users.insert {
+                it[id] = user.id
+                it[login] = user.login
+            }
+            PasskeysTable.insert {
+                it[id] = UUID.randomUUID()
+                it[userId] = user.id
+                it[credentialId] = this@PasskeysTest.credentialId.bytes
+                it[publicKey] = credential(0).publicKeyCose.bytes
+                it[signatureCount] = 0L
+                it[name] = "laptop"
+            }
+        }
+        val passkeys = Passkeys(testConfig(), database, cache, SignIn(database, mockk<Sessions> { coEvery { create(any()) } returns "session" }))
+        suspend fun signIn(flags: Int) = passkeys.assertionOptions().let { (challenge, body) ->
+            passkeys.verify(challenge, response(Bytes.fromBase64Url(publicKey(body).text("challenge")!!), 1, flags))
+        }
+        assertEquals("invalid_passkey", assertFailsWith<LiftgateException> { signIn(0x01) }.code)
+        assertEquals(user.id, signIn(0x05).userId)
+    }
+
     private fun assertion(stored: Long, counter: Int): AssertionResult {
         val rp = relyingParty(testConfig(), credentials(stored))
         val request = rp.startAssertion(StartAssertionOptions.builder().build())
-        val clientData = """{"type":"webauthn.get","challenge":"${request.publicKeyCredentialRequestOptions.challenge.base64Url}","origin":"http://localhost:3000"}"""
-            .toByteArray()
-        val authenticatorData = sha256("localhost".toByteArray()) + byteArrayOf(0x05) + ByteBuffer.allocate(4).putInt(counter).array()
+        val response = response(request.publicKeyCredentialRequestOptions.challenge, counter)
+        return rp.finishAssertion(FinishAssertionOptions.builder().request(request).response(PublicKeyCredential.parseAssertionResponseJson(response)).build())
+    }
+
+    private fun response(challenge: Bytes, counter: Int, flags: Int = 0x05): String {
+        val clientData = """{"type":"webauthn.get","challenge":"${challenge.base64Url}","origin":"http://localhost:3000"}""".toByteArray()
+        val authenticatorData = sha256("localhost".toByteArray()) + byteArrayOf(flags.toByte()) + ByteBuffer.allocate(4).putInt(counter).array()
         val signature = Signature.getInstance("SHA256withECDSA").run {
             initSign(key.private)
             update(authenticatorData + sha256(clientData))
             sign()
         }
-        val response = """{"id":"${credentialId.base64Url}","rawId":"${credentialId.base64Url}","type":"public-key","clientExtensionResults":{},
+        return """{"id":"${credentialId.base64Url}","rawId":"${credentialId.base64Url}","type":"public-key","clientExtensionResults":{},
             "response":{"clientDataJSON":"${Bytes(clientData).base64Url}","authenticatorData":"${Bytes(authenticatorData).base64Url}",
             "signature":"${Bytes(signature).base64Url}","userHandle":"${user.id.userHandle.base64Url}"}}"""
-        return rp.finishAssertion(FinishAssertionOptions.builder().request(request).response(PublicKeyCredential.parseAssertionResponseJson(response)).build())
     }
 
+    private fun credential(stored: Long) = RegisteredCredential.builder()
+        .credentialId(credentialId)
+        .userHandle(user.id.userHandle)
+        .publicKeyEs256Raw(Bytes(key.public.encoded.takeLast(65).toByteArray()))
+        .signatureCount(stored)
+        .build()
+
     private fun credentials(stored: Long): CredentialRepository {
-        val credential = RegisteredCredential.builder()
-            .credentialId(credentialId)
-            .userHandle(user.id.userHandle)
-            .publicKeyEs256Raw(Bytes(key.public.encoded.takeLast(65).toByteArray()))
-            .signatureCount(stored)
-            .build()
+        val credential = credential(stored)
         return object : CredentialRepository by PasskeyCredentials {
             override fun lookup(credentialId: Bytes, userHandle: Bytes) = Optional.of(credential)
 

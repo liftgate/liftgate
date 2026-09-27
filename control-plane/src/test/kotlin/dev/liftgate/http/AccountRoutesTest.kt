@@ -63,13 +63,14 @@ class AccountRoutesTest {
     private val db = TestDatabase.clean()
     private val orgs = Orgs(db)
     private val sessions = mockk<Sessions>()
+    private val apiTokens = ApiTokens(db, mockk(relaxed = true))
     private val app = mockk<App>().also {
         every { it.config } returns testConfig()
         every { it.metrics } returns PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
         every { it.orgs } returns orgs
         every { it.access } returns Access(orgs)
         every { it.sessions } returns sessions
-        every { it.apiTokens } returns ApiTokens(db)
+        every { it.apiTokens } returns apiTokens
     }
 
     private fun session(id: String, userId: UUID) = coEvery { sessions.resolve(id) } coAnswers { orgs.user(userId) }
@@ -103,7 +104,7 @@ class AccountRoutesTest {
     @Test
     fun `a suspended user's sessions and tokens return 401`() = testApplication {
         val spammer = user("spammer")
-        val token = ApiTokens(db).create(orgs.create("spam", "Spam", spammer).id, "ci", spammer)
+        val token = apiTokens.create(orgs.create("spam", "Spam", spammer).id, "ci", spammer, null)
         session("s", spammer)
         application { liftgate(app) }
         suspend fun me(credential: HttpRequestBuilder.() -> Unit) = client.get("/api/v1/me", credential).status
@@ -140,7 +141,7 @@ class AccountRoutesTest {
                 it[expiresAt] = now().plusDays(1)
             }
         }
-        val token = ApiTokens(db).create(shared.id, "ci", dean)
+        val token = apiTokens.create(shared.id, "ci", dean, null)
         session("s", dean)
         application { liftgate(app) }
 
@@ -182,7 +183,7 @@ class AccountRoutesTest {
                 it[role] = "admin"
             }
         }
-        val token = ApiTokens(db).create(org.id, "ci", owner)
+        val token = apiTokens.create(org.id, "ci", owner, null)
         session("owner", owner)
         session("member", member)
         application { liftgate(app) }

@@ -179,6 +179,7 @@ object ApiTokens : Table("api_tokens") {
     val createdBy = fk("created_by", Users.id)
     val createdAt = createdAtColumn()
     val lastUsedAt = timestampWithTimeZone("last_used_at").nullable()
+    val expiresAt = timestampWithTimeZone("expires_at").nullable()
     override val primaryKey = PrimaryKey(id)
 }
 

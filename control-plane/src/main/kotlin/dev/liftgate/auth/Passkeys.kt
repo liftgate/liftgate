@@ -68,7 +68,7 @@ class Passkeys(config: Config, private val db: Db, private val cache: Cache, pri
             StartRegistrationOptions.builder()
                 .user(UserIdentity.builder().name(user.email ?: user.login).displayName(user.name ?: user.login).id(user.id.userHandle).build())
                 .authenticatorSelection(
-                    AuthenticatorSelectionCriteria.builder().residentKey(ResidentKeyRequirement.REQUIRED).userVerification(UserVerificationRequirement.PREFERRED).build(),
+                    AuthenticatorSelectionCriteria.builder().residentKey(ResidentKeyRequirement.REQUIRED).userVerification(UserVerificationRequirement.REQUIRED).build(),
                 )
                 .build(),
         ).toBuilder().excludeCredentials(db.tx { PasskeyCredentials.descriptors(user.id) }).build()
@@ -97,7 +97,7 @@ class Passkeys(config: Config, private val db: Db, private val cache: Cache, pri
     }
 
     fun assertionOptions(): Pair<String, String> =
-        rp.startAssertion(StartAssertionOptions.builder().userVerification(UserVerificationRequirement.PREFERRED).build())
+        rp.startAssertion(StartAssertionOptions.builder().userVerification(UserVerificationRequirement.REQUIRED).build())
             .let { remember(it.toJson()) to it.toCredentialsGetJson() }
 
     suspend fun verify(challenge: String?, credential: String): SignedIn {

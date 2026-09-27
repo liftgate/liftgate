@@ -1,9 +1,11 @@
 package dev.liftgate.auth
 
+import dev.liftgate.TestDatabase
 import dev.liftgate.config.GitHubConfig
 import dev.liftgate.config.OAuthClient
 import dev.liftgate.http.LiftgateException
 import dev.liftgate.http.json
+import dev.liftgate.org.insertUser
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -16,11 +18,14 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.Url
 import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
+import io.mockk.coEvery
+import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -33,7 +38,8 @@ class OAuthTest {
     private val requests = mutableListOf<HttpRequestData>()
     private val github = OAuthProviders.github(GitHubConfig("1", "pem", "webhook", "client", "secret"))
     private val google = OAuthProviders.google(OAuthClient("client", "secret"))
-    private val gitlab = OAuthProviders.gitlab(OAuthClient("client", "secret"), "https://git.example")
+    private val gitlab = OAuthProviders.gitlab(OAuthClient("client", "secret"), "https://git.example", trustEmail = true)
+    private val unconfirmed = HttpStatusCode.OK to """[{"id":2,"email":"dean@x.dev","confirmed_at":null}]"""
     private val bitbucket = OAuthProviders.bitbucket(OAuthClient("client", "secret"))
 
     private fun oauth(provider: OAuthProvider, vararg routes: Pair<String, Pair<HttpStatusCode, String>>) = OAuth(
@@ -49,6 +55,13 @@ class OAuthTest {
     private fun ok(body: String) = HttpStatusCode.OK to body
 
     private suspend fun OAuth.signIn(provider: OAuthProvider) = identity(provider, exchange(provider, "code", "verifier"))
+
+    private suspend fun gitlabSignIn(provider: OAuthProvider, emails: Pair<HttpStatusCode, String>) = oauth(
+        provider,
+        "/oauth/token" to ok("""{"access_token":"a"}"""),
+        "/api/v4/user" to ok("""{"id":3,"username":"dean","name":"Dean","email":"Dean@x.dev","confirmed_at":"2026-01-01T00:00:00Z","avatar_url":"https://a"}"""),
+        "/api/v4/user/emails" to emails,
+    ).signIn(provider)
 
     private fun tokenForm() = (requests.first().body as FormDataContent).formData
 
@@ -127,15 +140,20 @@ class OAuthTest {
     }
 
     @Test
-    fun `gitlab trusts the email of a confirmed account only`() = runBlocking {
-        suspend fun gitlab(confirmedAt: String) = oauth(
-            gitlab,
-            "/oauth/token" to ok("""{"access_token":"a"}"""),
-            "/api/v4/user" to ok("""{"id":3,"username":"dean","name":"Dean","email":"dean@x.dev","confirmed_at":$confirmedAt,"avatar_url":"https://a"}"""),
-        ).signIn(gitlab)
-        assertEquals(VerifiedIdentity("gitlab", "3", "dean@x.dev", true, "dean", "Dean", "https://a"), gitlab("\"2026-01-01T00:00:00Z\""))
-        assertFalse(gitlab("null").emailVerified)
+    fun `gitlab trusts only an address its email list shows confirmed`() = runBlocking {
+        val confirmed = ok("""[{"id":1,"email":"old@x.dev","confirmed_at":null},{"id":2,"email":"dean@x.dev","confirmed_at":"2026-01-01T00:00:00Z"}]""")
+        assertEquals(VerifiedIdentity("gitlab", "3", "Dean@x.dev", true, "dean", "Dean", "https://a"), gitlabSignIn(gitlab, confirmed))
+        listOf(unconfirmed, ok("[]"), HttpStatusCode.Forbidden to "{}").forEach { assertFalse(gitlabSignIn(gitlab, it).emailVerified) }
+        assertFalse(gitlabSignIn(OAuthProviders.gitlab(OAuthClient("client", "secret"), "https://git.example", trustEmail = false), confirmed).emailVerified)
         assertTrue(Url(oauth(gitlab).loginUrl(gitlab, "s", "v")).toString().startsWith("https://git.example/oauth/authorize?"))
+    }
+
+    @Test
+    fun `a confirmed gitlab account with an unconfirmed address never signs in as the user who owns that email`() = runBlocking {
+        val db = TestDatabase.clean()
+        val owner = db.tx { insertUser("owner", null, "dean@x.dev", null) }.id
+        val signIn = SignIn(db, mockk<Sessions> { coEvery { create(any()) } returns "session" })
+        assertNotEquals(owner, signIn.complete(gitlabSignIn(gitlab, unconfirmed)).userId)
     }
 
     @Test

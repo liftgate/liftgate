@@ -39,7 +39,7 @@ private data class Member(val user: User, val role: OrgRole)
  * @date 9/17/2026
  */
 @Serializable
-private data class CreateToken(val name: String)
+private data class CreateToken(val name: String, val expiresInDays: Int? = 90)
 
 /**
  * @author Dean
@@ -71,17 +71,23 @@ fun Route.orgRoutes(app: App) {
         route("/{slug}") {
             get { call.respond(call.org(app)) }
             delete {
-                if (call.principal.token) forbidden()
-                app.orgs.delete(call.org(app, OrgRole.OWNER).id)
+                app.orgs.delete(call.sessionOrg(app, OrgRole.OWNER).id)
                 call.respond(HttpStatusCode.NoContent)
             }
             get("/members") { call.respond(app.orgs.members(call.org(app).id).map { (user, role) -> Member(user, role) }) }
-            post("/tokens") {
-                val principal = call.principal
-                if (principal.token) forbidden()
-                val org = call.org(app, OrgRole.ADMIN)
-                val name = call.receive<CreateToken>().name.trim().ifEmpty { invalid("name is required") }
-                call.respond(HttpStatusCode.Created, CreatedToken(app.apiTokens.create(org.id, name, principal.user.id)))
+            route("/tokens") {
+                get { call.respond(app.apiTokens.list(call.sessionOrg(app, OrgRole.ADMIN).id)) }
+                post {
+                    val org = call.sessionOrg(app, OrgRole.ADMIN)
+                    val body = call.receive<CreateToken>()
+                    val name = body.name.trim().takeIf { it.length in 1..100 } ?: invalid("name must be 1 to 100 characters")
+                    if (body.expiresInDays != null && body.expiresInDays !in 1..365) invalid("expiresInDays must be 1 to 365, or null for a token that never expires")
+                    call.respond(HttpStatusCode.Created, CreatedToken(app.apiTokens.create(org.id, name, call.principal.user.id, body.expiresInDays)))
+                }
+                delete("/{id}") {
+                    app.apiTokens.delete(call.sessionOrg(app, OrgRole.ADMIN).id, call.uuid("id"), call.principal.user.id)
+                    call.respond(HttpStatusCode.NoContent)
+                }
             }
         }
     }
@@ -97,3 +103,5 @@ suspend fun ApplicationCall.org(app: App, min: OrgRole = OrgRole.MEMBER): Organi
     app.access.require(org.id, principal, min)
     return org
 }
+
+suspend fun ApplicationCall.sessionOrg(app: App, min: OrgRole): Organization = if (principal.token) forbidden() else org(app, min)

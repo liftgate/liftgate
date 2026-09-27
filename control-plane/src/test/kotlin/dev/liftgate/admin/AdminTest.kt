@@ -17,6 +17,7 @@ import dev.liftgate.service.Service
 import dev.liftgate.service.ServiceKind
 import dev.liftgate.service.ServiceSpec
 import dev.liftgate.service.Services
+import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -96,7 +97,8 @@ class AdminTest {
     @Test
     fun `suspending a user deletes their sessions and api tokens`() = runBlocking {
         val spammer = db.tx { insertUser("spammer", null, null, null) }
-        val token = ApiTokens(db).create(orgs.create("spam", "Spam", spammer.id).id, "ci", spammer.id)
+        val tokens = ApiTokens(db, mockk(relaxed = true))
+        val token = tokens.create(orgs.create("spam", "Spam", spammer.id).id, "ci", spammer.id, null)
         db.tx {
             Sessions.insert {
                 it[id] = "session"
@@ -106,7 +108,7 @@ class AdminTest {
         }
         assertEquals("spammer is suspended", exec("suspend-user", "spammer", "spam"))
         assertEquals(UserStatus.SUSPENDED, orgs.user(spammer.id)?.status)
-        assertNull(ApiTokens(db).resolve(token))
+        assertNull(tokens.resolve(token))
         assertEquals(0L, db.tx { Sessions.selectAll().count() })
         assertEquals(listOf(spammer.id.toString() to json("status" to "suspended", "reason" to "spam")), audit("user.suspend"))
         assertEquals("spammer is active", exec("unsuspend-user", spammer.id.toString()))

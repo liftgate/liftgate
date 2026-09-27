@@ -20,7 +20,11 @@ class Housekeeping(private val db: Db) {
     private val log = LoggerFactory.getLogger(Housekeeping::class.java)
 
     suspend fun runOnce() {
-        db.tx { Outbox.deleteWhere { publishedAt less now().minusDays(OUTBOX_RETENTION_DAYS) } }
+        db.tx {
+            Outbox.deleteWhere { publishedAt less now().minusDays(OUTBOX_RETENTION_DAYS) }
+            Sessions.deleteWhere { expiresAt less now() }
+            EmailCodes.deleteWhere { expiresAt less now() }
+        }
     }
 
     fun start(scope: CoroutineScope): Job = scope.launch {

@@ -30,9 +30,9 @@ while it runs. Nodes log in as `pull`, which can read every repository and write
 
 ## Switch-over
 
-Running pods keep pulling through every step: containerd sends node credentials only when the
-registry asks for them, and builds keep pushing because the registry accepts anonymous
-requests until step 4.
+The registry accepts anonymous requests until step 4, so builds keep pushing and nodes keep
+pulling while Liftgate and the nodes get their logins; step 4 turns authentication on once both
+have them.
 
 1. Create the signing key, its certificate and the pull password:
 

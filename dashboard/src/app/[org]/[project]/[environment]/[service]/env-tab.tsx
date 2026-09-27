@@ -4,7 +4,7 @@ import { useState } from "react";
 import { api } from "@/lib/api";
 import { useAction, useApi } from "@/lib/hooks";
 import type { EnvVar, Service } from "@/lib/types";
-import { envPayload, keepsStoredValue } from "@/lib/util";
+import { envPayload, keepsStoredValue, storedRows } from "@/lib/util";
 import { Loaded } from "@/components/loaded";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -22,12 +22,12 @@ export function EnvTab({ service }: { service: Service }) {
 }
 
 function EnvEditor({ serviceId, initial }: { serviceId: string; initial: EnvVar[] }) {
-  const [rows, setRows] = useState(initial);
+  const [rows, setRows] = useState(() => storedRows(initial));
   const [saved, setSaved] = useState(false);
   const save = useAction(async () => {
     const body = envPayload(rows);
     await api(`/services/${serviceId}/env`, { method: "PUT", body });
-    setRows(body.map((r) => (r.secret ? { ...r, value: null } : r)));
+    setRows(storedRows(body));
     setSaved(true);
   });
   const change = (next: EnvVar[]) => {
@@ -72,7 +72,7 @@ function EnvEditor({ serviceId, initial }: { serviceId: string; initial: EnvVar[
                 <Input
                   aria-label="Value"
                   type={row.secret ? "password" : "text"}
-                  placeholder={row.secret && row.value === null ? "Hidden. Type to replace." : "value"}
+                  placeholder={keepsStoredValue(row) ? "Hidden. Type to replace." : "value"}
                   value={row.value ?? ""}
                   onChange={(e) => update(i, { value: e.target.value })}
                   className="font-mono"

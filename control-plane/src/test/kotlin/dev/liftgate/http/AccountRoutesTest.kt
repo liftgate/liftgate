@@ -24,9 +24,9 @@ import dev.liftgate.org.Orgs
 import dev.liftgate.org.insertUser
 import dev.liftgate.project.Projects
 import dev.liftgate.testConfig
+import dev.liftgate.unlimitedCache
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.bearerAuth
-import io.ktor.client.request.cookie
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.post
@@ -66,6 +66,7 @@ class AccountRoutesTest {
     private val apiTokens = ApiTokens(db, mockk(relaxed = true))
     private val app = mockk<App>().also {
         every { it.config } returns testConfig()
+        every { it.cache } returns unlimitedCache
         every { it.metrics } returns PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
         every { it.orgs } returns orgs
         every { it.access } returns Access(orgs)
@@ -76,8 +77,6 @@ class AccountRoutesTest {
     private fun session(id: String, userId: UUID) = coEvery { sessions.resolve(id) } coAnswers { orgs.user(userId) }
 
     private suspend fun user(login: String) = db.tx { insertUser(login, null, null, null) }.id
-
-    private fun HttpRequestBuilder.session(id: String) = cookie(SESSION_COOKIE, id)
 
     private suspend fun HttpResponse.error() = json.decodeFromString(ErrorBody.serializer(), bodyAsText()).error
 

@@ -37,7 +37,7 @@
     "controlPlane": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["image", "tag", "replicas", "logLevel", "trustedProxies", "javaOpts", "resources"],
+      "required": ["image", "tag", "replicas", "logLevel", "trustedProxies", "javaOpts", "resources", "clientIpHeader", "trustedProxyCidrs"],
       "properties": {
         "image": { "type": "string", "minLength": 1 },
         "tag": { "type": "string", "minLength": 1 },
@@ -55,7 +55,9 @@
         "logLevel": { "type": "string", "enum": ["TRACE", "DEBUG", "INFO", "WARN", "ERROR"] },
         "trustedProxies": { "type": "integer", "minimum": 0 },
         "javaOpts": { "type": "string" },
-        "resources": { "type": "object" }
+        "resources": { "type": "object" },
+        "clientIpHeader": { "type": "string" },
+        "trustedProxyCidrs": { "type": "array", "items": { "type": "string" } }
       }
     },
     "dashboard": {
@@ -220,6 +222,7 @@
       "properties": {
         "enabled": { "type": "boolean" }
       }
-    }
+    },
+    "allowSharedSite": { "type": "boolean" }
   }
 }

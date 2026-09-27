@@ -18,8 +18,8 @@ import dev.liftgate.service.ServiceScope
 import dev.liftgate.service.ServiceSpec
 import dev.liftgate.service.Services
 import dev.liftgate.testConfig
+import dev.liftgate.unlimitedCache
 import io.ktor.client.request.HttpRequestBuilder
-import io.ktor.client.request.cookie
 import io.ktor.client.request.get
 import io.ktor.client.request.patch
 import io.ktor.client.request.post
@@ -68,6 +68,7 @@ class ServiceRoutesTest {
         every { it.sessions } returns mockk<Sessions> { coEvery { resolve("s") } returns user }
         every { it.metrics } returns PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
         every { it.config } returns testConfig()
+        every { it.cache } returns unlimitedCache
     }
 
     init {
@@ -75,8 +76,6 @@ class ServiceRoutesTest {
         coEvery { services.scope(service.id) } returns ServiceScope(service, environment, project, org)
         coEvery { access.require(org.id, any(), any()) } just Runs
     }
-
-    private fun HttpRequestBuilder.session() = cookie(SESSION_COOKIE, "s")
 
     private fun HttpRequestBuilder.jsonBody(body: String) {
         session()

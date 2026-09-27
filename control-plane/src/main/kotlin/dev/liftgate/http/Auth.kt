@@ -3,19 +3,38 @@ package dev.liftgate.http
 import dev.liftgate.App
 import dev.liftgate.auth.Principal
 import dev.liftgate.org.UserStatus
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpMethod
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.Url
+import io.ktor.http.protocolWithAuthority
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.createApplicationPlugin
 import io.ktor.server.request.authorization
+import io.ktor.server.request.header
+import io.ktor.server.request.httpMethod
 import io.ktor.util.AttributeKey
 
-const val SESSION_COOKIE = "liftgate_session"
+const val SESSION_COOKIE = "__Host-liftgate_session"
+val safeMethods = setOf(HttpMethod.Get, HttpMethod.Head, HttpMethod.Options)
 private val principalKey = AttributeKey<Principal>("liftgate.principal")
 
 val ApplicationCall.principal: Principal
-    get() = attributes.getOrNull(principalKey) ?: unauthorized()
+    get() = principalOrNull ?: unauthorized()
+
+val ApplicationCall.principalOrNull: Principal?
+    get() = attributes.getOrNull(principalKey)
 
 fun authPlugin(app: App) = createApplicationPlugin("LiftgateAuth") {
-    onCall { call -> app.resolve(call)?.takeIf { it.user.status != UserStatus.SUSPENDED }?.let { call.attributes.put(principalKey, it) } }
+    val origins = setOf(app.config.dashboardUrl, app.config.publicUrl).map { Url(it).protocolWithAuthority }
+    onCall { call ->
+        val principal = app.resolve(call)?.takeIf { it.user.status != UserStatus.SUSPENDED } ?: return@onCall
+        val guarded = call.request.httpMethod !in safeMethods || call.request.headers.contains(HttpHeaders.Upgrade)
+        if (!principal.token && guarded && call.request.header(HttpHeaders.Origin) !in origins) {
+            throw LiftgateException(HttpStatusCode.Forbidden, "bad_origin", "requests signed in with a session cookie must come from the dashboard")
+        }
+        call.attributes.put(principalKey, principal)
+    }
 }
 
 private suspend fun App.resolve(call: ApplicationCall): Principal? {

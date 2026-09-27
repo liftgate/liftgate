@@ -11,9 +11,11 @@ import dev.liftgate.db.sql
 import dev.liftgate.http.SESSION_COOKIE
 import dev.liftgate.http.json
 import dev.liftgate.http.liftgate
+import dev.liftgate.http.session
 import dev.liftgate.org.Orgs
 import dev.liftgate.org.insertUser
 import dev.liftgate.testConfig
+import dev.liftgate.unlimitedCache
 import io.ktor.client.HttpClient
 import io.ktor.client.request.cookie
 import io.ktor.client.request.delete
@@ -72,6 +74,7 @@ class ApiTokensTest {
     private fun replica() = TestApplication {
         val app = mockk<App>().also {
             every { it.config } returns testConfig()
+            every { it.cache } returns unlimitedCache
             every { it.metrics } returns PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
             every { it.orgs } returns orgs
             every { it.access } returns Access(orgs)
@@ -108,7 +111,7 @@ class ApiTokensTest {
     }
 
     private suspend fun HttpClient.create(session: String, body: String) = post("/api/v1/orgs/acme/tokens") {
-        cookie(SESSION_COOKIE, session)
+        session(session)
         contentType(ContentType.Application.Json)
         setBody(body)
     }
@@ -154,9 +157,9 @@ class ApiTokensTest {
         val token = a.token(admin)
         assertEquals(HttpStatusCode.OK to HttpStatusCode.OK, a.me(token) to b.me(token))
         val id = b.list(admin).single().text("id")
-        assertEquals(HttpStatusCode.NoContent, b.delete("/api/v1/orgs/acme/tokens/$id") { cookie(SESSION_COOKIE, admin) }.status)
+        assertEquals(HttpStatusCode.NoContent, b.delete("/api/v1/orgs/acme/tokens/$id") { session(admin) }.status)
         assertEquals(HttpStatusCode.Unauthorized to HttpStatusCode.Unauthorized, a.me(token) to b.me(token))
-        assertEquals(HttpStatusCode.NotFound, a.delete("/api/v1/orgs/acme/tokens/$id") { cookie(SESSION_COOKIE, admin) }.status)
+        assertEquals(HttpStatusCode.NotFound, a.delete("/api/v1/orgs/acme/tokens/$id") { session(admin) }.status)
         val audit = db.tx { AuditLog.selectAll().where { AuditLog.targetId eq id }.orderBy(AuditLog.id).map { it[AuditLog.action] to it[AuditLog.orgId] } }
         assertEquals(listOf("token.create" to acme.id, "token.revoke" to acme.id), audit)
     }
@@ -182,7 +185,7 @@ class ApiTokensTest {
         val token = api.token(owner)
         val id = api.list(owner).single().text("id")
         assertEquals(HttpStatusCode.Forbidden, api.get("/api/v1/orgs/acme/tokens") { cookie(SESSION_COOKIE, member) }.status)
-        assertEquals(HttpStatusCode.Forbidden, api.delete("/api/v1/orgs/acme/tokens/$id") { cookie(SESSION_COOKIE, member) }.status)
+        assertEquals(HttpStatusCode.Forbidden, api.delete("/api/v1/orgs/acme/tokens/$id") { session(member) }.status)
         assertEquals(HttpStatusCode.Forbidden, api.create(member, """{"name":"ci"}""").status)
         val bearer = listOf(
             api.post("/api/v1/orgs/acme/tokens") { header(HttpHeaders.Authorization, "Bearer $token") },

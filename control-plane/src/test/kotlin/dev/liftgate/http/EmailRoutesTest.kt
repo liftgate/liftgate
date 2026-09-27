@@ -65,6 +65,7 @@ class EmailRoutesTest {
         every { it.metrics } returns PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
         every { it.oauth } returns OAuth(mockk(), "http://localhost:8080", emptyList())
         every { it.emailCodes } returns emailCodes
+        every { it.cache } returns cache
     }
 
     private suspend fun ApplicationTestBuilder.post(path: String, body: String, ip: String = UUID.randomUUID().toString()): HttpResponse =

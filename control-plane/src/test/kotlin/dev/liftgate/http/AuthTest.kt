@@ -6,6 +6,7 @@ import dev.liftgate.auth.Sessions
 import dev.liftgate.org.Orgs
 import dev.liftgate.org.User
 import dev.liftgate.testConfig
+import dev.liftgate.unlimitedCache
 import io.ktor.client.request.cookie
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -35,6 +36,7 @@ class AuthTest {
         every { it.sessions } returns sessions
         every { it.metrics } returns PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
         every { it.config } returns testConfig()
+        every { it.cache } returns unlimitedCache
     }
 
     @Test

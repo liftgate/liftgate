@@ -86,6 +86,21 @@ class ConfigTest {
     }
 
     @Test
+    fun `the client ip header needs trusted proxy cidrs`() {
+        val config = Config.fromEnv(minimalEnv + mapOf("LIFTGATE_CLIENT_IP_HEADER" to "CF-Connecting-IP", "LIFTGATE_TRUSTED_PROXY_CIDRS" to "10.0.0.0/8, fd00::/8"))
+        assertEquals("CF-Connecting-IP", config.clientIpHeader)
+        assertEquals(2, config.trustedProxyCidrs.size)
+        listOf(
+            mapOf("LIFTGATE_CLIENT_IP_HEADER" to "CF-Connecting-IP") to "LIFTGATE_TRUSTED_PROXY_CIDRS",
+            mapOf("LIFTGATE_TRUSTED_PROXY_CIDRS" to "10.0.0.0") to "LIFTGATE_TRUSTED_PROXY_CIDRS",
+            mapOf("LIFTGATE_TRUSTED_PROXY_CIDRS" to "10.0.0.0/33") to "LIFTGATE_TRUSTED_PROXY_CIDRS",
+        ).forEach { (env, name) ->
+            val error = assertFailsWith<IllegalStateException> { Config.fromEnv(minimalEnv + env) }
+            assertTrue(name in error.message.orEmpty(), error.message)
+        }
+    }
+
+    @Test
     fun `oauth providers exist only when their client is configured`() {
         val none = Config.fromEnv(minimalEnv)
         assertEquals(listOf(null, null, null), listOf(none.google, none.gitlab, none.bitbucket))

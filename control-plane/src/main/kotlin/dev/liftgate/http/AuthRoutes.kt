@@ -55,7 +55,7 @@ val ApplicationCall.sessionUser: User
     get() = principal.takeUnless { it.token }?.user ?: forbidden()
 
 fun ApplicationCall.startSession(app: App, sessionId: String) =
-    response.cookies.append(app.cookie(SESSION_COOKIE, sessionId, sessionLifetime.inWholeSeconds.toInt()))
+    response.cookies.append(app.cookie(SESSION_COOKIE, sessionId, sessionLifetime.inWholeSeconds.toInt()).copy(secure = true))
 
 suspend fun ApplicationCall.redirectOnError(app: App, back: String, block: suspend () -> Unit) = try {
     block()
@@ -99,14 +99,14 @@ fun Route.authRoutes(app: App) {
         }
         post("/logout") {
             call.request.cookies[SESSION_COOKIE]?.let { app.sessions.delete(it) }
-            call.response.cookies.append(expired(SESSION_COOKIE))
+            call.response.cookies.append(expired(SESSION_COOKIE).copy(secure = true))
             call.respond(HttpStatusCode.NoContent)
         }
     }
     route("/me") {
         delete("/sessions") {
             app.sessions.deleteAll(call.sessionUser.id)
-            call.response.cookies.append(expired(SESSION_COOKIE))
+            call.response.cookies.append(expired(SESSION_COOKIE).copy(secure = true))
             call.respond(HttpStatusCode.NoContent)
         }
         get("/identities") { call.respond(app.signIn.identities(call.sessionUser.id)) }

@@ -4,6 +4,7 @@ import dev.liftgate.App
 import dev.liftgate.auth.SignedIn
 import dev.liftgate.auth.Sso
 import dev.liftgate.testConfig
+import dev.liftgate.unlimitedCache
 import io.ktor.client.request.cookie
 import io.ktor.client.request.forms.submitForm
 import io.ktor.client.request.get
@@ -37,6 +38,7 @@ class SsoRoutesTest {
         every { it.config } returns testConfig()
         every { it.metrics } returns PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
         every { it.sso } returns sso
+        every { it.cache } returns unlimitedCache
     }
 
     @Test

@@ -80,3 +80,14 @@ data:
   LIFTGATE_GITLAB_TRUST_EMAIL: "true"
   {{- end }}
   LIFTGATE_CUSTOM_DOMAINS_ENABLED: {{ .Values.customDomains.enabled | quote }}
+  {{- with .Values.controlPlane.clientIpHeader }}
+  LIFTGATE_CLIENT_IP_HEADER: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.controlPlane.trustedProxyCidrs }}
+  LIFTGATE_TRUSTED_PROXY_CIDRS: {{ join "," . | quote }}
+  {{- end }}
+{{- with include "liftgate.sharedSite" . }}
+{{- if not $.Values.allowSharedSite }}
+{{- fail (printf "deployDomain %s shares the site %s with publicUrl or dashboardUrl, so tenant apps would be same-site with the dashboard; use a separate registrable domain, or set allowSharedSite=true if %s is a public suffix such as co.uk" $.Values.deployDomain . .) }}
+{{- end }}
+{{- end }}

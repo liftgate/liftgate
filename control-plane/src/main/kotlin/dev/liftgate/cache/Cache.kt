@@ -1,13 +1,22 @@
 package dev.liftgate.cache
 
 import com.hazelcast.config.Config as HazelcastConfig
+import com.hazelcast.config.EvictionConfig
+import com.hazelcast.config.EvictionPolicy
+import com.hazelcast.config.MaxSizePolicy
 import com.hazelcast.config.NearCacheConfig
 import com.hazelcast.core.Hazelcast
 import com.hazelcast.map.IMap
 import dev.liftgate.config.Config
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.hours
 
 private const val DAY_SECONDS = 86_400
 private const val HOUR_SECONDS = 3_600
+const val PASSKEY_CHALLENGES_CAP = 10_000
+private const val SAML_REQUESTS_CAP = 10_000
+private const val SAML_ASSERTIONS_CAP = 100_000
+private const val RATE_LIMITS_CAP = 100_000
 
 /**
  * @author Dean
@@ -24,7 +33,10 @@ class Cache(config: Config) : AutoCloseable {
             if (config.hazelcastKubernetes) kubernetesConfig.setEnabled(true).setProperty("service-name", "${config.hazelcastCluster}-hazelcast") else tcpIpConfig.setEnabled(true).addMember("127.0.0.1")
         }
         getMapConfig("sessions").setTimeToLiveSeconds(DAY_SECONDS).setNearCacheConfig(NearCacheConfig().setTimeToLiveSeconds(DAY_SECONDS))
-        getMapConfig("rate-limits").setTimeToLiveSeconds(HOUR_SECONDS)
+        getMapConfig("rate-limits").setTimeToLiveSeconds(HOUR_SECONDS).setEvictionConfig(lru(RATE_LIMITS_CAP))
+        getMapConfig("passkey-challenges").setEvictionConfig(lru(PASSKEY_CHALLENGES_CAP))
+        getMapConfig("saml-requests").setEvictionConfig(lru(SAML_REQUESTS_CAP))
+        getMapConfig("saml-assertions").setEvictionConfig(lru(SAML_ASSERTIONS_CAP))
     })
     val sessions: IMap<String, String> = hazelcast.getMap("sessions")
     val passkeyChallenges: IMap<String, String> = hazelcast.getMap("passkey-challenges")
@@ -32,8 +44,10 @@ class Cache(config: Config) : AutoCloseable {
     val samlAssertions: IMap<String, String> = hazelcast.getMap("saml-assertions")
     private val rateLimits: IMap<String, Int> = hazelcast.getMap("rate-limits")
 
-    fun allow(key: String, perHour: Int): Boolean =
-        rateLimits.merge("$key:${System.currentTimeMillis() / (HOUR_SECONDS * 1000L)}", 1, Int::plus)!! <= perHour
+    fun allow(key: String, limit: Int, window: Duration = 1.hours): Boolean =
+        rateLimits.merge("$key:${System.currentTimeMillis() / window.inWholeMilliseconds}", 1, Int::plus)!! <= limit
 
     override fun close() = hazelcast.shutdown()
 }
+
+private fun lru(size: Int) = EvictionConfig().setEvictionPolicy(EvictionPolicy.LRU).setMaxSizePolicy(MaxSizePolicy.PER_NODE).setSize(size)

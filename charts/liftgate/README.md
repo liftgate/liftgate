@@ -28,7 +28,7 @@ Google, GitLab, Bitbucket, email codes, passkeys and SAML sign-in are optional; 
 helm dependency update charts/liftgate
 helm upgrade --install liftgate charts/liftgate \
   --namespace liftgate-system --create-namespace \
-  --set deployDomain=apps.example.com \
+  --set deployDomain=apps.example.net \
   --set publicUrl=https://liftgate.example.com \
   --set secrets.masterKey="$MASTER_KEY" \
   --set github.appId=123456 \
@@ -79,6 +79,34 @@ listener per domain onto the Gateway (field manager `liftgate`) and keeps the ma
 cert-manager `Certificate` beside the Gateway. A Gateway holds at most 64 listeners, which
 caps custom domains per cluster. `helm upgrade` rewrites the listener list; the next release
 or domain change restores the custom-domain listeners.
+
+## Separate sites
+
+Tenant apps must not share a site with the dashboard and API. Browsers treat hosts under the
+same registrable domain as one site, so an app at `shop.apps.example.com` is same-site with
+`liftgate.example.com`: requests it triggers carry the `SameSite=Lax` session cookie, and it
+can set cookies for `example.com` that the API receives. Give `deployDomain` its own
+registrable domain, such as `apps.example.net` next to `publicUrl: https://liftgate.example.com`.
+
+The chart refuses to render when `deployDomain` ends in the same two labels as the host of
+`publicUrl` or `dashboardUrl`. The check cannot tell a public suffix such as `co.uk` from a
+registrable domain; set `allowSharedSite: true` only when the shared labels are a public suffix.
+
+## Client IP
+
+Rate limits key anonymous requests by client IP. By default the control plane takes the entry
+`controlPlane.trustedProxies` places from the right of `X-Forwarded-For`. The Cilium gateway
+appends the address it received the request from, so the default of `1` fits clients that reach
+the gateway directly. Add one for every proxy in front of the gateway that appends to the
+header; a proxy that replaces the header counts as one entry. Behind Cloudflare and a reverse
+proxy that sets `X-Forwarded-For` from `CF-Connecting-IP`, the control plane receives
+`<client>, <proxy>`, so set `trustedProxies: 2`. IPv6 clients share one key per /64.
+
+Alternatively `controlPlane.clientIpHeader` names a header that carries the client address,
+such as `CF-Connecting-IP`. The control plane reads it only on connections from an address in
+`controlPlane.trustedProxyCidrs`, falls back to `X-Forwarded-For` otherwise, and refuses to
+start with a header but no CIDRs. Use it only when every request reaches the gateway through a
+proxy that sets or overwrites that header.
 
 ## External PostgreSQL and NATS
 
@@ -280,7 +308,9 @@ empty, neither appears.
 | `controlPlane.tag` | `0.1.0` | |
 | `controlPlane.replicas.{api,reconciler,builder,meter}` | `3,2,2,1` | Replicas per role in `ha` |
 | `controlPlane.logLevel` | `INFO` | `LIFTGATE_LOG_LEVEL` |
-| `controlPlane.trustedProxies` | `1` | `LIFTGATE_TRUSTED_PROXIES`: how many proxies append to `X-Forwarded-For` before the API. Rate limits read the client IP this many entries from the right. Count the gateway and every proxy in front of it, each of which must keep the incoming header (Caddy needs `trusted_proxies`); `0` uses the connection address |
+| `controlPlane.trustedProxies` | `1` | `LIFTGATE_TRUSTED_PROXIES`: how many proxies append to `X-Forwarded-For` before the API. Rate limits read the client IP this many entries from the right. Count the gateway and every proxy in front of it, each of which must keep the incoming header (Caddy needs `trusted_proxies`); `0` uses the connection address. See [Client IP](#client-ip) |
+| `controlPlane.clientIpHeader` | `""` | `LIFTGATE_CLIENT_IP_HEADER`, e.g. `CF-Connecting-IP`; read only on connections from `trustedProxyCidrs` |
+| `controlPlane.trustedProxyCidrs` | `[]` | `LIFTGATE_TRUSTED_PROXY_CIDRS`: CIDRs of the proxy that connects to the control plane |
 | `controlPlane.javaOpts` | `-XX:MaxRAMPercentage=75.0` | `JAVA_TOOL_OPTIONS` |
 | `controlPlane.resources` | 250m / 768Mi, limit 1536Mi | |
 | `dashboard.image` | `ghcr.io/liftgate/dashboard` | |
@@ -337,6 +367,7 @@ empty, neither appears.
 | `legal.privacyUrl` | `""` | `LIFTGATE_PRIVACY_URL` |
 | `legal.aupUrl` | `""` | `LIFTGATE_AUP_URL`, the acceptable use policy |
 | `customDomains.enabled` | `true` | `LIFTGATE_CUSTOM_DOMAINS_ENABLED`; `false` replaces the dashboard's add-domain form with a notice, for edges that cannot route customer hostnames yet |
+| `allowSharedSite` | `false` | Render although `deployDomain` ends in the same two labels as `publicUrl` or `dashboardUrl`; see [Separate sites](#separate-sites) |
 
 Derived variables: `LIFTGATE_DATABASE_URL` points at the CloudNativePG `-rw` Service (or
 `postgres.externalUrl`), `LIFTGATE_DATABASE_USER` and `LIFTGATE_DATABASE_PASSWORD` come from

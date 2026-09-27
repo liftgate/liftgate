@@ -29,6 +29,7 @@ fun Route.deployRoutes(app: App) {
     route("/services/{id}") {
         post("/deploy") {
             val scope = call.service(app, OrgRole.ADMIN)
+            call.limit(app, "deploy", DEPLOYS_PER_MINUTE, scope.service.id.toString())
             val ref = call.receive<DeployRequest>().ref ?: scope.environment.branch
             if (!refPattern.matches(ref)) invalid("ref must be a commit sha or branch name")
             val (sha, message) = if (shaPattern.matches(ref)) ref to null else app.branchHead(scope, ref)

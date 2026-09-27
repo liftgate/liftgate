@@ -15,6 +15,7 @@ import dev.liftgate.config.GitHubConfig
 import dev.liftgate.config.OAuthClient
 import dev.liftgate.org.User
 import dev.liftgate.testConfig
+import dev.liftgate.unlimitedCache
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -78,6 +79,7 @@ class AuthRoutesTest {
     private val passkeys = mockk<Passkeys>()
     private val app = mockk<App>().also {
         every { it.config } returns testConfig()
+        every { it.cache } returns unlimitedCache
         every { it.metrics } returns PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
         every { it.oauth } returns oauth
         every { it.signIn } returns signIn
@@ -128,7 +130,7 @@ class AuthRoutesTest {
         assertEquals(HttpStatusCode.Found, callback.status)
         assertEquals("http://localhost:3000/acme", callback.headers[HttpHeaders.Location])
         assertEquals(authorize.parameters["code_challenge"], pkceChallenge(verifier!!))
-        assertTrue(callback.headers.getAll(HttpHeaders.SetCookie).orEmpty().any { it.startsWith("$SESSION_COOKIE=session-1") })
+        assertTrue(callback.headers.getAll(HttpHeaders.SetCookie).orEmpty().any { it.startsWith("$SESSION_COOKIE=session-1") && "Secure" in it })
         coVerify { gitConnections.store(user.id, "dean", OAuthTokens("ghu_token", null, null)) }
     }
 
@@ -194,7 +196,7 @@ class AuthRoutesTest {
         val id = UUID.randomUUID()
         coEvery { signIn.unlink(user.id, id) } throws LiftgateException(HttpStatusCode.Conflict, "last_method", "add another sign-in method before removing this one")
         application { liftgate(app) }
-        val response = client.delete("/api/v1/me/identities/$id") { cookie(SESSION_COOKIE, "s") }
+        val response = client.delete("/api/v1/me/identities/$id") { session() }
         assertEquals(HttpStatusCode.Conflict, response.status)
         assertEquals("last_method", json.decodeFromString(ErrorBody.serializer(), response.bodyAsText()).error)
     }

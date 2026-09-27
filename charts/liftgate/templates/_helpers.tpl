@@ -68,3 +68,14 @@ nats://{{ include "liftgate.natsService" . }}.{{ .Release.Namespace }}.svc:4222
 {{- .Values.nats.externalUrl -}}
 {{- end -}}
 {{- end -}}
+
+{{- define "liftgate.site" -}}
+{{- regexFind "[^.]+[.][^.]+$" (lower .) -}}
+{{- end -}}
+
+{{- define "liftgate.sharedSite" -}}
+{{- $site := include "liftgate.site" .Values.deployDomain -}}
+{{- $shared := "" -}}
+{{- range include "liftgate.hosts" . | fromJsonArray }}{{ if and $site (eq $site (include "liftgate.site" .)) }}{{ $shared = $site }}{{ end }}{{ end -}}
+{{- $shared -}}
+{{- end -}}

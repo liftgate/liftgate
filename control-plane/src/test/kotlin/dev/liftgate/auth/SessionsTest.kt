@@ -9,6 +9,7 @@ import dev.liftgate.db.Sessions as SessionsTable
 import dev.liftgate.db.now
 import dev.liftgate.http.SESSION_COOKIE
 import dev.liftgate.http.liftgate
+import dev.liftgate.http.session
 import dev.liftgate.org.Orgs
 import dev.liftgate.org.insertUser
 import dev.liftgate.testConfig
@@ -68,7 +69,7 @@ class SessionsTest {
         val (dean, other) = db.tx { insertUser("dean", null, null, null) to insertUser("other", null, null, null) }
         val mine = List(3) { sessions.create(dean.id) }
         val theirs = sessions.create(other.id)
-        assertEquals(HttpStatusCode.NoContent, client.delete("/api/v1/me/sessions") { cookie(SESSION_COOKIE, mine.first()) }.status)
+        assertEquals(HttpStatusCode.NoContent, client.delete("/api/v1/me/sessions") { session(mine.first()) }.status)
         mine.forEach { cache.sessions.putIfAbsent(ApiTokens.hash(it), dean.id.toString()) }
         assertEquals(List(3) { HttpStatusCode.Unauthorized }, mine.map { session -> client.get("/api/v1/me") { cookie(SESSION_COOKIE, session) }.status })
         assertEquals(HttpStatusCode.OK, client.get("/api/v1/me") { cookie(SESSION_COOKIE, theirs) }.status)

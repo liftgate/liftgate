@@ -75,7 +75,7 @@ Stack: Kotlin 2.4, Ktor 3.6, Exposed 1.5, Flyway, PostgreSQL 16, NATS JetStream,
 - A container registry that build jobs can push to and the nodes can pull from: set `registry`, and `build.registryCredentials` when it needs a login. The default `registry.liftgate.internal` does not exist.
 - A TLS secret named `liftgate-wildcard-tls` in the release namespace for `*.<deployDomain>`, issued with a DNS-01 `Certificate` for your DNS provider; the `https-apps` listener reads it.
 - Helm (CI uses 4.3.0).
-- A wildcard DNS record for the app domain (`*.apps.example.com`) and a record for the control plane hostname (`liftgate.example.com`), both pointing at the gateway's address.
+- A wildcard DNS record for the app domain (`*.apps.example.net`) and a record for the control plane hostname (`liftgate.example.com`), both pointing at the gateway's address.
 - A GitHub App, described below.
 
 ### Install
@@ -93,7 +93,7 @@ A minimal `my-values.yaml`:
 
 ```yaml
 profile: single
-deployDomain: apps.example.com
+deployDomain: apps.example.net
 publicUrl: https://liftgate.example.com
 github:
   appId: "123456"
@@ -108,7 +108,7 @@ secrets:
   masterKey: "..."
 ```
 
-Generate `masterKey` with `openssl rand -base64 32`. `dashboardUrl` defaults to `publicUrl`, which serves the dashboard and the API on one host. With `postgres.managed` and `nats.managed` left at `true` the chart renders a CloudNativePG cluster and installs the NATS chart; set `externalUrl` on either to bring your own. For high availability install with `--values charts/liftgate/values-ha.yaml`: it sets `profile: ha` (three `api`, two `reconciler`, two `builder`, one `meter` replica and a three-instance database) and turns on the three-server NATS cluster, which `profile: ha` alone leaves at one server. Every value is documented in `charts/liftgate/README.md`.
+Generate `masterKey` with `openssl rand -base64 32`. Keep `deployDomain` on a different registrable domain from `publicUrl` so tenant apps are not same-site with the dashboard; the chart refuses a shared one, as `charts/liftgate/README.md` explains under Separate sites. `dashboardUrl` defaults to `publicUrl`, which serves the dashboard and the API on one host. With `postgres.managed` and `nats.managed` left at `true` the chart renders a CloudNativePG cluster and installs the NATS chart; set `externalUrl` on either to bring your own. For high availability install with `--values charts/liftgate/values-ha.yaml`: it sets `profile: ha` (three `api`, two `reconciler`, two `builder`, one `meter` replica and a three-instance database) and turns on the three-server NATS cluster, which `profile: ha` alone leaves at one server. Every value is documented in `charts/liftgate/README.md`.
 
 ### GitHub App
 

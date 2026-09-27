@@ -43,6 +43,17 @@ class DomainsTest {
 
     private fun suffixed(prefix: String) = Regex("""$prefix-[0-9a-z]{6}\.liftgate\.app""")
 
+    private suspend fun issue(serviceId: UUID, hostname: String) = db.tx {
+        DomainsTable.insertReturning {
+            it[id] = UUID.randomUUID()
+            it[DomainsTable.serviceId] = serviceId
+            it[DomainsTable.hostname] = hostname
+            it[kind] = "platform"
+            it[verifiedAt] = now()
+            it[certificateStatus] = "ready"
+        }.single().toDomain()
+    }
+
     @Test
     fun `the same web service gets distinct hostnames in production and staging`() = runBlocking {
         val shop = project("acme", "shop")
@@ -67,19 +78,19 @@ class DomainsTest {
     fun `an issued platform hostname is kept and its readable name stays taken`() = runBlocking {
         val shop = project("acme", "shop")
         val legacy = web(staging(shop))
-        val issued = db.tx {
-            DomainsTable.insertReturning {
-                it[id] = UUID.randomUUID()
-                it[serviceId] = legacy.id
-                it[hostname] = "api-shop-acme.liftgate.app"
-                it[kind] = "platform"
-                it[verifiedAt] = now()
-                it[certificateStatus] = "ready"
-            }.single().toDomain()
-        }
+        val issued = issue(legacy.id, "api-shop-acme.liftgate.app")
         assertEquals(issued, domains.ensurePlatform(requireNotNull(services.scope(legacy.id))))
         assertEquals(listOf(issued), domains.forService(legacy.id))
         val production = claim(production(shop))
         assertTrue(suffixed("api-shop").matches(production), production)
+    }
+
+    @Test
+    fun `a service whose readable and suffix names are both taken gets its hyphen-free id`() = runBlocking {
+        val shop = project("acme", "shop")
+        val holder = web(staging(shop))
+        val scope = requireNotNull(services.scope(web(production(shop)).id))
+        DomainNames.platform(scope, "liftgate.app").dropLast(1).forEach { issue(holder.id, it) }
+        assertEquals("${scope.service.id.toString().replace("-", "")}.liftgate.app", domains.ensurePlatform(scope).hostname)
     }
 }

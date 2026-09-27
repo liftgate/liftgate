@@ -107,8 +107,11 @@ proxy that sets `X-Forwarded-For` from `CF-Connecting-IP`, the control plane rec
 Alternatively `controlPlane.clientIpHeader` names a header that carries the client address,
 such as `CF-Connecting-IP`. The control plane reads it only on connections from an address in
 `controlPlane.trustedProxyCidrs`, falls back to `X-Forwarded-For` otherwise, and refuses to
-start with a header but no CIDRs. Use it only when every request reaches the gateway through a
-proxy that sets or overwrites that header.
+start with a header but no CIDRs. The gateway forwards a header the client sent unchanged, so
+with the gateway inside `trustedProxyCidrs`, a client that reaches the gateway directly picks its
+own address. Set `clientIpHeader` only when every request passes through an upstream proxy that
+overwrites that header, and confirm it with `controlPlane.upstreamOverwritesClientIpHeader: true`;
+the chart refuses to render a header without it.
 
 ## External PostgreSQL and NATS
 
@@ -222,7 +225,8 @@ Leave `url` empty for gitlab.com.
 Liftgate signs a GitLab login into an existing account with the same email only when GitLab lists
 that address as confirmed. For a self-managed `url` this is off unless you set `trustEmail: true`,
 because the administrators of that instance decide what counts as confirmed; without it, a GitLab
-login is never matched to an existing account by email.
+login is never matched to an existing account by email. `trustEmail: false` turns it off for
+gitlab.com as well. The `url` must use `https://`, because Liftgate sends GitLab access tokens to it.
 
 ### Bitbucket
 
@@ -358,7 +362,8 @@ empty, neither appears.
 | `controlPlane.replicas.{api,reconciler,builder,meter}` | `3,2,2,1` | Replicas per role in `ha` |
 | `controlPlane.logLevel` | `INFO` | `LIFTGATE_LOG_LEVEL` |
 | `controlPlane.trustedProxies` | `1` | `LIFTGATE_TRUSTED_PROXIES`: how many proxies append to `X-Forwarded-For` before the API. Rate limits read the client IP this many entries from the right. Count the gateway and every proxy in front of it, each of which must keep the incoming header (Caddy needs `trusted_proxies`); `0` uses the connection address. See [Client IP](#client-ip) |
-| `controlPlane.clientIpHeader` | `""` | `LIFTGATE_CLIENT_IP_HEADER`, e.g. `CF-Connecting-IP`; read only on connections from `trustedProxyCidrs` |
+| `controlPlane.clientIpHeader` | `""` | `LIFTGATE_CLIENT_IP_HEADER`, e.g. `CF-Connecting-IP`; read only on connections from `trustedProxyCidrs`, and only when every request passes through an upstream proxy that overwrites it. See [Client IP](#client-ip) |
+| `controlPlane.upstreamOverwritesClientIpHeader` | `false` | Required with `clientIpHeader`: confirms that an upstream proxy overwrites that header on every request |
 | `controlPlane.trustedProxyCidrs` | `[]` | `LIFTGATE_TRUSTED_PROXY_CIDRS`: CIDRs of the proxy that connects to the control plane |
 | `controlPlane.javaOpts` | `-XX:MaxRAMPercentage=75.0` | `JAVA_TOOL_OPTIONS` |
 | `controlPlane.resources` | 250m / 768Mi, limit 1536Mi | |
@@ -390,7 +395,7 @@ empty, neither appears.
 | `gateway.className` | `cilium` | |
 | `gateway.wildcardSecret` | `liftgate-wildcard-tls` | TLS secret for `*.deployDomain` |
 | `gateway.issuer` | `letsencrypt` | ClusterIssuer for the public hosts |
-| `deployDomain` | `liftgate.app` | `LIFTGATE_DEPLOY_DOMAIN` |
+| `deployDomain` | `liftgate.app` | `LIFTGATE_DEPLOY_DOMAIN`, at most 189 characters so every generated hostname fits in 253 |
 | `publicUrl` | `https://liftgate.dev` | `LIFTGATE_PUBLIC_URL` |
 | `dashboardUrl` | `""` | `LIFTGATE_DASHBOARD_URL`; empty means `publicUrl` |
 | `github.appId` | `""` | `LIFTGATE_GITHUB_APP_ID` |
@@ -400,10 +405,10 @@ empty, neither appears.
 | `github.privateKey` | `""` | `LIFTGATE_GITHUB_APP_PRIVATE_KEY`, PEM |
 | `google.clientId` | `""` | `LIFTGATE_GOOGLE_CLIENT_ID` |
 | `google.clientSecret` | `""` | `LIFTGATE_GOOGLE_CLIENT_SECRET`, Secret |
-| `gitlab.url` | `""` | `LIFTGATE_GITLAB_URL`; empty means `https://gitlab.com` |
+| `gitlab.url` | `""` | `LIFTGATE_GITLAB_URL`, `https://` only; empty means `https://gitlab.com` |
 | `gitlab.clientId` | `""` | `LIFTGATE_GITLAB_CLIENT_ID` |
 | `gitlab.clientSecret` | `""` | `LIFTGATE_GITLAB_CLIENT_SECRET`, Secret |
-| `gitlab.trustEmail` | `false` | `LIFTGATE_GITLAB_TRUST_EMAIL`; gitlab.com is always trusted, a self-managed `url` only when this is `true` |
+| `gitlab.trustEmail` | `null` | `LIFTGATE_GITLAB_TRUST_EMAIL`; unset trusts confirmed addresses on gitlab.com only, `true` or `false` decides for any `url` |
 | `bitbucket.clientId` | `""` | `LIFTGATE_BITBUCKET_CLIENT_ID` |
 | `bitbucket.clientSecret` | `""` | `LIFTGATE_BITBUCKET_CLIENT_SECRET`, Secret |
 | `email.smtpUrl` | `""` | `LIFTGATE_SMTP_URL`, Secret; `smtp://` for STARTTLS, `smtps://` for implicit TLS |

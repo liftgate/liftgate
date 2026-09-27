@@ -1,5 +1,6 @@
 package dev.liftgate.config
 
+import dev.liftgate.domain.DomainNames
 import io.fabric8.kubernetes.api.model.Toleration
 import io.fabric8.kubernetes.api.model.TolerationBuilder
 import io.ktor.http.Url
@@ -121,6 +122,7 @@ data class Config(
             ) else null
             val dashboardUrl = text("DASHBOARD_URL", "http://localhost:3000")
             val gitlabUrl = text("GITLAB_URL", GITLAB_COM).trimEnd('/')
+            check(gitlabUrl.startsWith("https://")) { "LIFTGATE_GITLAB_URL must start with https://, because GitLab access tokens are sent to it" }
             val encodedKey = required("SECRETS_MASTER_KEY")
             val masterKey = runCatching { Base64.getDecoder().decode(encodedKey) }.getOrNull()?.takeIf { it.size == 32 }
                 ?: error("LIFTGATE_SECRETS_MASTER_KEY must be the base64 of 32 random bytes")
@@ -156,7 +158,8 @@ data class Config(
                 publicUrl = text("PUBLIC_URL", "http://localhost:8080"),
                 dashboardUrl = dashboardUrl,
                 trustedProxies = text("TRUSTED_PROXIES", "0").toIntOrNull()?.takeIf { it >= 0 } ?: error("LIFTGATE_TRUSTED_PROXIES must be a number of proxy hops"),
-                deployDomain = text("DEPLOY_DOMAIN", "liftgate.app"),
+                deployDomain = text("DEPLOY_DOMAIN", "liftgate.app").takeIf { it.length <= DomainNames.MAX_DEPLOY_DOMAIN }
+                    ?: error("LIFTGATE_DEPLOY_DOMAIN must be at most ${DomainNames.MAX_DEPLOY_DOMAIN} characters, so generated hostnames stay within 253"),
                 github = github,
                 google = oauthClient("GOOGLE"),
                 gitlab = oauthClient("GITLAB"),

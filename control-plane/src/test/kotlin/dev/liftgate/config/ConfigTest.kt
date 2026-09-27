@@ -1,5 +1,6 @@
 package dev.liftgate.config
 
+import dev.liftgate.domain.DomainNames
 import dev.liftgate.minimalEnv
 import io.fabric8.kubernetes.api.model.TolerationBuilder
 import kotlin.test.Test
@@ -178,6 +179,22 @@ class ConfigTest {
         assertNull(config.bitbucket)
         val error = assertFailsWith<IllegalStateException> { Config.fromEnv(minimalEnv + ("LIFTGATE_BITBUCKET_CLIENT_ID" to "b")) }
         assertTrue("LIFTGATE_BITBUCKET_CLIENT_SECRET" in error.message.orEmpty())
+    }
+
+    @Test
+    fun `a gitlab url without https stops startup`() {
+        listOf("http://git.example", "git.example", "https://").forEach {
+            val error = assertFailsWith<IllegalStateException> { Config.fromEnv(minimalEnv + ("LIFTGATE_GITLAB_URL" to it)) }
+            assertTrue("LIFTGATE_GITLAB_URL" in error.message.orEmpty(), it)
+        }
+    }
+
+    @Test
+    fun `a deploy domain that leaves no room for a generated label stops startup`() {
+        val longest = "a".repeat(DomainNames.MAX_DEPLOY_DOMAIN - 4) + ".app"
+        assertEquals(longest, Config.fromEnv(minimalEnv + ("LIFTGATE_DEPLOY_DOMAIN" to longest)).deployDomain)
+        val error = assertFailsWith<IllegalStateException> { Config.fromEnv(minimalEnv + ("LIFTGATE_DEPLOY_DOMAIN" to "a$longest")) }
+        assertTrue("LIFTGATE_DEPLOY_DOMAIN" in error.message.orEmpty())
     }
 
     @Test

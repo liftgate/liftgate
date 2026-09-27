@@ -76,11 +76,14 @@ data:
   {{- with .Values.legal.aupUrl }}
   LIFTGATE_AUP_URL: {{ . | quote }}
   {{- end }}
-  {{- if .Values.gitlab.trustEmail }}
-  LIFTGATE_GITLAB_TRUST_EMAIL: "true"
+  {{- if kindIs "bool" .Values.gitlab.trustEmail }}
+  LIFTGATE_GITLAB_TRUST_EMAIL: {{ .Values.gitlab.trustEmail | quote }}
   {{- end }}
   LIFTGATE_CUSTOM_DOMAINS_ENABLED: {{ .Values.customDomains.enabled | quote }}
   {{- with .Values.controlPlane.clientIpHeader }}
+  {{- if not $.Values.controlPlane.upstreamOverwritesClientIpHeader }}
+  {{- fail (printf "controlPlane.clientIpHeader %s is trusted on every connection from trustedProxyCidrs, and the gateway forwards a %s header sent by the client unchanged; set it only when every request passes through an upstream proxy that overwrites %s, and confirm that with controlPlane.upstreamOverwritesClientIpHeader=true" . . .) }}
+  {{- end }}
   LIFTGATE_CLIENT_IP_HEADER: {{ . | quote }}
   {{- end }}
   {{- with .Values.controlPlane.trustedProxyCidrs }}

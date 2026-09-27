@@ -19,6 +19,7 @@ concurrency:
 
 jobs:
   lint:
+    name: lint (${{ matrix.profile }})
     runs-on: ubuntu-24.04
     strategy:
       matrix:
@@ -44,6 +45,21 @@ jobs:
           helm template liftgate charts/liftgate ${{ matrix.args }} --set runtimeClass= --set allowUnsandboxedTenants=true --show-only templates/configmap.yaml | grep 'LIFTGATE_ALLOW_RUNC: "true"'
           helm template liftgate charts/liftgate ${{ matrix.args }} --set-json 'build.allowedEgressCidrs=[{"cidr":"10.200.0.1/32","ports":[5050]}]' --show-only templates/networkpolicy.yaml \
             | yq -e 'select(.metadata.name == "build-isolation") | .spec.egress | (length == 3 and .[1].to[0].ipBlock.except[0] == "10.0.0.0/8" and .[2].to[0].ipBlock.cidr == "10.200.0.1/32" and (.[2].ports | length) == 1 and .[2].ports[0].protocol == "TCP" and .[2].ports[0].port == 5050)'
+      - name: gitlab, deploy domain and client ip guards
+        run: |
+          set -o pipefail
+          render() { helm template liftgate charts/liftgate ${{ matrix.args }} --show-only templates/configmap.yaml "$@"; }
+          render > default.yaml
+          if grep LIFTGATE_GITLAB_TRUST_EMAIL default.yaml; then exit 1; fi
+          render --set gitlab.trustEmail=false | grep 'LIFTGATE_GITLAB_TRUST_EMAIL: "false"'
+          render --set gitlab.trustEmail=true | grep 'LIFTGATE_GITLAB_TRUST_EMAIL: "true"'
+          if render --set gitlab.url=http://gitlab.example.com 2> render.err; then exit 1; fi
+          grep "/gitlab/url" render.err
+          if render --set deployDomain="$(printf 'a%.0s' $(seq 186)).app" 2> render.err; then exit 1; fi
+          grep "/deployDomain" render.err
+          if render --set controlPlane.clientIpHeader=CF-Connecting-IP --set controlPlane.trustedProxyCidrs={10.0.0.0/8} 2> render.err; then exit 1; fi
+          grep "upstreamOverwritesClientIpHeader=true" render.err
+          render --set controlPlane.clientIpHeader=CF-Connecting-IP --set controlPlane.trustedProxyCidrs={10.0.0.0/8} --set controlPlane.upstreamOverwritesClientIpHeader=true | grep 'LIFTGATE_CLIENT_IP_HEADER: "CF-Connecting-IP"'
 
   install-kindnet:
     runs-on: ubuntu-24.04
@@ -89,6 +105,23 @@ jobs:
           before="$(helm list --all-namespaces --output json)"
           sh infra/install.sh
           test "$(helm list --all-namespaces --output json)" = "$before"
+      - name: controllers whose CRDs outlived them are reinstalled
+        run: |
+          helm uninstall cert-manager --namespace cert-manager --wait
+          helm uninstall plugin-barman-cloud cnpg --namespace cnpg-system --wait
+          kubectl get crd certificates.cert-manager.io clusters.postgresql.cnpg.io objectstores.barmancloud.cnpg.io
+          sh infra/install.sh
+          kubectl --namespace cert-manager get deployment cert-manager
+          kubectl --namespace cnpg-system get deployment cnpg-cloudnative-pg plugin-barman-cloud
+      - name: the plugin joins an operator in another namespace
+        run: |
+          helm uninstall plugin-barman-cloud cnpg --namespace cnpg-system --wait
+          kubectl delete crd objectstores.barmancloud.cnpg.io
+          helm install cnpg cloudnative-pg --repo https://cloudnative-pg.github.io/charts --version "$(sed -n 's/^CNPG_VERSION=//p' infra/install.sh)" \
+            --namespace postgres-operator --create-namespace --take-ownership --wait --timeout 10m
+          sh infra/install.sh
+          kubectl --namespace postgres-operator get deployment plugin-barman-cloud
+          test -z "$(helm list --namespace cnpg-system --short)"
       - name: diagnostics
         if: failure()
         run: |

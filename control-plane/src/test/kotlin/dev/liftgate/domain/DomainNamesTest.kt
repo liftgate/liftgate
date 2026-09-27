@@ -20,12 +20,14 @@ import kotlin.test.assertTrue
 class DomainNamesTest {
     private val production = ServiceScope(testService, testEnvironment, testProject, testOrg)
     private val suffixed = Regex("""api-shop-[0-9a-z]{6}\.liftgate\.app""")
+    private val long = production.copy(service = testService.copy(slug = "s".repeat(40)), project = testProject.copy(slug = "p".repeat(40)))
 
     @Test
-    fun `production tries service-project-org and then the suffix form`() {
-        val (readable, fallback) = DomainNames.platform(production, "liftgate.app")
+    fun `production tries service-project-org, then the suffix form, then the hyphen-free service id`() {
+        val (readable, fallback, unique) = DomainNames.platform(production, "liftgate.app")
         assertEquals("api-shop-acme.liftgate.app", readable)
         assertTrue(suffixed.matches(fallback), fallback)
+        assertEquals("${testService.id.toString().replace("-", "")}.liftgate.app", unique)
     }
 
     @Test
@@ -38,15 +40,24 @@ class DomainNamesTest {
     fun `the suffix is stable per service id and differs between services`() {
         val other = production.copy(service = testService.copy(id = UUID.randomUUID()))
         assertEquals(DomainNames.platform(production, "liftgate.app"), DomainNames.platform(production, "liftgate.app"))
-        assertNotEquals(DomainNames.platform(production, "liftgate.app").last(), DomainNames.platform(other, "liftgate.app").last())
+        assertNotEquals(DomainNames.platform(production, "liftgate.app")[1], DomainNames.platform(other, "liftgate.app")[1])
     }
 
     @Test
-    fun `names longer than a dns label only get the suffix form, cut to fit one label`() {
-        val long = production.copy(service = testService.copy(slug = "s".repeat(40)), project = testProject.copy(slug = "p".repeat(40)))
-        val label = DomainNames.platform(long, "liftgate.app").single().substringBefore('.')
+    fun `names longer than a dns label skip the readable form and cut the suffix form to one label`() {
+        val names = DomainNames.platform(long, "liftgate.app")
+        assertEquals(2, names.size)
+        val label = names.first().substringBefore('.')
         assertTrue(Regex("s{40}-p{15}-[0-9a-z]{6}").matches(label), label)
         DomainNames.validate("$label.example.com", "liftgate.app")
+    }
+
+    @Test
+    fun `every name fits a dns hostname under the longest deploy domain config accepts`() {
+        val deployDomain = listOf("a".repeat(63), "b".repeat(63), "c".repeat(DomainNames.MAX_DEPLOY_DOMAIN - 128)).joinToString(".")
+        val names = DomainNames.platform(long, deployDomain) + DomainNames.platform(production, deployDomain)
+        assertEquals(253, names.maxOf { it.length })
+        names.forEach { DomainNames.validate(it, "liftgate.app") }
     }
 
     @Test

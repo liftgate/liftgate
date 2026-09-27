@@ -54,8 +54,8 @@ export function Projects({ org }: { org: string }) {
         description="Each project tracks one GitHub repository."
         actions={
           <>
-            <Link href={`/${org}/settings/sso`} className={buttonClasses("ghost")}>
-              SAML SSO
+            <Link href={`/${org}/settings`} className={buttonClasses("ghost")}>
+              Settings
             </Link>
             {newProject}
           </>

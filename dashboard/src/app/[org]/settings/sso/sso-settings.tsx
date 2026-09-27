@@ -10,6 +10,7 @@ import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
+import { CopyField } from "@/components/ui/copy-field";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Field, FormError, Input, Textarea } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -17,28 +18,6 @@ import { PageSkeleton, TableSkeleton } from "@/components/ui/skeleton";
 import { Cell, Row, Table } from "@/components/ui/table";
 
 const roles: OrgRole[] = ["member", "admin"];
-
-function CopyField({ label, value }: { label: string; value: string }) {
-  const [copied, setCopied] = useState(false);
-  const copy = useAction(async () => {
-    await navigator.clipboard.writeText(value);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  });
-  return (
-    <div className="flex flex-col gap-2">
-      <Field label={label}>
-        <div className="flex gap-2">
-          <Input readOnly value={value} onFocus={(e) => e.currentTarget.select()} className="flex-1 font-mono" />
-          <Button pending={copy.pending} onClick={() => copy.run()} aria-live="polite">
-            {copied ? "Copied" : "Copy"}
-          </Button>
-        </div>
-      </Field>
-      <FormError message={copy.error} />
-    </div>
-  );
-}
 
 export function SsoSettings({ org }: { org: string }) {
   const path = `/orgs/${org}/sso`;

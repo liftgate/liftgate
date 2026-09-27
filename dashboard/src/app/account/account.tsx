@@ -5,7 +5,7 @@ import { useState } from "react";
 import { api } from "@/lib/api";
 import { useAction, useApi } from "@/lib/hooks";
 import type { AuthProviders, GitConnection, Identity, OAuthProvider, Passkey, User } from "@/lib/types";
-import { formValues, timeAgo } from "@/lib/util";
+import { formValues, lastUsed, timeAgo } from "@/lib/util";
 import { createPasskey } from "@/lib/webauthn";
 import { Loaded } from "@/components/loaded";
 import { PageHeader } from "@/components/page-header";
@@ -17,8 +17,6 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Field, FormError, Input } from "@/components/ui/input";
 import { Skeleton, TableSkeleton } from "@/components/ui/skeleton";
 import { Cell, Row, Table } from "@/components/ui/table";
-
-const lastUsed = (iso: string | null) => (iso ? timeAgo(iso) : "Never");
 
 function useRemoval(reload: () => void) {
   const [target, setTarget] = useState<string>();

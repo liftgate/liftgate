@@ -62,10 +62,10 @@ class BuilderTest {
         .build()
 
     private fun build(status: JobStatus) = runBlocking {
-        client.resource(finishedPod()).create()
         val building = async(Dispatchers.Default) { Builder(app, client).build(queued.id) }
         job().waitUntilCondition({ it != null }, 10, TimeUnit.SECONDS)
         job().editStatus { JobBuilder(it).withStatus(status).build() }
+        client.resource(finishedPod()).create()
         building.await()
     }
 

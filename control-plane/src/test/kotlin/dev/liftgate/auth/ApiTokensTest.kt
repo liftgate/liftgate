@@ -162,7 +162,7 @@ class ApiTokensTest {
     }
 
     @Test
-    fun `an expired token is rejected by every replica and expiry is bounded`() = replicas { a, b ->
+    fun `an expired token is rejected by every replica and create input is bounded`() = replicas { a, b ->
         val owner = signedIn(OrgRole.OWNER)
         val token = a.token(owner, """{"name":"deploy","expiresInDays":1}""")
         assertEquals(HttpStatusCode.OK, b.me(token))
@@ -170,7 +170,9 @@ class ApiTokensTest {
         assertEquals(HttpStatusCode.Unauthorized to HttpStatusCode.Unauthorized, a.me(token) to b.me(token))
         a.token(owner, """{"name":"forever","expiresInDays":null}""")
         assertEquals(JsonNull, a.list(owner).single { it.text("name") == "forever" }["expiresAt"])
-        listOf(0, 366).forEach { assertEquals(HttpStatusCode.UnprocessableEntity, a.create(owner, """{"name":"x","expiresInDays":$it}""").status) }
+        listOf("""{"name":"x","expiresInDays":0}""", """{"name":"x","expiresInDays":366}""", """{"name":" "}""", """{"name":"${"x".repeat(101)}"}""").forEach {
+            assertEquals(HttpStatusCode.UnprocessableEntity, a.create(owner, it).status, it)
+        }
     }
 
     @Test

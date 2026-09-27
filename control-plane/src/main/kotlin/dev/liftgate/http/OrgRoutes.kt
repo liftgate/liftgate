@@ -81,7 +81,7 @@ fun Route.orgRoutes(app: App) {
                 post {
                     val org = call.sessionOrg(app, OrgRole.ADMIN)
                     val body = call.receive<CreateToken>()
-                    val name = body.name.trim().ifEmpty { invalid("name is required") }
+                    val name = body.name.trim().takeIf { it.length in 1..100 } ?: invalid("name must be 1 to 100 characters")
                     if (body.expiresInDays != null && body.expiresInDays !in 1..365) invalid("expiresInDays must be 1 to 365, or null for a token that never expires")
                     call.respond(HttpStatusCode.Created, CreatedToken(app.apiTokens.create(org.id, name, call.principal.user.id, body.expiresInDays)))
                 }

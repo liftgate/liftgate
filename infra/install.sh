@@ -80,4 +80,4 @@ found service prometheus -n liftgate-system || helm install prometheus prometheu
   -f prometheus/values.yaml \
   --wait --timeout 10m
 
-echo "==> Baseline ready. Install the chart: helm upgrade --install liftgate charts/liftgate -n liftgate-system"
+echo "==> Baseline ready. Install the chart: helm install liftgate oci://ghcr.io/liftgate/charts/liftgate --version <version> -n liftgate-system"

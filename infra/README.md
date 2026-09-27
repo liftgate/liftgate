@@ -39,7 +39,8 @@ through; match them to the chart's `gateway.name` and release namespace.
 Set `K8S_API_HOST` when the API server is not the first address of the `kubernetes`
 EndpointSlice (multi-server clusters behind a load balancer).
 
-Then install the chart from [`charts/liftgate`](../charts/liftgate). NATS is installed by the
+Then install the published chart `oci://ghcr.io/liftgate/charts/liftgate`, documented in
+[`charts/liftgate`](../charts/liftgate). NATS is installed by the
 chart (`nats.managed=true`); [`nats/values.yaml`](nats/values.yaml) is for running NATS outside
 the release:
 

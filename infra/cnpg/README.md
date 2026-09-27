@@ -39,7 +39,16 @@ into new volumes from the object store, and archives to a new folder from then o
    kubectl -n liftgate-system get backups
    ```
 
-2. Delete the `Cluster`. This removes the Postgres pods, their volumes and the
+2. If the primary still runs, close its current WAL file and wait until `last_archived_wal`
+   reaches the name the first command prints, so the latest writes are in the archive:
+
+   ```sh
+   PRIMARY=$(kubectl -n liftgate-system get cluster liftgate-postgres -o jsonpath='{.status.currentPrimary}')
+   kubectl -n liftgate-system exec "$PRIMARY" -c postgres -- psql -U postgres -Atc 'select pg_walfile_name(pg_switch_wal())'
+   kubectl -n liftgate-system exec "$PRIMARY" -c postgres -- psql -U postgres -Atc 'select last_archived_wal from pg_stat_archiver'
+   ```
+
+3. Delete the `Cluster`. This removes the Postgres pods, their volumes and the
    `liftgate-postgres-app` Secret; the object store is untouched.
 
    ```sh
@@ -48,10 +57,12 @@ into new volumes from the object store, and archives to a new folder from then o
    kubectl -n liftgate-system wait secret/liftgate-postgres-app --for=delete --timeout=10m
    ```
 
-3. Recreate it from the archive, and keep the three values in your values file afterwards.
-   `recoverFrom` is the folder the lost cluster archived to. `serverName` must be a folder that
-   has never been used: CloudNativePG refuses to archive into one that already holds WAL, and the
-   chart refuses to render when the two are equal.
+4. Recreate it from the archive. `recoverFrom` is the folder the lost cluster archived to:
+   `liftgate-postgres`, or the current `serverName` after an earlier restore. `serverName` must
+   be a folder that has never been used: CloudNativePG refuses to archive into one that already
+   holds WAL, and the chart refuses to render when the two are equal. Write the new values into
+   your values file so later upgrades keep `serverName`; the next restore changes all three
+   again.
 
    ```sh
    helm upgrade liftgate charts/liftgate -n liftgate-system -f liftgate-values.yaml \
@@ -61,7 +72,7 @@ into new volumes from the object store, and archives to a new folder from then o
    kubectl -n liftgate-system wait cluster/liftgate-postgres --for=condition=Ready --timeout=60m
    ```
 
-4. Restart the control plane. The restore generates a new password for the `liftgate` role,
+5. Restart the control plane. The restore generates a new password for the `liftgate` role,
    and running pods still hold the old one.
 
    ```sh
@@ -69,7 +80,7 @@ into new volumes from the object store, and archives to a new folder from then o
    kubectl -n liftgate-system rollout status deployment --selector app.kubernetes.io/component=control-plane
    ```
 
-5. The `ScheduledBackup` is named after `serverName`, so the restored cluster takes its first
+6. The `ScheduledBackup` is named after `serverName`, so the restored cluster takes its first
    base backup as soon as it is ready. Point-in-time restores of the new folder work once it has
    completed:
 

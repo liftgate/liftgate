@@ -105,8 +105,16 @@
             "recoverFrom": { "type": "string" },
             "recoverTo": { "type": "string", "pattern": "^([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2}))?$" }
           },
-          "if": { "properties": { "recoverFrom": { "minLength": 1 } } },
-          "then": { "properties": { "enabled": { "const": true } } }
+          "allOf": [
+            {
+              "if": { "properties": { "recoverFrom": { "minLength": 1 } } },
+              "then": { "properties": { "enabled": { "const": true } } }
+            },
+            {
+              "if": { "properties": { "recoverTo": { "minLength": 1 } } },
+              "then": { "properties": { "recoverFrom": { "minLength": 1 } } }
+            }
+          ]
         }
       },
       "if": { "properties": { "managed": { "const": false } } },

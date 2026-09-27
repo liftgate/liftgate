@@ -131,7 +131,8 @@ after the schedule is created, through the
 [Barman Cloud plugin](https://cloudnative-pg.io/plugin-barman-cloud/). The chart renders a
 `barmancloud.cnpg.io/v1` `ObjectStore`, registers the plugin as the cluster's WAL archiver and
 adds a `ScheduledBackup`. Backups and WAL that fall out of the `postgres.backup.retention`
-recovery window are deleted. The `ha` profile refuses to render without backups.
+recovery window are deleted. With a managed database, the `ha` profile refuses to render
+without backups.
 
 Install the plugin into the operator's namespace; it needs cert-manager:
 

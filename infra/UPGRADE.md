@@ -3,10 +3,9 @@
 Upgrade from a checkout of the new tag, with the values file of the running release. The steps
 assume release `liftgate` in `liftgate-system` with `postgres.backup.enabled=true`.
 
-1. Record the time and the schema version, and take a backup:
+1. Record the schema version, take a backup and, once it has completed, record the time:
 
    ```sh
-   date -u +%Y-%m-%dT%H:%M:%SZ
    PRIMARY=$(kubectl -n liftgate-system get cluster liftgate-postgres -o jsonpath='{.status.currentPrimary}')
    kubectl -n liftgate-system exec "$PRIMARY" -c postgres -- psql -U postgres -d liftgate -Atc \
      'select max(installed_rank) from flyway_schema_history where success'
@@ -24,6 +23,7 @@ assume release `liftgate` in `liftgate-system` with `postgres.backup.enabled=tru
    EOF
    )
    kubectl -n liftgate-system wait "$BACKUP" --for=jsonpath='{.status.phase}'=completed --timeout=60m
+   date -u +%Y-%m-%dT%H:%M:%SZ
    ```
 
 2. Snapshot the disk that holds the node's volumes, for a VM its data drive.

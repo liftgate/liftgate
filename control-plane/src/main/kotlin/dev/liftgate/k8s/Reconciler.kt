@@ -89,9 +89,14 @@ class Reconciler(private val app: App, private val kube: KubernetesClient) {
         val (workload, otherWorkload) = if (r.service.kind == ServiceKind.CRON) workloads.reversed() else workloads
         (listOf(Resources.namespace(r), Resources.resourceQuota(r), Resources.secret(r)) + Resources.networkPolicies(r, config.gatewayNamespace) + workload)
             .forEach { kube.resource(it).apply() }
+        if (r.suspended && r.service.kind == ServiceKind.CRON) stopJobs(r)
         route(r)
         kube.resource(otherWorkload).delete()
     }
+
+    private fun stopJobs(r: Release) = kube.batch().v1().jobs().inNamespace(r.namespace).list().items
+        .filter { job -> job.metadata.ownerReferences.orEmpty().any { it.kind == "CronJob" && it.name == r.service.slug } }
+        .forEach { kube.resource(it).delete() }
 
     private fun route(r: Release) = listOf(Resources.service(r), Resources.httpRoute(r, app.config.gatewayNamespace, app.config.gatewayName))
         .forEach { if (r.routable) kube.resource(it).apply() else kube.resource(it).delete() }

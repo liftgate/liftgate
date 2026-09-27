@@ -24,6 +24,9 @@ import dev.liftgate.service.ServiceSpec
 import dev.liftgate.service.Services
 import dev.liftgate.testConfig
 import io.fabric8.kubernetes.api.model.StatusBuilder
+import io.fabric8.kubernetes.api.model.batch.v1.CronJob
+import io.fabric8.kubernetes.api.model.batch.v1.JobBuilder
+import io.fabric8.kubernetes.api.model.batch.v1.JobListBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer
@@ -75,29 +78,38 @@ class SuspensionTest {
         every { it.domains } returns Domains(db, "liftgate.app")
     }
     private val requests = ConcurrentLinkedQueue<Triple<String, String, String>>()
+    private lateinit var namespace: String
 
-    private suspend fun seed(): Pair<UUID, List<Service>> {
+    private suspend fun seed(vararg extra: ServiceSpec): Pair<UUID, List<Service>> {
         val org = Orgs(db).create("acme", "Acme", db.tx { insertUser("dean", null, null, null) }.id)
         val projects = Projects(db)
         val project = projects.create(org.id, "shop", "Shop", "acme/shop", 42)
         val environment = projects.environments(project.id).single()
-        val services = listOf(ServiceSpec("api", "API", ServiceKind.WEB, replicas = 2), ServiceSpec("worker", "Worker", ServiceKind.WORKER, replicas = 3))
+        val services = (listOf(ServiceSpec("api", "API", ServiceKind.WEB, replicas = 2), ServiceSpec("worker", "Worker", ServiceKind.WORKER, replicas = 3)) + extra)
             .map { Services(db).create(environment.id, it) }
         Domains(db, "liftgate.app").ensurePlatform(services.first(), project, org)
         services.forEach { deployments.transition(release(it).id, DeploymentStatus.RUNNING, replicasReady = it.replicas) }
-        val namespaced = "namespaces/${environment.namespace}"
+        namespace = environment.namespace
+        val namespaced = "namespaces/$namespace"
         val applied = listOf("/api/v1/$namespaced", "/api/v1/$namespaced/resourcequotas/liftgate") +
             listOf("default-deny", "allow-internal", "allow-egress").map { "/apis/networking.k8s.io/v1/$namespaced/networkpolicies/$it" }
-        val perService = services.flatMap {
-            listOf("/api/v1/$namespaced/secrets/${it.slug}-env", "/apis/apps/v1/$namespaced/deployments/${it.slug}", "/api/v1/$namespaced/services/${it.slug}", routePath(namespaced, it))
+        val workloads = services.flatMap {
+            listOf(
+                "/api/v1/$namespaced/services/${it.slug}",
+                routePath(namespaced, it),
+                "/apis/apps/v1/$namespaced/deployments/${it.slug}",
+                "/apis/batch/v1/$namespaced/cronjobs/${it.slug}",
+            )
         }
-        (applied + perService).forEach { path -> server.expect().patch().withPath("$path?fieldManager=liftgate&force=true").andReply(200) { record(it) }.always() }
-        services.flatMap { listOf("/api/v1/$namespaced/services/${it.slug}", routePath(namespaced, it), "/apis/batch/v1/$namespaced/cronjobs/${it.slug}") }
-            .forEach { path -> server.expect().delete().withPath(path).andReply(200) { record(it).let { StatusBuilder().build() } }.always() }
+        (applied + workloads + services.map { "/api/v1/$namespaced/secrets/${it.slug}-env" })
+            .forEach { path -> server.expect().patch().withPath("$path?fieldManager=liftgate&force=true").andReply(200) { record(it) }.always() }
+        workloads.forEach { accept(it) }
         return org.id to services
     }
 
     private suspend fun release(service: Service) = builds.markSucceeded(builds.request(service.id, "abc123", null, "main").id, "registry/acme/shop-${service.slug}:abc123")
+
+    private fun accept(path: String) = server.expect().delete().withPath(path).andReply(200) { record(it).let { StatusBuilder().build() } }.always()
 
     private fun routePath(namespaced: String, service: Service) = "/apis/gateway.networking.k8s.io/v1/$namespaced/httproutes/${service.slug}"
 
@@ -145,6 +157,22 @@ class SuspensionTest {
         assertEquals(mapOf("api" to 2, "worker" to 3), workloads().associate { it.metadata.name to it.spec.replicas })
         assertEquals(listOf("api"), sent("PATCH", "httproutes").map { it.first.substringAfterLast('/').substringBefore('?') })
         assertEquals(listOf(worker.slug), sent("DELETE", "httproutes").map { it.first.substringAfterLast('/') })
+    }
+
+    @Test
+    fun `suspending a cron service suspends its schedule and deletes the jobs it already started`() = runBlocking {
+        val (orgId) = seed(ServiceSpec("nightly", "Nightly", ServiceKind.CRON, cronSchedule = "0 3 * * *"))
+        val jobs = listOf("nightly-1" to "nightly", "report-1" to "report").map { (name, owner) ->
+            JobBuilder().withNewMetadata().withName(name).withNamespace(namespace)
+                .addNewOwnerReference().withApiVersion("batch/v1").withKind("CronJob").withName(owner).withUid(name).endOwnerReference()
+                .endMetadata().build()
+        }
+        server.expect().get().withPath("/apis/batch/v1/namespaces/$namespace/jobs").andReturn(200, JobListBuilder().withItems(jobs).build()).always()
+        jobs.forEach { accept("/apis/batch/v1/namespaces/$namespace/jobs/${it.metadata.name}") }
+        admin("suspend", "acme", "mining")
+        Suspension(app, client).reapply(orgId)
+        assertEquals(true, client.kubernetesSerialization.unmarshal(sent("PATCH", "cronjobs").single().second, CronJob::class.java).spec.suspend)
+        assertEquals(listOf("nightly-1"), sent("DELETE", "jobs").map { it.first.substringAfterLast('/') })
     }
 
     @Test

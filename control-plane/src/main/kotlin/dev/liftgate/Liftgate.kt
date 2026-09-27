@@ -25,6 +25,8 @@ import dev.liftgate.domain.Domains
 import dev.liftgate.events.LeaderElection
 import dev.liftgate.events.Nats
 import dev.liftgate.events.OutboxRelay
+import dev.liftgate.events.Subject
+import dev.liftgate.events.uuid
 import dev.liftgate.http.httpServer
 import dev.liftgate.http.json
 import dev.liftgate.k8s.DeploymentWatcher
@@ -103,6 +105,7 @@ class App(val config: Config) : AutoCloseable {
             val relay = OutboxRelay(db, nats)
             LeaderElection(config, kube, "liftgate-outbox-relay").start(scope) { coroutineScope { relay.start(this); Housekeeping(db).start(this) } }
             server = httpServer(this).start(wait = false)
+            nats.consume(Subject.USER_UPDATED, "api-user-updated", scope) { sessions.evict(it.uuid("userId")) }
         }
         if (runs(Role.RECONCILER)) {
             Reconciler(this, kube).start()

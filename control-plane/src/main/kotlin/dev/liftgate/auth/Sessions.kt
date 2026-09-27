@@ -1,5 +1,6 @@
 package dev.liftgate.auth
 
+import com.hazelcast.query.Predicates
 import dev.liftgate.cache.Cache
 import dev.liftgate.db.Db
 import dev.liftgate.db.Sessions as SessionsTable
@@ -40,6 +41,8 @@ class Sessions(private val db: Db, private val cache: Cache, private val orgs: O
         val userId = cache.sessions[id]?.let(UUID::fromString) ?: lookup(id) ?: return null
         return orgs.user(userId)
     }
+
+    fun evict(userId: UUID) = cache.sessions.removeAll(Predicates.equal("this", userId.toString()))
 
     suspend fun delete(id: String) {
         db.tx { SessionsTable.deleteWhere { SessionsTable.id eq id } }

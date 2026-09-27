@@ -4,12 +4,15 @@ set -eu
 cd "$(dirname "$0")/.."
 
 NAMESPACE=liftgate-system
-tag="$(git describe --tags --abbrev=0 --match 'v*' HEAD^)"
-version="${tag#v}"
+for tag in $(git -c versionsort.suffix=- tag --merged HEAD^ --sort=-v:refname --list 'v*'); do
+  version="${tag#v}"
+  images="ghcr.io/liftgate/control-plane:$version ghcr.io/liftgate/dashboard:$version"
+  for image in $images; do docker pull --quiet "$image" || continue 2; done
+  break
+done
+docker image inspect $images > /dev/null
 previous="$(mktemp -d)"
 git archive "$tag" charts e2e | tar -x -C "$previous"
-images="ghcr.io/liftgate/control-plane:$version ghcr.io/liftgate/dashboard:$version"
-for image in $images; do docker pull --quiet "$image"; done
 
 sql() {
   kubectl -n "$NAMESPACE" exec -i liftgate-postgres-1 -c postgres -- psql --username postgres --dbname liftgate --set ON_ERROR_STOP=1 --tuples-only --no-align "$@"

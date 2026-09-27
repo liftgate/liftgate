@@ -13,6 +13,18 @@ export const lastUsed = (iso: string | null) => (iso ? timeAgo(iso) : "Never");
 
 export const shortSha = (sha: string) => sha.slice(0, 7);
 
+export const duration = (from: string | null, to: string | null) => {
+  if (!from) return undefined;
+  const seconds = Math.max(0, Math.round(((to ? new Date(to).getTime() : Date.now()) - new Date(from).getTime()) / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+  return `${Math.floor(seconds / 3600)}h ${Math.floor(seconds / 60) % 60}m`;
+};
+
+const ansi = /\u001b(?:\[[0-?]*[ -/]*[@-~]|\][^\u0007\u001b]*(?:\u0007|\u001b\\)|[ -/]*[0-~])/g;
+
+export const stripAnsi = (line: string) => line.replace(ansi, "");
+
 export const slugify = (value: string) =>
   value
     .toLowerCase()

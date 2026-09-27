@@ -36,6 +36,7 @@ denied 'cannot list resource "nodes"' get nodes
 denied "$policy" create namespace e2e-unlabelled --dry-run=server
 namespace e2e-permissive '{"liftgate.dev/managed": "true"}' | denied "$policy" create --dry-run=server -f -
 denied "$policy" label namespace kube-system liftgate.dev/managed=true pod-security.kubernetes.io/enforce=restricted --dry-run=server
+denied "$policy" delete namespace "$build" --dry-run=server
 namespace e2e-managed '{"liftgate.dev/managed": "true", "pod-security.kubernetes.io/enforce": "restricted"}' | allowed create --dry-run=server -f -
 allowed create deployment e2e -n env-e2e --image=busybox:1.36 --dry-run=server
 allowed create secret generic e2e -n "$build" --from-literal=token=value --dry-run=server

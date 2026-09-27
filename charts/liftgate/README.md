@@ -367,6 +367,7 @@ empty, neither appears.
 | `controlPlane.clientIpHeader` | `""` | `LIFTGATE_CLIENT_IP_HEADER`, e.g. `CF-Connecting-IP`; read only on connections from `trustedProxyCidrs`, and only when every request passes through an upstream proxy that overwrites it. See [Client IP](#client-ip) |
 | `controlPlane.upstreamOverwritesClientIpHeader` | `false` | Required with `clientIpHeader`: confirms that an upstream proxy overwrites that header on every request |
 | `controlPlane.trustedProxyCidrs` | `[]` | `LIFTGATE_TRUSTED_PROXY_CIDRS`: CIDRs of the proxy that connects to the control plane |
+| `controlPlane.databasePoolSize` | `0` | `LIFTGATE_DATABASE_POOL_SIZE`: the most Postgres connections one control-plane pod holds; `0` keeps the role default of 10 for `api` and `all` and 3 for the other roles, each keeping 2 idle. Size `postgres.maxConnections` for the sum over every pod |
 | `controlPlane.javaOpts` | `-XX:MaxRAMPercentage=75.0` | `JAVA_TOOL_OPTIONS` |
 | `controlPlane.resources` | 250m / 768Mi, limit 1536Mi | |
 | `dashboard.image` | `ghcr.io/liftgate/dashboard` | |

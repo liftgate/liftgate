@@ -89,6 +89,9 @@ data:
   {{- with .Values.controlPlane.trustedProxyCidrs }}
   LIFTGATE_TRUSTED_PROXY_CIDRS: {{ join "," . | quote }}
   {{- end }}
+  {{- with .Values.controlPlane.databasePoolSize }}
+  LIFTGATE_DATABASE_POOL_SIZE: {{ . | quote }}
+  {{- end }}
   {{- with .Values.workloads.nodeSelector }}
   LIFTGATE_WORKLOAD_NODE_SELECTOR: {{ include "liftgate.nodeSelector" . | quote }}
   {{- end }}

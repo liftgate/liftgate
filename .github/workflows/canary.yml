@@ -1,0 +1,68 @@
+name: canary
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+    - cron: "30 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CANARY_URL: ${{ vars.CANARY_URL }}
+
+jobs:
+  probe:
+    if: github.repository == 'liftgate/liftgate' && github.event.schedule != '30 6 * * *'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - run: curl --fail --silent --show-error --retry 2 --retry-all-errors --max-time 20 --output /dev/null https://liftgate.dev/api/v1/auth/providers
+      - if: env.CANARY_URL != ''
+        run: curl --fail --silent --show-error --retry 2 --retry-all-errors --max-time 20 --output /dev/null "$CANARY_URL"
+
+  deploy:
+    if: github.repository == 'liftgate/liftgate' && github.event.schedule != '*/10 * * * *'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    concurrency: canary-deploy
+    env:
+      READY: ${{ vars.CANARY_URL != '' && vars.CANARY_REPOSITORY != '' && secrets.CANARY_DEPLOY_KEY != '' }}
+    steps:
+      - if: env.READY != 'true'
+        run: echo "::notice::set CANARY_URL, CANARY_REPOSITORY and CANARY_DEPLOY_KEY to run the deploy canary"
+      - if: env.READY == 'true'
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ vars.CANARY_REPOSITORY }}
+          ssh-key: ${{ secrets.CANARY_DEPLOY_KEY }}
+      - if: env.READY == 'true'
+        name: push a commit and wait until it is served
+        run: |
+          marker="$GITHUB_RUN_ID.$GITHUB_RUN_ATTEMPT"
+          echo "$marker" > index.html
+          git add index.html
+          git -c user.name=liftgate-canary -c user.email=canary@liftgate.dev commit --quiet --message "chore: canary $marker"
+          git push --quiet
+          deadline=$(( $(date +%s) + 600 ))
+          until [ "$(curl --silent --max-time 10 "$CANARY_URL?$marker" || true)" = "$marker" ]; do
+            [ "$(date +%s)" -lt "$deadline" ] || { echo "::error::$CANARY_URL did not serve $marker within 10 minutes of the push"; exit 1; }
+            sleep 15
+          done
+
+  notify:
+    needs: [probe, deploy]
+    if: failure()
+    runs-on: ubuntu-24.04
+    env:
+      DISCORD_WEBHOOK_URL: ${{ secrets.ALERT_DISCORD_WEBHOOK_URL }}
+      NTFY_URL: ${{ secrets.ALERT_NTFY_URL }}
+      MESSAGE: "Liftgate canary failed: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} Runbook: https://github.com/liftgate/liftgate/blob/main/infra/RUNBOOK.md#canary"
+    steps:
+      - if: env.DISCORD_WEBHOOK_URL != ''
+        run: |
+          jq -n --arg content "$MESSAGE" '{content: $content}' | curl --fail --silent --show-error --header 'Content-Type: application/json' --data @- "$DISCORD_WEBHOOK_URL"
+      - if: env.NTFY_URL != ''
+        run: |
+          curl --fail --silent --show-error --output /dev/null --header 'Title: Liftgate canary failed' --header 'Priority: high' --data "$MESSAGE" "$NTFY_URL"

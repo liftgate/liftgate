@@ -20,6 +20,7 @@ controlPlane:
     limits:
       memory: 1536Mi
   clientIpHeader: ""
+  upstreamOverwritesClientIpHeader: false
   trustedProxyCidrs: []
 
 dashboard:
@@ -92,7 +93,7 @@ gitlab:
   url: ""
   clientId: ""
   clientSecret: ""
-  trustEmail: false
+  trustEmail: null
 
 bitbucket:
   clientId: ""

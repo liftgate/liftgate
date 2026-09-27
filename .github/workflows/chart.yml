@@ -45,6 +45,21 @@ jobs:
           helm template liftgate charts/liftgate ${{ matrix.args }} --set runtimeClass= --set allowUnsandboxedTenants=true --show-only templates/configmap.yaml | grep 'LIFTGATE_ALLOW_RUNC: "true"'
           helm template liftgate charts/liftgate ${{ matrix.args }} --set-json 'build.allowedEgressCidrs=[{"cidr":"10.200.0.1/32","ports":[5050]}]' --show-only templates/networkpolicy.yaml \
             | yq -e 'select(.metadata.name == "build-isolation") | .spec.egress | (length == 3 and .[1].to[0].ipBlock.except[0] == "10.0.0.0/8" and .[2].to[0].ipBlock.cidr == "10.200.0.1/32" and (.[2].ports | length) == 1 and .[2].ports[0].protocol == "TCP" and .[2].ports[0].port == 5050)'
+      - name: gitlab, deploy domain and client ip guards
+        run: |
+          set -o pipefail
+          render() { helm template liftgate charts/liftgate ${{ matrix.args }} --show-only templates/configmap.yaml "$@"; }
+          render > default.yaml
+          if grep LIFTGATE_GITLAB_TRUST_EMAIL default.yaml; then exit 1; fi
+          render --set gitlab.trustEmail=false | grep 'LIFTGATE_GITLAB_TRUST_EMAIL: "false"'
+          render --set gitlab.trustEmail=true | grep 'LIFTGATE_GITLAB_TRUST_EMAIL: "true"'
+          if render --set gitlab.url=http://gitlab.example.com 2> render.err; then exit 1; fi
+          grep "/gitlab/url" render.err
+          if render --set deployDomain="$(printf 'a%.0s' $(seq 186)).app" 2> render.err; then exit 1; fi
+          grep "/deployDomain" render.err
+          if render --set controlPlane.clientIpHeader=CF-Connecting-IP --set controlPlane.trustedProxyCidrs={10.0.0.0/8} 2> render.err; then exit 1; fi
+          grep "upstreamOverwritesClientIpHeader=true" render.err
+          render --set controlPlane.clientIpHeader=CF-Connecting-IP --set controlPlane.trustedProxyCidrs={10.0.0.0/8} --set controlPlane.upstreamOverwritesClientIpHeader=true | grep 'LIFTGATE_CLIENT_IP_HEADER: "CF-Connecting-IP"'
 
   install-kindnet:
     runs-on: ubuntu-24.04

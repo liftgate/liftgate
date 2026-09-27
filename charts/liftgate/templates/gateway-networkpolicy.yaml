@@ -1,4 +1,4 @@
-{{- if eq .Values.gateway.className "cilium" }}
+{{- if and (eq .Values.gateway.className "cilium") (.Capabilities.APIVersions.Has "cilium.io/v2/CiliumClusterwideNetworkPolicy") }}
 apiVersion: cilium.io/v2
 kind: CiliumClusterwideNetworkPolicy
 metadata:

@@ -8,16 +8,21 @@ import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder
 import io.fabric8.kubernetes.api.model.apps.DeploymentStatusBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient
+import io.mockk.clearMocks
+import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
+import java.sql.SQLException
+import java.util.UUID
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.time.Duration.Companion.minutes
 
 /**
  * @author Dean
@@ -70,16 +75,42 @@ class DeploymentWatcherTest {
         assertEquals(Rollout(testDeployment.id, DeploymentStatus.FAILED, 0, "api has timed out progressing"), Rollout.of(stalled))
     }
 
+    private fun app(deployments: Deployments) = mockk<App> {
+        every { this@mockk.scope } returns this@DeploymentWatcherTest.scope
+        every { this@mockk.deployments } returns deployments
+    }
+
     @Test
     fun `the informer records rollouts of managed deployments`() {
         val deployments = mockk<Deployments>(relaxUnitFun = true)
-        val app = mockk<App> {
-            every { this@mockk.scope } returns this@DeploymentWatcherTest.scope
-            every { this@mockk.deployments } returns deployments
+        client.resource(rollout()).create()
+        DeploymentWatcher(app(deployments), client).start().use {
+            coVerify(timeout = 10_000) { deployments.transition(testDeployment.id, DeploymentStatus.RUNNING, 2, null) }
+        }
+    }
+
+    @Test
+    fun `a rollout that could not be written while postgres was unreachable is recorded once it is back`() {
+        val deployments = mockk<Deployments> {
+            coEvery { transition(testDeployment.id, DeploymentStatus.RUNNING, 2, null) } throws SQLException("connection refused") andThen Unit
         }
         client.resource(rollout()).create()
-        DeploymentWatcher(app, client).start().use {
-            coVerify(timeout = 10_000) { deployments.transition(testDeployment.id, DeploymentStatus.RUNNING, 2, null) }
+        DeploymentWatcher(app(deployments), client).start().use {
+            coVerify(timeout = 15_000, exactly = 2) { deployments.transition(testDeployment.id, DeploymentStatus.RUNNING, 2, null) }
+        }
+    }
+
+    @Test
+    fun `a thousand idle deployments make no transition calls in three minutes`() {
+        val deployments = mockk<Deployments>(relaxUnitFun = true)
+        repeat(1000) {
+            client.resource(DeploymentBuilder(rollout()).editMetadata().withName("api-$it").addToLabels(DEPLOYMENT_LABEL, UUID.randomUUID().toString()).endMetadata().build()).create()
+        }
+        DeploymentWatcher(app(deployments), client).start().use {
+            coVerify(timeout = 60_000, exactly = 1000) { deployments.transition(any(), DeploymentStatus.RUNNING, 2, null) }
+            clearMocks(deployments, answers = false)
+            Thread.sleep(3.minutes.inWholeMilliseconds)
+            coVerify(exactly = 0) { deployments.transition(any(), any(), any(), any()) }
         }
     }
 }

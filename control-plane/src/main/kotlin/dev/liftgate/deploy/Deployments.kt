@@ -2,10 +2,12 @@ package dev.liftgate.deploy
 
 import dev.liftgate.db.Db
 import dev.liftgate.db.Deployments as DeploymentsTable
+import dev.liftgate.db.now
 import dev.liftgate.db.sql
 import dev.liftgate.db.toEnum
 import dev.liftgate.events.Subject
 import dev.liftgate.events.enqueue
+import dev.liftgate.events.requestedSince
 import dev.liftgate.http.conflict
 import dev.liftgate.http.notFound
 import kotlinx.serialization.json.buildJsonObject
@@ -19,12 +21,18 @@ import org.jetbrains.exposed.v1.core.less
 import org.jetbrains.exposed.v1.core.neq
 import org.jetbrains.exposed.v1.jdbc.JdbcTransaction
 import org.jetbrains.exposed.v1.jdbc.insertReturning
+import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.update
+import org.jetbrains.exposed.v1.jdbc.updateReturning
+import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.util.UUID
 
-private val live = listOf(DeploymentStatus.PENDING, DeploymentStatus.RELEASING, DeploymentStatus.RUNNING).map { it.sql }
+private const val REQUEUE_MINUTES = 5L
+private const val TIMEOUT_MINUTES = 45L
+private val unreleased = listOf(DeploymentStatus.PENDING, DeploymentStatus.RELEASING).map { it.sql }
+private val live = unreleased + DeploymentStatus.RUNNING.sql
 
 fun ResultRow.toDeployment() = Deployment(
     this[DeploymentsTable.id],
@@ -43,9 +51,14 @@ fun JdbcTransaction.createDeployment(serviceId: UUID, buildId: UUID): Deployment
         it[DeploymentsTable.buildId] = buildId
         it[status] = DeploymentStatus.PENDING.sql
     }.single().toDeployment()
-    enqueue(Subject.RELEASE_REQUESTED, buildJsonObject { put("deploymentId", deployment.id.toString()) })
+    requestRelease(deployment.id)
     return deployment
 }
+
+private fun JdbcTransaction.requestRelease(id: UUID) = enqueue(Subject.RELEASE_REQUESTED, buildJsonObject { put("deploymentId", id.toString()) })
+
+private fun JdbcTransaction.updated(id: UUID, status: DeploymentStatus) =
+    enqueue(Subject.DEPLOYMENT_UPDATED, buildJsonObject { put("deploymentId", id.toString()); put("status", status.sql) })
 
 /**
  * @author Dean
@@ -83,11 +96,28 @@ class Deployments(private val db: Db) {
                 it[DeploymentsTable.error] = error
             }
             if (to == DeploymentStatus.RUNNING) supersedeOlder(current)
-            enqueue(Subject.DEPLOYMENT_UPDATED, buildJsonObject { put("deploymentId", id.toString()); put("status", to.sql) })
+            updated(id, to)
+        }
+    }
+
+    suspend fun redrive() {
+        db.tx {
+            val now = now()
+            DeploymentsTable.updateReturning(listOf(DeploymentsTable.id), { unreleasedBefore(now.minusMinutes(TIMEOUT_MINUTES)) }) {
+                it[status] = DeploymentStatus.FAILED.sql
+                it[error] = "timed out"
+            }.toList().forEach { updated(it[DeploymentsTable.id], DeploymentStatus.FAILED) }
+            val requested = requestedSince(Subject.RELEASE_REQUESTED, "deploymentId", now.minusMinutes(REQUEUE_MINUTES))
+            DeploymentsTable.select(DeploymentsTable.id).where { unreleasedBefore(now.minusMinutes(REQUEUE_MINUTES)) }
+                .map { it[DeploymentsTable.id] }
+                .filter { it.toString() !in requested }
+                .forEach { requestRelease(it) }
         }
     }
 
     private fun find(id: UUID) = DeploymentsTable.selectAll().where { DeploymentsTable.id eq id }.singleOrNull()?.toDeployment()
+
+    private fun unreleasedBefore(cutoff: OffsetDateTime) = (DeploymentsTable.status inList unreleased) and (DeploymentsTable.createdAt less cutoff)
 
     private fun running(serviceId: UUID) =
         DeploymentsTable.selectAll().where { (DeploymentsTable.serviceId eq serviceId) and (DeploymentsTable.status eq DeploymentStatus.RUNNING.sql) }

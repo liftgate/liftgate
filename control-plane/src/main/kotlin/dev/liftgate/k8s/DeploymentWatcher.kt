@@ -9,12 +9,15 @@ import io.fabric8.kubernetes.client.informers.ResourceEventHandler
 import io.fabric8.kubernetes.client.informers.SharedIndexInformer
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import org.slf4j.LoggerFactory
+import java.sql.SQLException
 import java.util.UUID
+import kotlin.time.Duration.Companion.seconds
 
-private const val RESYNC_MILLIS = 60_000L
+private val recordRetry = 5.seconds
 
 /**
  * @author Dean
@@ -51,10 +54,12 @@ class DeploymentWatcher(private val app: App, private val kube: KubernetesClient
         return kube.apps().deployments().inAnyNamespace().withLabel(MANAGED_LABEL, "true").inform(
             object : ResourceEventHandler<Deployment> {
                 override fun onAdd(deployment: Deployment) = observe(deployment)
-                override fun onUpdate(old: Deployment, deployment: Deployment) = observe(deployment)
+                override fun onUpdate(old: Deployment, deployment: Deployment) {
+                    if (old.metadata.resourceVersion != deployment.metadata.resourceVersion) observe(deployment)
+                }
                 override fun onDelete(deployment: Deployment, finalStateUnknown: Boolean) = Unit
             },
-            RESYNC_MILLIS,
+            0,
         )
     }
 
@@ -62,12 +67,19 @@ class DeploymentWatcher(private val app: App, private val kube: KubernetesClient
         Rollout.of(deployment)?.let(rollouts::trySend)
     }
 
-    private suspend fun record(rollout: Rollout) = try {
-        app.deployments.transition(rollout.deploymentId, rollout.status, rollout.replicasReady, rollout.error)
-    } catch (e: LiftgateException) {
-        log.debug("ignored rollout of deployment {}: {}", rollout.deploymentId, e.message)
-    } catch (e: Exception) {
-        currentCoroutineContext().ensureActive()
-        log.warn("could not record rollout of deployment {}", rollout.deploymentId, e)
+    private suspend fun record(rollout: Rollout) {
+        while (true) {
+            try {
+                return app.deployments.transition(rollout.deploymentId, rollout.status, rollout.replicasReady, rollout.error)
+            } catch (e: LiftgateException) {
+                return log.debug("ignored rollout of deployment {}: {}", rollout.deploymentId, e.message)
+            } catch (e: SQLException) {
+                log.warn("could not record rollout of deployment {}, retrying", rollout.deploymentId, e)
+                delay(recordRetry)
+            } catch (e: Exception) {
+                currentCoroutineContext().ensureActive()
+                return log.warn("could not record rollout of deployment {}", rollout.deploymentId, e)
+            }
+        }
     }
 }

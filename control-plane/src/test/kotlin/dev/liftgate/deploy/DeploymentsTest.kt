@@ -17,6 +17,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
@@ -57,7 +58,7 @@ class DeploymentsTest {
         val services = Services(db)
         val service = services.create(projects.environments(project.id).single().id, ServiceSpec("api", "API", ServiceKind.WEB))
         assertEquals(org, services.scope(service.id)?.org)
-        suspend fun release(sha: String) = builds.markSucceeded(builds.request(service.id, sha, null, "main").id, "registry/acme/shop-api:$sha")
+        suspend fun release(sha: String) = assertNotNull(builds.markSucceeded(builds.request(service.id, sha, null, "main").id, "registry/acme/shop-api:$sha"))
 
         val first = release("aaa")
         deployments.transition(first.id, DeploymentStatus.RELEASING)

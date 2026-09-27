@@ -34,6 +34,7 @@ import dev.liftgate.http.json
 import dev.liftgate.k8s.DeploymentWatcher
 import dev.liftgate.k8s.Reconciler
 import dev.liftgate.k8s.Suspension
+import dev.liftgate.k8s.Sweeper
 import dev.liftgate.metering.Meter
 import dev.liftgate.metering.Prometheus
 import dev.liftgate.org.Limits
@@ -123,6 +124,7 @@ class App(val config: Config) : AutoCloseable {
             Reconciler(this, kube).start()
             DeploymentWatcher(this, kube).start()
             Suspension(this, kube).start()
+            Sweeper(this, kube).start()
         }
         if (runs(Role.BUILDER)) Builder(this, kube).start()
         if (runs(Role.METER)) Meter(this, Prometheus(config.prometheusUrl, http)).start()

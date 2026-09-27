@@ -213,6 +213,26 @@ helm upgrade liftgate charts/liftgate --namespace liftgate-system --reuse-values
 kubectl -n liftgate-system rollout status deployment/liftgate-control-plane --timeout=10m
 kubectl -n $ns rollout status deployment/registry --timeout=5m
 
+for build in $own $rival; do
+  kubectl apply -f - <<EOF
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: build-$build
+  namespace: liftgate-build
+  labels:
+    liftgate.dev/build: $build
+spec:
+  suspend: true
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: build
+          image: busybox:1.36
+EOF
+done
+
 kubectl -n liftgate-system exec -i liftgate-postgres-1 -c postgres -- psql --username postgres --dbname liftgate --set ON_ERROR_STOP=1 \
   --set own="$own_password" --set rival="$rival_password" <<'EOF'
 insert into organizations (id, slug, name) values

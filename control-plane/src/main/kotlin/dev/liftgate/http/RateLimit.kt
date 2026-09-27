@@ -21,7 +21,6 @@ fun Route.rateLimits(app: App) {
     listOf("/orgs", "/projects", "/environments", "/services", "/deployments", "/domains").forEach {
         route(it) { rateLimit(app, "writes", WRITES_PER_MINUTE) { if (request.httpMethod in safeMethods) null else caller(app) } }
     }
-    route("/services/{id}/deploy") { rateLimit(app, "deploy", DEPLOYS_PER_MINUTE) { parameters["id"] } }
 }
 
 fun Route.rateLimit(app: App, name: String, perMinute: Int, key: ApplicationCall.() -> String? = { caller(app) }) {

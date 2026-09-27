@@ -32,6 +32,7 @@ import org.slf4j.LoggerFactory
 
 private const val UNIQUE_VIOLATION = "23505"
 private const val BODY_LIMIT = 1024L * 1024
+const val WEBSOCKET_FRAME_LIMIT = 64L * 1024
 private val tooLarge = ErrorBody("payload_too_large", "the request body is too large")
 private val log = LoggerFactory.getLogger("dev.liftgate.http")
 
@@ -39,7 +40,7 @@ fun Application.liftgate(app: App) {
     install(ContentNegotiation) { json(json) }
     install(CallLogging)
     install(MicrometerMetrics) { registry = app.metrics }
-    install(WebSockets)
+    install(WebSockets) { maxFrameSize = WEBSOCKET_FRAME_LIMIT }
     val dashboard = Url(app.config.dashboardUrl)
     if (dashboard.protocolWithAuthority != Url(app.config.publicUrl).protocolWithAuthority) install(CORS) {
         allowHost(dashboard.hostWithPortIfSpecified, listOf(dashboard.protocol.name))

@@ -145,17 +145,18 @@ class RateLimitTest {
     }
 
     @Test
-    fun `deploys are limited per service`() {
+    fun `deploys are limited per service and only authorised deploys count`() {
         freshWindow()
         testApplication {
             application { liftgate(app()) }
-            val statuses = List(20) {
-                client.post("/api/v1/services/${testService.id}/deploy") {
-                    session()
-                    contentType(ContentType.Application.Json)
-                    setBody("""{"ref":"dddddddddddddddddddddddddddddddddddddddd"}""")
-                }.status
-            }
+            val id = testService.id.toString()
+            suspend fun deploy(path: String, signedIn: Boolean = true) = client.post("/api/v1/services/$path/deploy") {
+                if (signedIn) session()
+                contentType(ContentType.Application.Json)
+                setBody("""{"ref":"dddddddddddddddddddddddddddddddddddddddd"}""")
+            }.status
+            assertEquals(List(20) { HttpStatusCode.Unauthorized }, List(20) { deploy(id, signedIn = false) })
+            val statuses = List(20) { deploy(if (it % 2 == 0) id.uppercase() else id) }
             assertEquals(List(DEPLOYS_PER_MINUTE) { HttpStatusCode.Created } + List(20 - DEPLOYS_PER_MINUTE) { HttpStatusCode.TooManyRequests }, statuses)
         }
     }
@@ -169,5 +170,13 @@ class RateLimitTest {
         assertEquals(CloseReason.Codes.TRY_AGAIN_LATER.code, open().closeReason.await()?.code)
         streams.first().close()
         assertNotNull((1..50).firstNotNullOfOrNull { delay(20); open().takeIf { it.incoming.receiveCatching().getOrNull() is Frame.Text } })
+    }
+
+    @Test
+    fun `a log socket frame over the cap closes the socket as too big`() = testApplication {
+        application { liftgate(app()) }
+        val socket = createClient { install(WebSockets) }.webSocketSession("/api/v1/logs/services/${testService.id}") { session() }
+        socket.send(Frame.Binary(true, ByteArray(WEBSOCKET_FRAME_LIMIT.toInt() + 1)))
+        assertEquals(CloseReason.Codes.TOO_BIG.code, socket.closeReason.await()?.code)
     }
 }

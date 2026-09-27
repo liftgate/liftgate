@@ -78,7 +78,7 @@ jobs:
       - name: k3s as in infra/k3s/install.md, without the podman CNI config the runner ships
         run: |
           sudo rm -f /etc/cni/net.d/87-podman-bridge.conflist
-          curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC='server --flannel-backend=none --disable-network-policy --disable-kube-proxy --disable=traefik --disable=servicelb --write-kubeconfig-mode=644' sh -
+          curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.34.8+k3s1 INSTALL_K3S_EXEC='server --flannel-backend=none --disable-network-policy --disable-kube-proxy --disable=traefik --disable=servicelb --write-kubeconfig-mode=644' sh -
           for attempt in $(seq 60); do
             kubectl get nodes -o jsonpath='{.items[*].status.conditions[?(@.type=="Ready")].message}' | grep -q NetworkReady=false && break
             sleep 2

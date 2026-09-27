@@ -1,6 +1,7 @@
 package dev.liftgate
 
 import dev.liftgate.events.Nats
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.nats.client.Connection
 import io.nats.client.api.StreamConfiguration
 import org.testcontainers.containers.GenericContainer
@@ -20,7 +21,8 @@ object TestNats {
         start()
     }
     private val url = "nats://${container.host}:${container.getMappedPort(4222)}"
-    private val nats = Nats(testConfig(mapOf("LIFTGATE_NATS_URL" to url)), Duration.ofMillis(10))
+    val metrics = SimpleMeterRegistry()
+    private val nats = Nats(testConfig(mapOf("LIFTGATE_NATS_URL" to url)), metrics, Duration.ofMillis(10))
     val connection: Connection = io.nats.client.Nats.connect(url)
     val streams = connection.jetStreamManagement()
 

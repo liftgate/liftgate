@@ -38,10 +38,12 @@ const authErrors: Record<string, string> = {
 
 export const authError = (code: unknown) => (typeof code === "string" && code ? (authErrors[code] ?? "Sign-in failed. Try again.") : undefined);
 
+export const keepsStoredValue = (r: EnvVar) => r.secret && !r.value;
+
 export const envPayload = (rows: EnvVar[]) =>
   rows.map((r) => {
     if (!r.secret && r.value === null) throw new Error(`Retype the value of ${r.name} before saving it as a plain variable.`);
-    return { ...r, value: r.secret && !r.value ? null : r.value };
+    return { ...r, value: keepsStoredValue(r) ? null : r.value };
   });
 
 export const findService = (tree: ProjectTree, environmentSlug: string, serviceSlug: string) => {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Environment, Project, Service } from "./types.ts";
-import { envPayload, findService, safeNext, shortSha, slugify, timeAgo } from "./util.ts";
+import { envPayload, findService, keepsStoredValue, safeNext, shortSha, slugify, timeAgo } from "./util.ts";
 
 test("slugify lowercases and collapses separators", () => {
   assert.equal(slugify("  Acme Web App!  "), "acme-web-app");
@@ -33,6 +33,13 @@ test("envPayload never sends an empty value for an untouched stored secret", () 
   const plain = { name: "MODE", value: "", secret: false };
   assert.deepEqual(envPayload([stored, typed, plain, { name: "EMPTY", value: "", secret: true }]), [stored, typed, plain, { name: "EMPTY", value: null, secret: true }]);
   assert.throws(() => envPayload([{ ...stored, secret: false }]), /Retype the value of TOKEN/);
+});
+
+test("a stored secret stays locked until a new value is typed, even after typing and clearing", () => {
+  const cleared = { name: "TOKEN", value: "", secret: true };
+  for (const row of [{ ...cleared, value: null }, cleared]) assert.equal(keepsStoredValue(row), true);
+  assert.equal(keepsStoredValue({ ...cleared, value: "a" }), false);
+  assert.deepEqual(envPayload([cleared]), [{ ...cleared, value: null }]);
 });
 
 test("findService resolves the service in the environment named by the url", () => {

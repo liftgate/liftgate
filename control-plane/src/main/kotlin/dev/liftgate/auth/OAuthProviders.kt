@@ -18,7 +18,7 @@ object OAuthProviders {
     fun enabled(config: Config) = listOfNotNull(
         config.github?.let(::github),
         config.google?.let(::google),
-        config.gitlab?.let { gitlab(it, config.gitlabUrl) },
+        config.gitlab?.let { gitlab(it, config.gitlabUrl, config.gitlabTrustEmail) },
         config.bitbucket?.let(::bitbucket),
     )
 
@@ -42,12 +42,17 @@ object OAuthProviders {
             .let { VerifiedIdentity("google", it.sub, it.email, it.emailVerified, name = it.name, avatarUrl = it.picture) }
     }
 
-    fun gitlab(client: OAuthClient, url: String) = OAuthProvider(
+    fun gitlab(client: OAuthClient, url: String, trustEmail: Boolean) = OAuthProvider(
         "gitlab", client.clientId, client.clientSecret,
         "$url/oauth/authorize", "$url/oauth/token", "read_user",
     ) { token ->
-        get("$url/api/v4/user") { bearerAuth(token) }.body<GitLabUser>()
-            .let { VerifiedIdentity("gitlab", it.id.toString(), it.email, it.email != null && it.confirmedAt != null, it.username, it.name, it.avatarUrl) }
+        val user = get("$url/api/v4/user") { bearerAuth(token) }.body<GitLabUser>()
+        val confirmed = trustEmail && user.email != null && get("$url/api/v4/user/emails?per_page=100") { bearerAuth(token) }
+            .takeIf { it.status.isSuccess() }
+            ?.body<List<GitLabEmail>>()
+            .orEmpty()
+            .any { it.email.equals(user.email, ignoreCase = true) && it.confirmedAt != null }
+        VerifiedIdentity("gitlab", user.id.toString(), user.email, confirmed, user.username, user.name, user.avatarUrl)
     }
 
     fun bitbucket(client: OAuthClient) = OAuthProvider(
@@ -86,9 +91,11 @@ object OAuthProviders {
         val username: String,
         val name: String? = null,
         val email: String? = null,
-        @SerialName("confirmed_at") val confirmedAt: String? = null,
         @SerialName("avatar_url") val avatarUrl: String? = null,
     )
+
+    @Serializable
+    private data class GitLabEmail(val email: String, @SerialName("confirmed_at") val confirmedAt: String? = null)
 
     @Serializable
     private data class BitbucketUser(

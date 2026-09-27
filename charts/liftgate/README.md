@@ -142,6 +142,11 @@ gitlab:
 
 Leave `url` empty for gitlab.com.
 
+Liftgate signs a GitLab login into an existing account with the same email only when GitLab lists
+that address as confirmed. For a self-managed `url` this is off unless you set `trustEmail: true`,
+because the administrators of that instance decide what counts as confirmed; without it, a GitLab
+login is never matched to an existing account by email.
+
 ### Bitbucket
 
 In Bitbucket Cloud open the workspace, Settings, Workspace settings, OAuth consumers, Add
@@ -309,6 +314,7 @@ empty, neither appears.
 | `gitlab.url` | `""` | `LIFTGATE_GITLAB_URL`; empty means `https://gitlab.com` |
 | `gitlab.clientId` | `""` | `LIFTGATE_GITLAB_CLIENT_ID` |
 | `gitlab.clientSecret` | `""` | `LIFTGATE_GITLAB_CLIENT_SECRET`, Secret |
+| `gitlab.trustEmail` | `false` | `LIFTGATE_GITLAB_TRUST_EMAIL`; gitlab.com is always trusted, a self-managed `url` only when this is `true` |
 | `bitbucket.clientId` | `""` | `LIFTGATE_BITBUCKET_CLIENT_ID` |
 | `bitbucket.clientSecret` | `""` | `LIFTGATE_BITBUCKET_CLIENT_SECRET`, Secret |
 | `email.smtpUrl` | `""` | `LIFTGATE_SMTP_URL`, Secret; `smtp://` for STARTTLS, `smtps://` for implicit TLS |

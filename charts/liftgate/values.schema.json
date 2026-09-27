@@ -141,7 +141,8 @@
       "properties": {
         "url": { "type": "string", "pattern": "^(https?://.*)?$" },
         "clientId": { "type": "string" },
-        "clientSecret": { "type": "string" }
+        "clientSecret": { "type": "string" },
+        "trustEmail": { "type": "boolean" }
       }
     },
     "bitbucket": {

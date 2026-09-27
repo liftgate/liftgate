@@ -90,6 +90,7 @@ class ConfigTest {
         val none = Config.fromEnv(minimalEnv)
         assertEquals(listOf(null, null, null), listOf(none.google, none.gitlab, none.bitbucket))
         assertEquals("https://gitlab.com", none.gitlabUrl)
+        assertTrue(none.gitlabTrustEmail)
         val config = Config.fromEnv(
             minimalEnv + mapOf(
                 "LIFTGATE_GOOGLE_CLIENT_ID" to "g",
@@ -102,6 +103,8 @@ class ConfigTest {
         assertEquals(OAuthClient("g", "gs"), config.google)
         assertEquals(OAuthClient("l", "ls"), config.gitlab)
         assertEquals("https://git.example", config.gitlabUrl)
+        assertFalse(config.gitlabTrustEmail)
+        assertTrue(Config.fromEnv(minimalEnv + mapOf("LIFTGATE_GITLAB_URL" to "https://git.example", "LIFTGATE_GITLAB_TRUST_EMAIL" to "true")).gitlabTrustEmail)
         assertNull(config.bitbucket)
         val error = assertFailsWith<IllegalStateException> { Config.fromEnv(minimalEnv + ("LIFTGATE_BITBUCKET_CLIENT_ID" to "b")) }
         assertTrue("LIFTGATE_BITBUCKET_CLIENT_SECRET" in error.message.orEmpty())

@@ -3,6 +3,8 @@ package dev.liftgate.config
 import io.ktor.http.Url
 import java.util.Base64
 
+private const val GITLAB_COM = "https://gitlab.com"
+
 /**
  * @author Dean
  * @date 9/17/2026
@@ -75,6 +77,7 @@ data class Config(
     val termsUrl: String?,
     val privacyUrl: String?,
     val aupUrl: String?,
+    val gitlabTrustEmail: Boolean,
 ) {
     companion object {
         fun fromEnv(env: Map<String, String> = System.getenv()): Config {
@@ -94,6 +97,7 @@ data class Config(
                 clientSecret = required("GITHUB_CLIENT_SECRET"),
             ) else null
             val dashboardUrl = text("DASHBOARD_URL", "http://localhost:3000")
+            val gitlabUrl = text("GITLAB_URL", GITLAB_COM).trimEnd('/')
             val encodedKey = required("SECRETS_MASTER_KEY")
             val masterKey = runCatching { Base64.getDecoder().decode(encodedKey) }.getOrNull()?.takeIf { it.size == 32 }
                 ?: error("LIFTGATE_SECRETS_MASTER_KEY must be the base64 of 32 random bytes")
@@ -123,7 +127,7 @@ data class Config(
                 github = github,
                 google = oauthClient("GOOGLE"),
                 gitlab = oauthClient("GITLAB"),
-                gitlabUrl = text("GITLAB_URL", "https://gitlab.com").trimEnd('/'),
+                gitlabUrl = gitlabUrl,
                 bitbucket = oauthClient("BITBUCKET"),
                 webauthnRpId = text("WEBAUTHN_RP_ID", Url(dashboardUrl).host),
                 webauthnRpName = text("WEBAUTHN_RP_NAME", "Liftgate"),
@@ -145,6 +149,7 @@ data class Config(
                 termsUrl = optional("TERMS_URL"),
                 privacyUrl = optional("PRIVACY_URL"),
                 aupUrl = optional("AUP_URL"),
+                gitlabTrustEmail = text("GITLAB_TRUST_EMAIL", (gitlabUrl == GITLAB_COM).toString()).toBoolean(),
             )
         }
     }

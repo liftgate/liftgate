@@ -79,6 +79,7 @@ gitlab:
   url: ""
   clientId: ""
   clientSecret: ""
+  trustEmail: false
 
 bitbucket:
   clientId: ""

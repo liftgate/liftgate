@@ -14,6 +14,7 @@ import dev.liftgate.auth.SignIn
 import dev.liftgate.auth.Sso
 import dev.liftgate.build.Builder
 import dev.liftgate.build.GitHubApp
+import dev.liftgate.build.RegistryTokens
 import dev.liftgate.cache.Cache
 import dev.liftgate.config.Config
 import dev.liftgate.config.Role
@@ -93,6 +94,7 @@ class App(val config: Config) : AutoCloseable {
     val passkeys = Passkeys(config, db, cache, signIn)
     val emailCodes = config.email?.let { EmailCodes(db, cache, config.secretsMasterKey, Mailer(it), signIn) }
     val sso = Sso(config.publicUrl, db, cache, signIn)
+    val registryTokens = RegistryTokens(db, services, config)
     private val stopped = CountDownLatch(1)
     private var server: EmbeddedServer<*, *>? = null
 

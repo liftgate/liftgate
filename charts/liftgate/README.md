@@ -356,13 +356,19 @@ empty, neither appears.
 | `build.image` | `""` | `LIFTGATE_BUILD_IMAGE`; empty means `ghcr.io/liftgate/build-image:<appVersion>` |
 | `build.namespace` | `liftgate-build` | `LIFTGATE_BUILD_NAMESPACE`; the chart creates it |
 | `build.allowedEgressCidrs` | `[]` | Private addresses build jobs may reach, such as the registry, each as `{cidr: 10.0.0.5/32, ports: [5000]}` (TCP); everything else private is blocked. A bare CIDR string still works but opens every port, and the install notes warn about it |
-| `build.registryCredentials` | `""` | Docker `config.json` content; rendered as Secret `registry-credentials` in `build.namespace` and mounted by build jobs |
+| `build.registryCredentials` | `""` | Docker `config.json` content; rendered as Secret `registry-credentials` in `build.namespace` and mounted by build jobs. `registryAuth: shared` only |
+| `build.nodeSelector` | `{}` | `LIFTGATE_BUILD_NODE_SELECTOR`; node labels for build jobs, `nodeSelector` when empty |
+| `build.tolerations` | `[]` | `LIFTGATE_BUILD_TOLERATIONS`; taints build jobs tolerate, in the same form as `workloads.tolerations` |
 | `runtimeClass` | `gvisor` | `LIFTGATE_RUNTIME_CLASS`; the RuntimeClass of every tenant pod. The chart refuses to render when it is empty unless `allowUnsandboxedTenants=true` |
 | `allowUnsandboxedTenants` | `false` | With an empty `runtimeClass`, renders `LIFTGATE_ALLOW_RUNC=true` so tenant pods run under runc on the node kernel. Only for clusters where every tenant is trusted |
 | `workloads.nodeSelector` | `{}` | `LIFTGATE_WORKLOAD_NODE_SELECTOR`; node labels for tenant pods, `nodeSelector` when empty |
 | `workloads.tolerations` | `[]` | `LIFTGATE_WORKLOAD_TOLERATIONS`; taints tenant pods tolerate, written as for `kubectl taint`: `key=value:Effect`, `key:Effect` or `key` |
-| `nodeSelector` | `{}` | Node labels that pin the control plane, dashboard, CloudNativePG cluster and build jobs; rendered into `LIFTGATE_NODE_SELECTOR` as `key=value,key=value`, which tenant pods use when `workloads.nodeSelector` is empty. See [Node pools](#node-pools) for NATS |
+| `nodeSelector` | `{}` | Node labels that pin the control plane, dashboard and CloudNativePG cluster; rendered into `LIFTGATE_NODE_SELECTOR` as `key=value,key=value`, which tenant pods and build jobs use when `workloads.nodeSelector` or `build.nodeSelector` is empty. See [Node pools](#node-pools) for NATS |
 | `registryInsecure` | `false` | `LIFTGATE_REGISTRY_INSECURE`; build jobs push to `registry` over plain HTTP |
+| `registryAuth` | `shared` | `LIFTGATE_REGISTRY_AUTH`: `shared` or `token`, see [Registry authentication](#registry-authentication) |
+| `registryTokenKey` | `""` | `LIFTGATE_REGISTRY_TOKEN_KEY`, Secret; RSA private key in PEM that signs registry tokens. Required with `token` |
+| `registryTokenCertificate` | `""` | `LIFTGATE_REGISTRY_TOKEN_CERTIFICATE`; the certificate of `registryTokenKey`, which the registry trusts. Required with `token` |
+| `registryPullPassword` | `""` | `LIFTGATE_REGISTRY_PULL_PASSWORD`, Secret; password of the `pull` account nodes use. Required with `token` |
 | `prometheusUrl` | `http://prometheus.liftgate-system:9090` | `LIFTGATE_PROMETHEUS_URL` |
 | `signup.mode` | `approval` | `LIFTGATE_SIGNUP`: `open`, `approval` or `closed`; see [Sign-up and accounts](#sign-up-and-accounts) |
 | `signup.allow` | `[]` | `LIFTGATE_SIGNUP_ALLOW`: emails, `@domains` and `github:<login>` entries that are active from their first sign-in |
@@ -385,9 +391,10 @@ missing configuration instead of running with blank secrets.
 
 ## Node pools
 
-`nodeSelector` pins the platform (control plane, dashboard, CloudNativePG) and build jobs.
-Tenant pods are placed with `workloads.nodeSelector` and `workloads.tolerations`, and fall back
-to `nodeSelector` when `workloads.nodeSelector` is empty.
+`nodeSelector` pins the platform (control plane, dashboard, CloudNativePG). Tenant pods are
+placed with `workloads.nodeSelector` and `workloads.tolerations`, build jobs with
+`build.nodeSelector` and `build.tolerations`, and each falls back to `nodeSelector` when its
+own selector is empty.
 
 The `nats` subchart reads its own values, and Helm cannot template one value from another, so
 repeat the platform selector under `nats.podTemplate.merge.spec.nodeSelector`:
@@ -411,6 +418,43 @@ traffic from anywhere; Hazelcast only from the control plane; NATS only from thi
 pods; and PostgreSQL only from its own instances and the CloudNativePG operator. Anything else
 installed in the release namespace, such as the Prometheus from [`infra/`](../../infra), is
 reachable only from the control plane unless it brings its own NetworkPolicy.
+
+## Registry authentication
+
+With `registryAuth: shared`, the default, every build job mounts the same
+`build.registryCredentials`, so a build can push to and pull from every repository in the
+registry. Use it when one team owns every project.
+
+With `registryAuth: token`, the registry must be [CNCF Distribution](https://distribution.github.io/distribution/)
+with token authentication that points at Liftgate:
+
+- Each build logs in as `build-<build id>` with a random password from its own Secret. The
+  control plane stores only a hash of it and accepts it only while the build runs. The build job no
+  longer mounts `registry-credentials`.
+- `<publicUrl>/api/v1/registry/token` answers the registry's token requests with a token valid
+  for 5 minutes that allows pull and push on the build's own repository,
+  `<org>/<project>-<service>`, and nothing else. Build jobs reach it over their internet egress.
+- Nodes pull as `pull` with `registryPullPassword`, which reads every repository and writes
+  none. Add it to `/etc/rancher/k3s/registries.yaml` on every node.
+
+Create the signing key and certificate, and a pull password:
+
+```sh
+openssl req -x509 -newkey rsa:4096 -nodes -days 3650 -subj /CN=liftgate-registry-token \
+  -keyout registry-token.key -out registry-token.crt
+openssl rand -hex 32
+```
+
+```sh
+helm upgrade liftgate charts/liftgate --reuse-values \
+  --set registryAuth=token --set registryPullPassword="$PULL_PASSWORD" \
+  --set-file registryTokenKey=registry-token.key --set-file registryTokenCertificate=registry-token.crt
+```
+
+Configure the registry with `realm` `<publicUrl>/api/v1/registry/token`, `service` equal to
+`registry`, `issuer` `liftgate` and `rootcertbundle` pointing at `registry-token.crt`.
+[`infra/registry`](../../infra/registry) has the configuration Liftgate Cloud uses and the order
+of the switch-over.
 
 ## Build namespace
 

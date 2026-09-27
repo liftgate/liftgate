@@ -179,4 +179,17 @@ class ConfigTest {
         val error = assertFailsWith<IllegalStateException> { Config.fromEnv(minimalEnv + ("LIFTGATE_BITBUCKET_CLIENT_ID" to "b")) }
         assertTrue("LIFTGATE_BITBUCKET_CLIENT_SECRET" in error.message.orEmpty())
     }
+
+    @Test
+    fun `token registry auth requires its signing material only where tokens are served`() {
+        assertFalse(Config.fromEnv(minimalEnv).registryTokenAuth)
+        val reconciler = Config.fromEnv(minimalEnv + ("LIFTGATE_REGISTRY_AUTH" to "token"))
+        assertTrue(reconciler.registryTokenAuth)
+        assertNull(reconciler.registryTokens)
+        val api = minimalEnv + github + mapOf("LIFTGATE_ROLE" to "api", "LIFTGATE_REGISTRY_AUTH" to "token")
+        assertTrue("LIFTGATE_REGISTRY_TOKEN_KEY" in assertFailsWith<IllegalStateException> { Config.fromEnv(api) }.message.orEmpty())
+        val signing = mapOf("LIFTGATE_REGISTRY_TOKEN_KEY" to "key", "LIFTGATE_REGISTRY_TOKEN_CERTIFICATE" to "cert", "LIFTGATE_REGISTRY_PULL_PASSWORD" to "pull")
+        assertEquals(RegistryTokenConfig("key", "cert", "pull"), Config.fromEnv(api + signing).registryTokens)
+        assertTrue("LIFTGATE_REGISTRY_AUTH" in assertFailsWith<IllegalStateException> { Config.fromEnv(minimalEnv + ("LIFTGATE_REGISTRY_AUTH" to "none")) }.message.orEmpty())
+    }
 }

@@ -1,12 +1,7 @@
 #!/bin/sh
 set -eu
 
-src="$HOME/src"
-auth=$(printf 'x-access-token:%s' "$LIFTGATE_GIT_TOKEN" | base64 | tr -d '\n')
-
-git init -q "$src"
-git -C "$src" -c "http.extraHeader=Authorization: Basic $auth" fetch -q --depth 1 "$LIFTGATE_REPO_URL" "$LIFTGATE_COMMIT"
-git -C "$src" checkout -q FETCH_HEAD
+src=/workspace/src
 
 inside() {
   case "$1/" in
@@ -32,7 +27,7 @@ if [ "$LIFTGATE_BUILD_STRATEGY" = dockerfile ] || [ -f "$dockerfile" ]; then
 else
   plan=$(mktemp -d)
   railpack prepare --plan-out "$plan/railpack-plan.json" "$context"
-  set -- --frontend gateway.v0 --opt source=ghcr.io/railwayapp/railpack-frontend --local "dockerfile=$plan"
+  set -- --frontend gateway.v0 --opt "source=ghcr.io/railwayapp/railpack-frontend:v$RAILPACK_VERSION" --local "dockerfile=$plan"
 fi
 
 insecure=""

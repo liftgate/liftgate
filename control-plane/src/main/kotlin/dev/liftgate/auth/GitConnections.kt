@@ -43,11 +43,12 @@ class GitConnections(private val db: Db, private val secrets: SecretBox, private
         }
     }
 
-    suspend fun githubToken(userId: UUID): String? {
+    suspend fun github(userId: UUID): Pair<String, String>? {
         val row = db.tx { GitConnectionsTable.selectAll().where { (GitConnectionsTable.userId eq userId) and (GitConnectionsTable.provider eq GITHUB) }.singleOrNull() }
             ?: return null
         val expiresAt = row[GitConnectionsTable.expiresAt]
-        return if (expiresAt == null || expiresAt.isAfter(now().plusMinutes(1))) secrets.open(row[GitConnectionsTable.accessToken]) else refresh(userId, row)
+        val token = if (expiresAt == null || expiresAt.isAfter(now().plusMinutes(1))) secrets.open(row[GitConnectionsTable.accessToken]) else refresh(userId, row)
+        return token?.let { it to row[GitConnectionsTable.accountLogin] }
     }
 
     suspend fun list(userId: UUID): List<GitConnection> = db.tx {

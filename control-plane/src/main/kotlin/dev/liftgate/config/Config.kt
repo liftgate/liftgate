@@ -87,6 +87,8 @@ data class Config(
     val trustedProxyCidrs: List<IpSubnetFilterRule>,
     val workloadNodeSelector: Map<String, String>,
     val workloadTolerations: List<Toleration>,
+    val registryTokenAuth: Boolean,
+    val registryTokens: RegistryTokenConfig?,
     val buildNodeSelector: Map<String, String>,
     val buildTolerations: List<Toleration>,
 ) {
@@ -136,6 +138,11 @@ data class Config(
                 runCatching { IpSubnetFilterRule(it.trim(), IpFilterRuleType.ACCEPT) }.getOrElse { error("LIFTGATE_TRUSTED_PROXY_CIDRS must be CIDRs such as 10.0.0.0/8[,fd00::/8]") }
             }.orEmpty()
             val clientIpHeader = optional("CLIENT_IP_HEADER")?.also { if (trustedProxyCidrs.isEmpty()) error("LIFTGATE_CLIENT_IP_HEADER needs LIFTGATE_TRUSTED_PROXY_CIDRS") }
+            val registryTokenAuth = when (text("REGISTRY_AUTH", "shared")) {
+                "shared" -> false
+                "token" -> true
+                else -> error("LIFTGATE_REGISTRY_AUTH must be shared or token")
+            }
 
             return Config(
                 role = role,
@@ -181,6 +188,12 @@ data class Config(
                 trustedProxyCidrs = trustedProxyCidrs,
                 workloadNodeSelector = selector("WORKLOAD_NODE_SELECTOR") ?: nodeSelector,
                 workloadTolerations = tolerations("WORKLOAD_TOLERATIONS"),
+                registryTokenAuth = registryTokenAuth,
+                registryTokens = if (registryTokenAuth && role in setOf(Role.API, Role.ALL)) RegistryTokenConfig(
+                    privateKeyPem = required("REGISTRY_TOKEN_KEY"),
+                    certificatePem = required("REGISTRY_TOKEN_CERTIFICATE"),
+                    pullPassword = required("REGISTRY_PULL_PASSWORD"),
+                ) else null,
                 buildNodeSelector = selector("BUILD_NODE_SELECTOR") ?: nodeSelector,
                 buildTolerations = tolerations("BUILD_TOLERATIONS"),
             )

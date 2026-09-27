@@ -114,6 +114,11 @@ nodeSelector: {}
 
 registryInsecure: false
 
+registryAuth: shared
+registryTokenKey: ""
+registryTokenCertificate: ""
+registryPullPassword: ""
+
 prometheusUrl: http://prometheus.liftgate-system:9090
 
 signup:

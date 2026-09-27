@@ -23,6 +23,15 @@
     "build",
     "prometheusUrl"
   ],
+  "if": { "required": ["registryAuth"], "properties": { "registryAuth": { "const": "token" } } },
+  "then": {
+    "required": ["registryTokenKey", "registryTokenCertificate", "registryPullPassword"],
+    "properties": {
+      "registryTokenKey": { "minLength": 1 },
+      "registryTokenCertificate": { "minLength": 1 },
+      "registryPullPassword": { "minLength": 1 }
+    }
+  },
   "properties": {
     "global": { "type": "object" },
     "profile": { "type": "string", "enum": ["single", "ha"] },
@@ -215,6 +224,10 @@
     "runtimeClass": { "type": "string" },
     "nodeSelector": { "$ref": "#/definitions/nodeSelector" },
     "registryInsecure": { "type": "boolean" },
+    "registryAuth": { "type": "string", "enum": ["shared", "token"] },
+    "registryTokenKey": { "type": "string" },
+    "registryTokenCertificate": { "type": "string" },
+    "registryPullPassword": { "type": "string" },
     "prometheusUrl": { "type": "string", "pattern": "^https?://" },
     "signup": {
       "type": "object",

@@ -27,6 +27,7 @@ fun Route.apiRoutes(app: App) {
         domainRoutes(app)
         logRoutes(app)
         webhookRoutes(app)
+        registryRoutes(app)
         rateLimits(app)
     }
 }

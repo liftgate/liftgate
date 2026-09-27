@@ -92,6 +92,12 @@ data:
   {{- with .Values.workloads.tolerations }}
   LIFTGATE_WORKLOAD_TOLERATIONS: {{ join "," . | quote }}
   {{- end }}
+  {{- with .Values.registryAuth }}
+  LIFTGATE_REGISTRY_AUTH: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.registryTokenCertificate }}
+  LIFTGATE_REGISTRY_TOKEN_CERTIFICATE: {{ . | quote }}
+  {{- end }}
   {{- with .Values.build.nodeSelector }}
   LIFTGATE_BUILD_NODE_SELECTOR: {{ include "liftgate.nodeSelector" . | quote }}
   {{- end }}

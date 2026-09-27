@@ -12,8 +12,13 @@ import io.fabric8.kubernetes.api.model.OwnerReferenceBuilder
 import io.fabric8.kubernetes.api.model.Quantity
 import io.fabric8.kubernetes.api.model.Secret
 import io.fabric8.kubernetes.api.model.SecretBuilder
+import io.fabric8.kubernetes.api.model.Toleration
 import io.fabric8.kubernetes.api.model.batch.v1.Job
 import io.fabric8.kubernetes.api.model.batch.v1.JobBuilder
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonObject
+import java.util.Base64
 import java.util.UUID
 
 const val BUILD_LABEL = "liftgate.dev/build"
@@ -34,6 +39,8 @@ data class BuildJobSpec(
     val namespace: String,
     val nodeSelector: Map<String, String>,
     val registryInsecure: Boolean,
+    val registryTokenAuth: Boolean = false,
+    val tolerations: List<Toleration> = emptyList(),
 )
 
 /**
@@ -45,18 +52,21 @@ object BuildJobs {
     private const val RETENTION_SECONDS = 24 * 60 * 60
     private const val BUILDER_UID = 1000L
     private const val DOCKER_CONFIG = "/home/user/.docker"
+    private const val DOCKER_CONFIG_KEY = ".dockerconfigjson"
+    private const val WORKSPACE = "/workspace"
     private const val TOKEN_KEY = "token"
+    private const val EPHEMERAL_STORAGE = "20Gi"
 
     fun name(buildId: UUID) = "build-$buildId"
 
+    fun repository(org: Organization, project: Project, service: Service) = "${org.slug}/${project.slug}-${service.slug}"
+
     fun imageRef(registry: String, org: Organization, project: Project, service: Service, sha: String) =
-        "$registry/${org.slug}/${project.slug}-${service.slug}:${sha.replace('/', '-')}"
+        "$registry/${repository(org, project, service)}:${sha.replace('/', '-')}"
 
     fun job(spec: BuildJobSpec): Job {
         val labels = mapOf(MANAGED_LABEL to "true", BUILD_LABEL to spec.build.id.toString())
         val env = mapOf(
-            "LIFTGATE_REPO_URL" to "https://github.com/${spec.project.repoFullName}.git",
-            "LIFTGATE_COMMIT" to spec.build.commitSha,
             "LIFTGATE_ROOT_DIR" to spec.service.rootDir,
             "LIFTGATE_BUILD_STRATEGY" to spec.service.buildStrategy.sql,
             "LIFTGATE_DOCKERFILE_PATH" to spec.service.dockerfilePath,
@@ -68,10 +78,14 @@ object BuildJobs {
         val token = EnvVarBuilder().withName("LIFTGATE_GIT_TOKEN")
             .withNewValueFrom().withNewSecretKeyRef().withName(name(spec.build.id)).withKey(TOKEN_KEY).endSecretKeyRef().endValueFrom()
             .build()
+        val storage = mapOf("ephemeral-storage" to Quantity(EPHEMERAL_STORAGE))
         return JobBuilder()
             .withNewMetadata().withName(name(spec.build.id)).withNamespace(spec.namespace).withLabels<String, String>(labels).endMetadata()
             .withNewSpec()
             .withBackoffLimit(0)
+            .withNewPodFailurePolicy()
+            .addNewRule().withAction("Ignore").addNewOnPodCondition().withType("DisruptionTarget").withStatus("True").endOnPodCondition().endRule()
+            .endPodFailurePolicy()
             .withActiveDeadlineSeconds(TIMEOUT_SECONDS)
             .withTtlSecondsAfterFinished(RETENTION_SECONDS)
             .withNewTemplate()
@@ -79,39 +93,61 @@ object BuildJobs {
             .withNewSpec()
             .withRestartPolicy("Never")
             .withNodeSelector<String, String>(spec.nodeSelector)
+            .withTolerations(spec.tolerations)
             .withAutomountServiceAccountToken(false)
             .withNewSecurityContext().withRunAsUser(BUILDER_UID).withRunAsGroup(BUILDER_UID).withFsGroup(BUILDER_UID).endSecurityContext()
+            .addNewInitContainer()
+            .withName("clone")
+            .withImage(spec.buildImage)
+            .withCommand("/usr/local/bin/clone.sh")
+            .withEnv(
+                EnvVar("LIFTGATE_REPO_URL", "https://github.com/${spec.project.repoFullName}.git", null),
+                EnvVar("LIFTGATE_COMMIT", spec.build.commitSha, null),
+                token,
+            )
+            .addNewVolumeMount().withName("workspace").withMountPath(WORKSPACE).endVolumeMount()
+            .endInitContainer()
             .addNewContainer()
             .withName("build")
             .withImage(spec.buildImage)
-            .withEnv(env.map { (name, value) -> EnvVar(name, value, null) } + token)
+            .withEnv(env.map { (name, value) -> EnvVar(name, value, null) })
             .withNewResources()
-            .withRequests<String, Quantity>(mapOf("cpu" to Quantity("500m"), "memory" to Quantity("1Gi")))
-            .withLimits<String, Quantity>(mapOf("cpu" to Quantity("2"), "memory" to Quantity("4Gi")))
+            .withRequests<String, Quantity>(mapOf("cpu" to Quantity("500m"), "memory" to Quantity("1Gi")) + storage)
+            .withLimits<String, Quantity>(mapOf("cpu" to Quantity("2"), "memory" to Quantity("4Gi")) + storage)
             .endResources()
             .withNewSecurityContext()
             .withNewSeccompProfile().withType("Unconfined").endSeccompProfile()
             .withNewAppArmorProfile().withType("Unconfined").endAppArmorProfile()
             .endSecurityContext()
             .addNewVolumeMount().withName("docker-config").withMountPath(DOCKER_CONFIG).withReadOnly(true).endVolumeMount()
+            .addNewVolumeMount().withName("workspace").withMountPath(WORKSPACE).endVolumeMount()
             .endContainer()
             .addNewVolume().withName("docker-config")
-            .withNewSecret().withSecretName(REGISTRY_SECRET).withOptional(true)
-            .addNewItem().withKey(".dockerconfigjson").withPath("config.json").endItem()
+            .withNewSecret().withSecretName(if (spec.registryTokenAuth) name(spec.build.id) else REGISTRY_SECRET).withOptional(!spec.registryTokenAuth)
+            .addNewItem().withKey(DOCKER_CONFIG_KEY).withPath("config.json").endItem()
             .endSecret()
             .endVolume()
+            .addNewVolume().withName("workspace").withNewEmptyDir().endEmptyDir().endVolume()
             .endSpec()
             .endTemplate()
             .endSpec()
             .build()
     }
 
-    fun tokenSecret(spec: BuildJobSpec, owner: Job): Secret = SecretBuilder()
+    fun tokenSecret(spec: BuildJobSpec, owner: Job, registryPassword: String? = null): Secret = SecretBuilder()
         .withNewMetadata()
         .withName(name(spec.build.id))
         .withNamespace(spec.namespace)
         .withOwnerReferences(OwnerReferenceBuilder().withApiVersion("batch/v1").withKind("Job").withName(owner.metadata.name).withUid(owner.metadata.uid).build())
         .endMetadata()
-        .withStringData<String, String>(mapOf(TOKEN_KEY to spec.installationToken))
+        .withStringData<String, String>(mapOf(TOKEN_KEY to spec.installationToken) + listOfNotNull(registryPassword?.let { DOCKER_CONFIG_KEY to dockerConfig(spec, it) }))
         .build()
+
+    private fun dockerConfig(spec: BuildJobSpec, password: String) = buildJsonObject {
+        putJsonObject("auths") {
+            putJsonObject(spec.imageRef.substringBefore('/')) {
+                put("auth", Base64.getEncoder().encodeToString("${name(spec.build.id)}:$password".toByteArray()))
+            }
+        }
+    }.toString()
 }

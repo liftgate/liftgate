@@ -41,11 +41,11 @@ fun Route.projectRoutes(app: App) {
             requireSlug(body.slug, reservedProjectSlugs)
             if (body.name.isBlank()) invalid("name is required")
             if (!repoPattern.matches(body.repoFullName)) invalid("repoFullName must be owner/repo")
-            val token = app.gitConnections.githubToken(call.principal.user.id)
+            val (token, login) = app.gitConnections.github(call.principal.user.id)
                 ?: throw LiftgateException(HttpStatusCode.Conflict, "github_not_connected", "connect GitHub to import a repository")
             val installationId = app.github?.installation(token, body.repoFullName)
                 ?: invalid("install the GitHub App on ${body.repoFullName} from an account that can push to it")
-            call.respond(HttpStatusCode.Created, app.projects.create(org.id, body.slug, body.name.trim(), body.repoFullName, installationId))
+            call.respond(HttpStatusCode.Created, app.projects.create(org.id, body.slug, body.name.trim(), body.repoFullName, installationId, login))
         }
         get("/{project}/tree") {
             val tree = app.services.tree(call.parameters["slug"]!!, call.parameters["project"]!!, call.principal.user.id) ?: notFound("project")

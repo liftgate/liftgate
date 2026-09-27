@@ -95,6 +95,8 @@ data class Config(
     val githubClient: OAuthClient?,
     val certIssuer: String,
     val databasePoolSize: Int,
+    val internalUrl: String,
+    val registryJanitorPassword: String?,
 ) {
     companion object {
         private val taint = Regex("""([\w./-]+)(?:=([\w.-]*))?(?::(NoSchedule|PreferNoSchedule|NoExecute))?""")
@@ -216,6 +218,8 @@ data class Config(
                 githubClient = oauthClient("GITHUB"),
                 certIssuer = text("CERT_ISSUER", "letsencrypt"),
                 databasePoolSize = text("DATABASE_POOL_SIZE", if (serving) "10" else "3").toInt(),
+                internalUrl = text("INTERNAL_URL", "http://localhost:8080"),
+                registryJanitorPassword = if (registryTokenAuth && role in setOf(Role.API, Role.BUILDER, Role.ALL)) required("REGISTRY_JANITOR_PASSWORD") else null,
             )
         }
     }

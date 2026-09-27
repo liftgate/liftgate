@@ -26,7 +26,9 @@ image retention:
 | `storage.delete.enabled` | `true` | |
 
 Each build logs in as `build-<build id>` and gets tokens for its own repository only, and only
-while it runs. Nodes log in as `pull`, which can read every repository and write none.
+while it runs. Nodes log in as `pull`, which can read every repository and write none. The
+builder's image janitor logs in as `janitor`, which can pull and delete in every repository and
+push to none.
 
 ## Switch-over
 
@@ -34,7 +36,7 @@ The registry accepts anonymous requests until step 4, so builds keep pushing and
 pulling while Liftgate and the nodes get their logins; step 4 turns authentication on once both
 have them.
 
-1. Create the signing key, its certificate and the pull password:
+1. Create the signing key, its certificate and the pull and janitor passwords:
 
    ```sh
    install -d -m 700 /etc/liftgate-registry
@@ -42,11 +44,12 @@ have them.
    openssl req -x509 -newkey rsa:4096 -nodes -days 3650 -subj /CN=liftgate-registry-token \
      -keyout token.key -out token.crt
    openssl rand -hex 32 > pull-password
+   openssl rand -hex 32 > janitor-password
    ```
 
 2. Upgrade Liftgate with `registryAuth=token`, `registryTokenKey` from `token.key`,
-   `registryTokenCertificate` from `token.crt` and `registryPullPassword`, as in the chart
-   README. Then run a build and confirm it pushes.
+   `registryTokenCertificate` from `token.crt`, `registryPullPassword` and
+   `registryJanitorPassword`, as in the chart README. Then run a build and confirm it pushes.
 
 3. On every node, add the pull account to `/etc/rancher/k3s/registries.yaml` and restart k3s
    (`k3s-agent` on agents):
@@ -119,8 +122,8 @@ Every other tag is deleted with `HEAD` for its `Docker-Content-Digest` and then
 answers 409 `image_pruned` and the dashboard hides the button. A tag that shares its manifest
 with a kept tag stays. Repositories of deleted services, projects and organizations lose every
 tag. Repositories Liftgate never pushed to, such as the platform's own `liftgate/*` images, are
-never touched. With token auth the janitor signs itself a token for `pull,delete` on one
-repository at a time.
+never touched. With token auth the janitor logs in to the control plane's token service as
+`janitor` and gets a token for `pull,delete` on one repository at a time.
 
 Deleting a manifest frees no disk. `registry garbage-collect --delete-untagged` does: it removes
 the pruned images and the `:cache` manifests that newer builds replaced, together with every blob

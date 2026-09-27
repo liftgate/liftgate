@@ -131,6 +131,7 @@ registryAuth: shared
 registryTokenKey: ""
 registryTokenCertificate: ""
 registryPullPassword: ""
+registryJanitorPassword: ""
 
 prometheusUrl: http://prometheus.liftgate-system:9090
 

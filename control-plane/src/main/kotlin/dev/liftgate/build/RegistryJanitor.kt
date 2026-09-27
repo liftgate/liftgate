@@ -19,7 +19,10 @@ import dev.liftgate.project.toProject
 import dev.liftgate.service.toService
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.ktor.client.call.body
+import io.ktor.client.request.basicAuth
+import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.request.parameter
 import io.ktor.client.request.request
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.HttpHeaders
@@ -34,6 +37,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.jetbrains.exposed.v1.core.Op
@@ -90,7 +94,7 @@ class RegistryJanitor(private val app: App, private val kube: KubernetesClient) 
 
     suspend fun runOnce(): Int {
         val shared = if (app.config.registryTokenAuth) null else runInterruptible(Dispatchers.IO) { sharedLogin() }
-        fun authorization(name: String) = if (app.config.registryTokenAuth) "Bearer ${app.registryTokens.janitor(name)}" else shared?.let { "Basic $it" }
+        suspend fun authorization(name: String) = if (app.config.registryTokenAuth) "Bearer ${token(name)}" else shared?.let { "Basic $it" }
         val repositories = app.db.tx { repositories() }
         val listed = repositories.filter { it.startsWith("$registry/") }.flatMap { repository ->
             val name = repository.removePrefix("$host/")
@@ -101,9 +105,9 @@ class RegistryJanitor(private val app: App, private val kube: KubernetesClient) 
             }
         }.toMap()
         val doomed = app.db.tx { prune(repositories, listed) }
-        doomed.forEach {
-            val name = it.substringBefore('@')
-            send(HttpMethod.Delete, "/v2/$name/manifests/${it.substringAfter('@')}", authorization(name))
+        doomed.groupBy({ it.substringBefore('@') }, { it.substringAfter('@') }).forEach { (name, digests) ->
+            val auth = authorization(name)
+            digests.forEach { send(HttpMethod.Delete, "/v2/$name/manifests/$it", auth) }
         }
         return doomed.size
     }
@@ -140,6 +144,15 @@ class RegistryJanitor(private val app: App, private val kube: KubernetesClient) 
 
     private fun sharedLogin(): String? = kube.secrets().inNamespace(app.config.buildNamespace).withName(REGISTRY_SECRET).get()?.data?.get(BuildJobs.DOCKER_CONFIG_KEY)?.let {
         json.parseToJsonElement(Base64.getDecoder().decode(it).decodeToString()).jsonObject["auths"]?.jsonObject?.get(host)?.jsonObject?.get("auth")?.jsonPrimitive?.content
+    }
+
+    private suspend fun token(name: String): String {
+        val response = app.http.get("${app.config.internalUrl}/api/v1/registry/token") {
+            basicAuth(JANITOR_ACCOUNT, requireNotNull(app.config.registryJanitorPassword))
+            parameter("scope", "repository:$name:pull,delete")
+        }
+        check(response.status.isSuccess()) { "the token service answered ${response.status} for $name" }
+        return response.body<JsonObject>().getValue("token").jsonPrimitive.content
     }
 
     private suspend fun send(method: HttpMethod, path: String, authorization: String?): HttpResponse? {

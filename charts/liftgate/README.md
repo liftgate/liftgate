@@ -436,6 +436,7 @@ empty, neither appears.
 | `registryTokenKey` | `""` | `LIFTGATE_REGISTRY_TOKEN_KEY`, Secret; RSA private key in PEM that signs registry tokens. Required with `token` |
 | `registryTokenCertificate` | `""` | `LIFTGATE_REGISTRY_TOKEN_CERTIFICATE`; the certificate of `registryTokenKey`, which the registry trusts. Required with `token` |
 | `registryPullPassword` | `""` | `LIFTGATE_REGISTRY_PULL_PASSWORD`, Secret; password of the `pull` account nodes use. Required with `token` |
+| `registryJanitorPassword` | `""` | `LIFTGATE_REGISTRY_JANITOR_PASSWORD`, Secret; password of the `janitor` account the builder prunes images with. Required with `token` |
 | `prometheusUrl` | `http://prometheus.liftgate-system:9090` | `LIFTGATE_PROMETHEUS_URL` |
 | `signup.mode` | `approval` | `LIFTGATE_SIGNUP`: `open`, `approval` or `closed`; see [Sign-up and accounts](#sign-up-and-accounts) |
 | `signup.allow` | `[]` | `LIFTGATE_SIGNUP_ALLOW`: emails, `@domains` and `github:<login>` entries that are active from their first sign-in |
@@ -455,7 +456,9 @@ is the release name when it contains `liftgate`, otherwise `<release>-liftgate`)
 `LIFTGATE_NATS_URL` points at the subchart Service (or `nats.externalUrl`),
 `LIFTGATE_NATS_REPLICAS` is `3` when the managed NATS cluster is enabled and `1` otherwise,
 `LIFTGATE_HAZELCAST_KUBERNETES` is `true` in `ha`, `LIFTGATE_GATEWAY_NAMESPACE` is the release
-namespace, `LIFTGATE_LEADER_ELECTION` is `kubernetes` and `LIFTGATE_HTTP_PORT` is `8080`.
+namespace, `LIFTGATE_LEADER_ELECTION` is `kubernetes`, `LIFTGATE_HTTP_PORT` is `8080` and, in
+`ha`, `LIFTGATE_INTERNAL_URL` is the control-plane Service, which the builder asks for registry
+tokens.
 Empty optional values are left out of the ConfigMap and Secret so the control plane reports
 missing configuration instead of running with blank secrets.
 
@@ -563,18 +566,23 @@ with token authentication that points at Liftgate:
   `<org>/<project>-<service>`, and nothing else. Build jobs reach it over their internet egress.
 - Nodes pull as `pull` with `registryPullPassword`, which reads every repository and writes
   none. Add it to `/etc/rancher/k3s/registries.yaml` on every node.
+- The builder prunes images as `janitor` with `registryJanitorPassword`, which may pull and
+  delete in every repository and push to none. It asks the control plane for these tokens
+  instead of signing them.
 
-Create the signing key and certificate, and a pull password:
+Create the signing key and certificate, and the pull and janitor passwords:
 
 ```sh
 openssl req -x509 -newkey rsa:4096 -nodes -days 3650 -subj /CN=liftgate-registry-token \
   -keyout registry-token.key -out registry-token.crt
-openssl rand -hex 32
+PULL_PASSWORD=$(openssl rand -hex 32)
+JANITOR_PASSWORD=$(openssl rand -hex 32)
 ```
 
 ```sh
 helm upgrade liftgate charts/liftgate --reuse-values \
   --set registryAuth=token --set registryPullPassword="$PULL_PASSWORD" \
+  --set registryJanitorPassword="$JANITOR_PASSWORD" \
   --set-file registryTokenKey=registry-token.key --set-file registryTokenCertificate=registry-token.crt
 ```
 
@@ -589,8 +597,8 @@ Once a day the builder deletes the images Liftgate no longer needs from the repo
 pushed to. It keeps the images of pending, releasing and running deployments and of queued and
 running builds, the newest 10 successful builds of each service, and each service's `cache`.
 The repositories of deleted services lose every tag. Rolling back to a pruned build answers 409
-`image_pruned`. With `registryAuth: shared` the builder logs in with `build.registryCredentials`,
-which must be allowed to delete.
+`image_pruned`. With `registryAuth: token` the builder logs in as `janitor`; with `shared` it
+logs in with `build.registryCredentials`, which must be allowed to delete.
 
 The registry must accept deletes (`storage.delete.enabled` in Distribution), and deleting frees
 no disk until the registry's garbage collection runs; [`infra/registry`](../../infra/registry#image-retention)

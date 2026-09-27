@@ -25,11 +25,12 @@
   ],
   "if": { "required": ["registryAuth"], "properties": { "registryAuth": { "const": "token" } } },
   "then": {
-    "required": ["registryTokenKey", "registryTokenCertificate", "registryPullPassword"],
+    "required": ["registryTokenKey", "registryTokenCertificate", "registryPullPassword", "registryJanitorPassword"],
     "properties": {
       "registryTokenKey": { "minLength": 1 },
       "registryTokenCertificate": { "minLength": 1 },
-      "registryPullPassword": { "minLength": 1 }
+      "registryPullPassword": { "minLength": 1 },
+      "registryJanitorPassword": { "minLength": 1 }
     }
   },
   "properties": {
@@ -257,6 +258,7 @@
     "registryTokenKey": { "type": "string" },
     "registryTokenCertificate": { "type": "string" },
     "registryPullPassword": { "type": "string" },
+    "registryJanitorPassword": { "type": "string" },
     "prometheusUrl": { "type": "string", "pattern": "^https?://" },
     "signup": {
       "type": "object",

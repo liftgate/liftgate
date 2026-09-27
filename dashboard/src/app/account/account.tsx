@@ -12,8 +12,9 @@ import { PageHeader } from "@/components/page-header";
 import { ProviderLabel, ProviderLink, providerNames } from "@/components/provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
+import { Dialog } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
-import { FormError, Input } from "@/components/ui/input";
+import { Field, FormError, Input } from "@/components/ui/input";
 import { Skeleton, TableSkeleton } from "@/components/ui/skeleton";
 import { Cell, Row, Table } from "@/components/ui/table";
 
@@ -60,6 +61,7 @@ export function Account({ error }: { error?: string }) {
       <SignInMethods oauth={oauth} />
       <Passkeys />
       <GitConnections github={oauth.includes("github")} />
+      <DeleteAccount login={me.data?.login} />
     </div>
   );
 }
@@ -229,6 +231,55 @@ function GitConnections({ github }: { github: boolean }) {
           }
         </Loaded>
       </div>
+    </Card>
+  );
+}
+
+function DeleteAccount({ login }: { login?: string }) {
+  const [open, setOpen] = useState(false);
+  const [typed, setTyped] = useState("");
+  const remove = useAction(async () => {
+    await api("/me", { method: "DELETE" });
+    window.location.replace("/login");
+  });
+  const close = () => {
+    setOpen(false);
+    setTyped("");
+  };
+  return (
+    <Card>
+      <CardHeader
+        title={<span className="text-danger">Delete account</span>}
+        description="Removes your sign-in methods, passkeys and sessions, and deletes the organizations only you belong to with their projects and apps. This cannot be undone."
+        actions={
+          <Button variant="danger" disabled={!login} onClick={() => setOpen(true)}>
+            Delete account
+          </Button>
+        }
+      />
+      <Dialog open={open} title="Delete your account" onClose={close}>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            remove.run();
+          }}
+          className="flex flex-col gap-4"
+        >
+          <p className="text-sm text-graphite-200">
+            Organizations you own with other members have to be deleted first. Everything else goes with your account.
+          </p>
+          <Field label={`Type ${login} to confirm`}>
+            <Input value={typed} onChange={(e) => setTyped(e.target.value)} required autoComplete="off" autoFocus className="font-mono" />
+          </Field>
+          <FormError message={remove.error} />
+          <div className="flex justify-end gap-2">
+            <Button onClick={close}>Cancel</Button>
+            <Button type="submit" variant="danger" pending={remove.pending} disabled={typed !== login}>
+              Delete account
+            </Button>
+          </div>
+        </form>
+      </Dialog>
     </Card>
   );
 }

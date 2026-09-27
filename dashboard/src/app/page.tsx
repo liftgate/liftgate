@@ -3,7 +3,7 @@
 import { redirect, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAction, useApi } from "@/lib/hooks";
-import type { Organization } from "@/lib/types";
+import type { Organization, User } from "@/lib/types";
 import { formValues } from "@/lib/util";
 import { NameSlugFields } from "@/components/name-slug-fields";
 import { Button } from "@/components/ui/button";
@@ -14,14 +14,25 @@ import { PageSkeleton } from "@/components/ui/skeleton";
 
 export default function Home() {
   const router = useRouter();
+  const me = useApi<User>("/me");
   const orgs = useApi<Organization[]>("/orgs");
   const create = useAction(async (form: HTMLFormElement) => {
     const { name, slug } = formValues(form);
     const org = await api<Organization>("/orgs", { method: "POST", body: { slug, name } });
     router.push(`/${org.slug}`);
   });
-  if (orgs.error) return <ErrorState error={orgs.error} retry={orgs.reload} />;
-  if (!orgs.data) return <PageSkeleton />;
+  const failed = me.error ?? orgs.error;
+  if (failed) return <ErrorState error={failed} retry={me.error ? me.reload : orgs.reload} />;
+  if (!me.data || !orgs.data) return <PageSkeleton />;
+  if (me.data.status === "pending")
+    return (
+      <Card className="mx-auto mt-16 w-full max-w-lg">
+        <CardHeader
+          title="Your account is waiting for approval"
+          description="The operator of this Liftgate instance approves new accounts by hand. Once yours is approved, this page lets you create your first organization."
+        />
+      </Card>
+    );
   if (orgs.data[0]) redirect(`/${orgs.data[0].slug}`);
   return (
     <Card className="mx-auto mt-16 w-full max-w-lg">

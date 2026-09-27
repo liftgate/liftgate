@@ -116,9 +116,21 @@ function Methods({ providers, next, error, onCodeSent }: { providers: AuthProvid
         </Link>
       )}
       <FormError message={start.error ?? passkey.error ?? autofillError ?? error} />
+      {providers.termsUrl && (
+        <p className="text-center text-xs text-graphite-400">
+          By continuing you agree to the <LegalLink href={providers.termsUrl}>Terms</LegalLink>
+          {providers.aupUrl && <> and <LegalLink href={providers.aupUrl}>Acceptable Use Policy</LegalLink></>}.
+        </p>
+      )}
     </div>
   );
 }
+
+const LegalLink = ({ href, children }: { href: string; children: string }) => (
+  <a href={href} target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-white">
+    {children}
+  </a>
+);
 
 function CodeStep({ email, next, onBack }: { email: string; next: string; onBack: () => void }) {
   const [code, setCode] = useState("");

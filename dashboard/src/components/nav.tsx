@@ -19,6 +19,7 @@ export function Nav() {
     await api("/auth/logout", { method: "POST" });
     window.location.replace("/login");
   });
+  const suspended = orgs.data?.find((o) => o.slug === org && o.suspendedAt);
   const segments = [org, project, service].filter((s): s is string => !!s);
   const crumbs = segments.map((label, i) => ({ label, href: `/${segments.slice(0, i + 1).join("/")}` }));
   return (
@@ -60,6 +61,14 @@ export function Nav() {
           </div>
         )}
       </div>
+      {suspended && (
+        <div role="status" className="border-t border-danger/40 bg-danger/10">
+          <p className="mx-auto max-w-6xl px-6 py-2 text-sm text-danger">
+            {suspended.name} is suspended{suspended.suspendedReason && ` for ${suspended.suspendedReason}`}. Its apps are stopped and changes are
+            blocked until the operator lifts the suspension.
+          </p>
+        </div>
+      )}
     </header>
   );
 }

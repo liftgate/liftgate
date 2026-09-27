@@ -28,6 +28,8 @@ const authErrors: Record<string, string> = {
   identity_in_use: "That account is already linked to another Liftgate user.",
   invalid_state: "The sign-in expired or was started in another tab. Try again.",
   invalid_saml: "Your identity provider's response was rejected. Ask an owner to check the SSO settings.",
+  signup_closed: "Sign-up is closed on this Liftgate instance.",
+  account_suspended: "This account is suspended.",
 };
 
 export const authError = (code: unknown) => (typeof code === "string" && code ? (authErrors[code] ?? "Sign-in failed. Try again.") : undefined);

@@ -162,6 +162,10 @@ class AccountRoutesTest {
         }
         assertEquals(listOf(namespace), teardowns())
         assertEquals(HttpStatusCode.Unauthorized, client.get("/api/v1/me") { session("s") }.status)
+
+        session("m", member)
+        assertEquals(HttpStatusCode.NoContent, client.delete("/api/v1/me") { session("m") }.status)
+        assertTrue(db.tx { Users.selectAll().empty() })
     }
 
     @Test

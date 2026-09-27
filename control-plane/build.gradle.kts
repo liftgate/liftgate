@@ -1,3 +1,5 @@
+import org.gradle.api.tasks.testing.logging.TestExceptionFormat
+
 plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlin.serialization)
@@ -58,7 +60,7 @@ dependencies {
     testImplementation(libs.ktor.client.mock)
     testImplementation(libs.fabric8.server.mock)
     testImplementation(libs.testcontainers.postgresql)
-    testImplementation(libs.testcontainers.junit)
+    testImplementation(libs.exposed.migration.jdbc)
 }
 
 kotlin {
@@ -71,4 +73,8 @@ application {
 
 tasks.test {
     useJUnitPlatform()
+    testLogging {
+        events("failed")
+        exceptionFormat = TestExceptionFormat.FULL
+    }
 }

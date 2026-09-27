@@ -2,19 +2,25 @@ package dev.liftgate.db
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import org.jetbrains.exposed.v1.core.Column
+import org.jetbrains.exposed.v1.core.CustomFunction
+import org.jetbrains.exposed.v1.core.ReferenceOption
 import org.jetbrains.exposed.v1.core.ReferenceOption.CASCADE
+import org.jetbrains.exposed.v1.core.ReferenceOption.NO_ACTION
 import org.jetbrains.exposed.v1.core.ReferenceOption.SET_NULL
 import org.jetbrains.exposed.v1.core.Table
+import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.isNotNull
 import org.jetbrains.exposed.v1.core.isNull
 import org.jetbrains.exposed.v1.core.java.javaUUID
-import org.jetbrains.exposed.v1.javatime.CurrentTimestampWithTimeZone
+import org.jetbrains.exposed.v1.core.lowerCase
 import org.jetbrains.exposed.v1.javatime.timestampWithTimeZone
 import org.jetbrains.exposed.v1.json.jsonb
 
-private fun Table.createdAtColumn() = timestampWithTimeZone("created_at").defaultExpression(CurrentTimestampWithTimeZone)
-private fun Table.oneOf(name: String, vararg values: String) = text(name).check { it inList values.toList() }
+private fun Table.createdAtColumn() = timestampWithTimeZone("created_at").run { defaultExpression(CustomFunction("now", columnType)) }
+private fun Table.oneOf(name: String, vararg values: String) = text(name).check("${tableName}_${name}_check") { it inList values.toList() }
+private fun <T : Comparable<T>> Table.fk(name: String, target: Column<T>, onDelete: ReferenceOption = NO_ACTION) = reference(name, target, onDelete, NO_ACTION)
 
 /**
  * @author Dean
@@ -29,6 +35,10 @@ object Users : Table("users") {
     val avatarUrl = text("avatar_url").nullable()
     val createdAt = createdAtColumn()
     override val primaryKey = PrimaryKey(id)
+
+    init {
+        index("users_verified_email", true, functions = listOf(email.lowerCase())) { emailVerified eq true }
+    }
 }
 
 /**
@@ -49,8 +59,8 @@ object Organizations : Table("organizations") {
  * @date 9/17/2026
  */
 object Memberships : Table("memberships") {
-    val orgId = reference("org_id", Organizations.id, onDelete = CASCADE)
-    val userId = reference("user_id", Users.id, onDelete = CASCADE)
+    val orgId = fk("org_id", Organizations.id, CASCADE)
+    val userId = fk("user_id", Users.id, CASCADE)
     val role = oneOf("role", "owner", "admin", "member")
     val createdAt = createdAtColumn()
     override val primaryKey = PrimaryKey(orgId, userId)
@@ -62,7 +72,7 @@ object Memberships : Table("memberships") {
  */
 object Sessions : Table("sessions") {
     val id = text("id")
-    val userId = reference("user_id", Users.id, onDelete = CASCADE)
+    val userId = fk("user_id", Users.id, CASCADE)
     val expiresAt = timestampWithTimeZone("expires_at")
     val createdAt = createdAtColumn()
     override val primaryKey = PrimaryKey(id)
@@ -74,7 +84,7 @@ object Sessions : Table("sessions") {
  */
 object Identities : Table("identities") {
     val id = javaUUID("id")
-    val userId = reference("user_id", Users.id, onDelete = CASCADE)
+    val userId = fk("user_id", Users.id, CASCADE)
     val provider = oneOf("provider", "github", "google", "gitlab", "bitbucket", "email", "saml")
     val subject = text("subject")
     val email = text("email").nullable()
@@ -94,7 +104,7 @@ object Identities : Table("identities") {
  */
 object Passkeys : Table("passkeys") {
     val id = javaUUID("id")
-    val userId = reference("user_id", Users.id, onDelete = CASCADE)
+    val userId = fk("user_id", Users.id, CASCADE)
     val credentialId = binary("credential_id").uniqueIndex()
     val publicKey = binary("public_key")
     val signatureCount = long("signature_count")
@@ -125,7 +135,7 @@ object EmailCodes : Table("email_codes") {
  * @date 9/18/2026
  */
 object GitConnections : Table("git_connections") {
-    val userId = reference("user_id", Users.id, onDelete = CASCADE)
+    val userId = fk("user_id", Users.id, CASCADE)
     val provider = oneOf("provider", "github")
     val accountLogin = text("account_login")
     val accessToken = binary("access_token")
@@ -141,12 +151,12 @@ object GitConnections : Table("git_connections") {
  */
 object SsoConnections : Table("sso_connections") {
     val id = javaUUID("id")
-    val orgId = reference("org_id", Organizations.id, onDelete = CASCADE).uniqueIndex()
+    val orgId = fk("org_id", Organizations.id, CASCADE).uniqueIndex()
     val idpEntityId = text("idp_entity_id")
     val idpSsoUrl = text("idp_sso_url")
     val idpCertificate = text("idp_certificate")
     val emailDomains = array<String>("email_domains")
-    val verifiedDomains = array<String>("verified_domains")
+    val verifiedDomains = array<String>("verified_domains").databaseGenerated()
     val verificationToken = text("verification_token")
     val defaultRole = oneOf("default_role", "admin", "member").default("member")
     val createdAt = createdAtColumn()
@@ -159,10 +169,10 @@ object SsoConnections : Table("sso_connections") {
  */
 object ApiTokens : Table("api_tokens") {
     val id = javaUUID("id")
-    val orgId = reference("org_id", Organizations.id, onDelete = CASCADE)
+    val orgId = fk("org_id", Organizations.id, CASCADE)
     val name = text("name")
     val tokenHash = text("token_hash").uniqueIndex()
-    val createdBy = reference("created_by", Users.id)
+    val createdBy = fk("created_by", Users.id)
     val createdAt = createdAtColumn()
     val lastUsedAt = timestampWithTimeZone("last_used_at").nullable()
     override val primaryKey = PrimaryKey(id)
@@ -174,7 +184,7 @@ object ApiTokens : Table("api_tokens") {
  */
 object GitHubInstallations : Table("github_installations") {
     val id = long("id")
-    val orgId = reference("org_id", Organizations.id, onDelete = CASCADE)
+    val orgId = fk("org_id", Organizations.id, CASCADE)
     val accountLogin = text("account_login")
     val createdAt = createdAtColumn()
     override val primaryKey = PrimaryKey(id)
@@ -186,12 +196,12 @@ object GitHubInstallations : Table("github_installations") {
  */
 object Projects : Table("projects") {
     val id = javaUUID("id")
-    val orgId = reference("org_id", Organizations.id, onDelete = CASCADE)
+    val orgId = fk("org_id", Organizations.id, CASCADE)
     val slug = text("slug")
     val name = text("name")
     val repoFullName = text("repo_full_name")
     val repoDefaultBranch = text("repo_default_branch").default("main")
-    val installationId = reference("installation_id", GitHubInstallations.id)
+    val installationId = fk("installation_id", GitHubInstallations.id)
     val createdAt = createdAtColumn()
     override val primaryKey = PrimaryKey(id)
 
@@ -206,7 +216,7 @@ object Projects : Table("projects") {
  */
 object Environments : Table("environments") {
     val id = javaUUID("id")
-    val projectId = reference("project_id", Projects.id, onDelete = CASCADE)
+    val projectId = fk("project_id", Projects.id, CASCADE)
     val slug = text("slug")
     val name = text("name")
     val kind = oneOf("kind", "production", "preview")
@@ -226,7 +236,7 @@ object Environments : Table("environments") {
  */
 object Services : Table("services") {
     val id = javaUUID("id")
-    val environmentId = reference("environment_id", Environments.id, onDelete = CASCADE)
+    val environmentId = fk("environment_id", Environments.id, CASCADE)
     val slug = text("slug")
     val name = text("name")
     val kind = oneOf("kind", "web", "worker", "cron", "static")
@@ -253,7 +263,7 @@ object Services : Table("services") {
  */
 object EnvVars : Table("env_vars") {
     val id = javaUUID("id")
-    val serviceId = reference("service_id", Services.id, onDelete = CASCADE)
+    val serviceId = fk("service_id", Services.id, CASCADE)
     val name = text("name")
     val valueEncrypted = binary("value_encrypted")
     val isSecret = bool("is_secret").default(false)
@@ -271,7 +281,7 @@ object EnvVars : Table("env_vars") {
  */
 object Builds : Table("builds") {
     val id = javaUUID("id")
-    val serviceId = reference("service_id", Services.id, onDelete = CASCADE)
+    val serviceId = fk("service_id", Services.id, CASCADE)
     val commitSha = text("commit_sha")
     val commitMessage = text("commit_message").nullable()
     val branch = text("branch")
@@ -294,8 +304,8 @@ object Builds : Table("builds") {
  */
 object Deployments : Table("deployments") {
     val id = javaUUID("id")
-    val serviceId = reference("service_id", Services.id, onDelete = CASCADE)
-    val buildId = reference("build_id", Builds.id)
+    val serviceId = fk("service_id", Services.id, CASCADE)
+    val buildId = fk("build_id", Builds.id)
     val status = oneOf("status", "pending", "releasing", "running", "failed", "superseded", "rolled_back")
     val replicasReady = integer("replicas_ready").default(0)
     val error = text("error").nullable()
@@ -315,7 +325,7 @@ object Deployments : Table("deployments") {
  */
 object Domains : Table("domains") {
     val id = javaUUID("id")
-    val serviceId = reference("service_id", Services.id, onDelete = CASCADE)
+    val serviceId = fk("service_id", Services.id, CASCADE)
     val hostname = text("hostname")
     val kind = oneOf("kind", "platform", "custom")
     val verificationToken = text("verification_token").nullable()
@@ -336,8 +346,8 @@ object Domains : Table("domains") {
  */
 object UsageRecords : Table("usage_records") {
     val id = long("id").autoIncrement()
-    val orgId = reference("org_id", Organizations.id, onDelete = CASCADE)
-    val serviceId = reference("service_id", Services.id, onDelete = SET_NULL).nullable()
+    val orgId = fk("org_id", Organizations.id, CASCADE)
+    val serviceId = fk("service_id", Services.id, SET_NULL).nullable()
     val metric = text("metric")
     val quantity = decimal("quantity", 20, 6)
     val windowStart = timestampWithTimeZone("window_start")
@@ -355,8 +365,8 @@ object UsageRecords : Table("usage_records") {
  */
 object AuditLog : Table("audit_log") {
     val id = long("id").autoIncrement()
-    val orgId = reference("org_id", Organizations.id, onDelete = CASCADE).nullable()
-    val actorUserId = reference("actor_user_id", Users.id, onDelete = SET_NULL).nullable()
+    val orgId = fk("org_id", Organizations.id, CASCADE).nullable()
+    val actorUserId = fk("actor_user_id", Users.id, SET_NULL).nullable()
     val action = text("action")
     val targetType = text("target_type")
     val targetId = text("target_id")

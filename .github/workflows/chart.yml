@@ -32,4 +32,4 @@ jobs:
           version: v4.3.0
       - run: helm dependency update charts/liftgate
       - run: helm lint charts/liftgate ${{ matrix.args }}
-      - run: helm template liftgate charts/liftgate ${{ matrix.args }} > /dev/null
+      - run: helm template liftgate charts/liftgate ${{ matrix.args }} --api-versions cilium.io/v2/CiliumClusterwideNetworkPolicy > /dev/null

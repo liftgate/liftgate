@@ -26,3 +26,6 @@ nats:
           size: 1Gi
 
 publicUrl: http://liftgate.test
+
+gateway:
+  issuer: selfsigned

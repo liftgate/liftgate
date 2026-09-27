@@ -1,7 +1,7 @@
 package dev.liftgate.auth
 
 import com.yubico.webauthn.data.ByteArray as Bytes
-import dev.liftgate.db.Db
+import dev.liftgate.TestDatabase
 import dev.liftgate.db.Passkeys as PasskeysTable
 import dev.liftgate.http.LiftgateException
 import dev.liftgate.testConfig
@@ -9,10 +9,6 @@ import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.jdbc.insert
-import org.testcontainers.containers.PostgreSQLContainer
-import org.testcontainers.junit.jupiter.Container
-import org.testcontainers.junit.jupiter.Testcontainers
-import org.testcontainers.utility.DockerImageName
 import java.util.UUID
 import kotlin.random.Random
 import kotlin.test.Test
@@ -26,26 +22,10 @@ import kotlin.test.assertTrue
  * @author Dean
  * @date 9/18/2026
  */
-@Testcontainers(disabledWithoutDocker = true)
 class PasskeyCredentialsTest {
-    companion object {
-        @Container
-        @JvmField
-        val postgres = PostgreSQLContainer<Nothing>(DockerImageName.parse("postgres:16-alpine"))
-    }
-
-    private val config by lazy {
-        testConfig(
-            mapOf(
-                "LIFTGATE_DATABASE_URL" to postgres.jdbcUrl,
-                "LIFTGATE_DATABASE_USER" to postgres.username,
-                "LIFTGATE_DATABASE_PASSWORD" to postgres.password,
-            ),
-        )
-    }
-    private val db by lazy { Db(config).also { it.migrate() } }
+    private val db = TestDatabase.clean()
     private val signIn by lazy { SignIn(db, mockk<Sessions> { coEvery { create(any()) } returns "session" }) }
-    private val passkeys by lazy { Passkeys(config, db, mockk(), signIn) }
+    private val passkeys by lazy { Passkeys(testConfig(), db, mockk(), signIn) }
 
     private suspend fun passkey(userId: UUID, signatureCount: Long = 0) = db.tx {
         Bytes(Random.nextBytes(16)).also { credential ->
@@ -61,7 +41,7 @@ class PasskeyCredentialsTest {
     }
 
     @Test
-    fun `credentials resolve only for their owner and record the new counter`() = runBlocking {
+    fun `credentials resolve only for their owner and record the new counter`(): Unit = runBlocking {
         val owner = signIn.complete(VerifiedIdentity("google", "p1", null, false)).userId
         val credential = passkey(owner, signatureCount = 3)
         db.tx {

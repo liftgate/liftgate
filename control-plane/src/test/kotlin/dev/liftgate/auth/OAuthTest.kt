@@ -73,7 +73,7 @@ class OAuthTest {
     }
 
     @Test
-    fun `code exchange posts the verifier and client credentials and keeps the refresh token`() = runBlocking {
+    fun `code exchange posts the verifier and client credentials and keeps the refresh token`(): Unit = runBlocking {
         val tokens = oauth(github, "/login/oauth/access_token" to ok("""{"access_token":"a","refresh_token":"r","expires_in":28800}"""))
             .exchange(github, "code", "verifier")
         val form = tokenForm()

@@ -1,6 +1,7 @@
 package dev.liftgate.events
 
 import dev.liftgate.config.Config
+import io.nats.client.Connection
 import io.nats.client.ConsumerContext
 import io.nats.client.Message
 import io.nats.client.Options
@@ -44,6 +45,7 @@ class Nats(private val config: Config, private val retryDelay: Duration = Durati
     private val jetStream = connection.jetStream()
     private val polls = ConcurrentHashMap<String, Instant>()
     val lastPolls: Map<String, Instant> get() = polls
+    val connected get() = connection.status == Connection.Status.CONNECTED
 
     fun ensureStream() {
         val management = connection.jetStreamManagement()

@@ -37,13 +37,14 @@ fun Route.projectRoutes(app: App) {
         get { call.respond(app.projects.forOrg(call.org(app).id)) }
         post {
             val org = call.org(app, OrgRole.ADMIN)
+            val github = app.github ?: conflict("the GitHub App is not configured")
             val body = call.receive<CreateProject>()
             requireSlug(body.slug, reservedProjectSlugs)
             if (body.name.isBlank()) invalid("name is required")
             if (!repoPattern.matches(body.repoFullName)) invalid("repoFullName must be owner/repo")
             val (token, login) = app.gitConnections.github(call.principal.user.id)
                 ?: throw LiftgateException(HttpStatusCode.Conflict, "github_not_connected", "connect GitHub to import a repository")
-            val installationId = app.github?.installation(token, body.repoFullName)
+            val installationId = github.installation(token, body.repoFullName)
                 ?: invalid("install the GitHub App on ${body.repoFullName} from an account that can push to it")
             call.respond(HttpStatusCode.Created, app.projects.create(org.id, body.slug, body.name.trim(), body.repoFullName, installationId, login))
         }

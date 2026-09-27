@@ -1,7 +1,6 @@
 package dev.liftgate.http
 
 import dev.liftgate.App
-import dev.liftgate.config.GitHubConfig
 import dev.liftgate.testConfig
 import dev.liftgate.unlimitedCache
 import io.ktor.client.request.post
@@ -31,7 +30,7 @@ private const val MIB = 1024 * 1024
  */
 class BodyLimitTest {
     private val app = mockk<App> {
-        every { config } returns testConfig().copy(github = GitHubConfig("1", "unused", "webhook", "client", "client-secret"))
+        every { config } returns testConfig().copy(githubWebhookSecret = "webhook")
         every { metrics } returns PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
         every { cache } returns unlimitedCache
         every { passkeys } returns mockk()

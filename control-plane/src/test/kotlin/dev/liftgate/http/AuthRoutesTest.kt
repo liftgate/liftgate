@@ -11,7 +11,6 @@ import dev.liftgate.auth.SignIn
 import dev.liftgate.auth.SignedIn
 import dev.liftgate.auth.VerifiedIdentity
 import dev.liftgate.auth.pkceChallenge
-import dev.liftgate.config.GitHubConfig
 import dev.liftgate.config.OAuthClient
 import dev.liftgate.org.User
 import dev.liftgate.testConfig
@@ -72,7 +71,7 @@ class AuthRoutesTest {
     private val oauth = OAuth(
         provider,
         "http://localhost:8080",
-        listOf(OAuthProviders.github(GitHubConfig("1", "pem", "webhook", "client", "secret")), OAuthProviders.google(OAuthClient("client", "secret"))),
+        listOf(OAuthProviders.github(OAuthClient("client", "secret")), OAuthProviders.google(OAuthClient("client", "secret"))),
     )
     private val signIn = mockk<SignIn>()
     private val gitConnections = mockk<GitConnections>()

@@ -1,6 +1,7 @@
 package dev.liftgate.http
 
 import dev.liftgate.App
+import dev.liftgate.config.Role
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
@@ -68,7 +69,12 @@ fun Application.liftgate(app: App) {
     }
 }
 
-fun httpServer(app: App) = embeddedServer(Netty, port = app.config.httpPort, host = "0.0.0.0") { liftgate(app) }
+fun Application.health(app: App) {
+    install(MicrometerMetrics) { registry = app.metrics }
+    routing { healthRoutes(app) }
+}
+
+fun httpServer(app: App) = embeddedServer(Netty, port = app.config.httpPort, host = "0.0.0.0") { if (app.runs(Role.API)) liftgate(app) else health(app) }
 
 private suspend fun internalError(call: ApplicationCall, e: Throwable) {
     log.error("unhandled error on {} {}", call.request.httpMethod.value, call.request.path(), e)

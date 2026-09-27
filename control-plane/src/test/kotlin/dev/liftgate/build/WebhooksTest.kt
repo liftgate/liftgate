@@ -2,7 +2,6 @@ package dev.liftgate.build
 
 import dev.liftgate.App
 import dev.liftgate.cache.Cache
-import dev.liftgate.config.GitHubConfig
 import dev.liftgate.deploy.Builds
 import dev.liftgate.http.WEBHOOKS_PER_MINUTE
 import dev.liftgate.http.liftgate
@@ -42,7 +41,7 @@ class WebhooksTest {
     private val cache = mockk<Cache> { every { allow(any(), any(), any()) } returns true }
     private val app = mockk<App> {
         every { this@mockk.cache } returns this@WebhooksTest.cache
-        every { config } returns testConfig().copy(github = GitHubConfig("1", "unused", secret, "client", "client-secret"))
+        every { config } returns testConfig().copy(githubWebhookSecret = secret)
         every { metrics } returns PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
         every { this@mockk.builds } returns this@WebhooksTest.builds
         every { projects } returns mockk<Projects> {

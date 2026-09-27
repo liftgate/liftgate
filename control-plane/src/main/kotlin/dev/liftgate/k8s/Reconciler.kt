@@ -123,7 +123,7 @@ class Reconciler(private val app: App, private val kube: KubernetesClient) {
         withContext(Dispatchers.IO) {
             kube.resources(Gateway::class.java).inNamespace(config.gatewayNamespace).withName(config.gatewayName).get() ?: return@withContext
             val certificates = kube.genericKubernetesResources(certificateContext).inNamespace(config.gatewayNamespace)
-            domains.forEach { certificates.resource(Resources.certificate(it, config.gatewayNamespace)).apply() }
+            domains.forEach { certificates.resource(Resources.certificate(it, config.gatewayNamespace, config.certIssuer)).apply() }
             kube.resource(Resources.gatewayListeners(domains, config.gatewayNamespace, config.gatewayName)).apply()
             certificates.withLabel(MANAGED_LABEL, "true").list().items
                 .filter { certificate -> domains.none { it.hostname == certificate.metadata.name } }

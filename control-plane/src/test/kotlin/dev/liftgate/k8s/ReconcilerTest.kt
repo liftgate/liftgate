@@ -79,7 +79,7 @@ class ReconcilerTest {
 
     private fun acceptAll(staleCertificate: String? = null) {
         val certificates = GenericKubernetesResourceList().apply {
-            items = listOfNotNull(staleCertificate).map { Resources.certificate(custom.copy(hostname = it), "liftgate-system") }
+            items = listOfNotNull(staleCertificate).map { Resources.certificate(custom.copy(hostname = it), "liftgate-system", "letsencrypt") }
         }
         val gateway = Resources.gatewayListeners(listOf(custom), "liftgate-system", "liftgate")
         server.expect().get().withPath(gatewayPath).andReturn(200, gateway).always()
@@ -91,7 +91,7 @@ class ReconcilerTest {
         accept(deploymentPath, Resources.deployment(release, null))
         accept(cronJobPath, Resources.cronJob(release, null))
         accept(routePath, Resources.httpRoute(release, "liftgate-system", "liftgate"))
-        accept(certificatePath, Resources.certificate(custom, "liftgate-system"))
+        accept(certificatePath, Resources.certificate(custom, "liftgate-system", "letsencrypt"))
         Resources.networkPolicies(release, "liftgate-system").zip(policyPaths).forEach { (policy, path) -> accept(path, policy) }
         server.expect().get().withPath("$certificatesPath?labelSelector=liftgate.dev%2Fmanaged%3Dtrue").andReturn(200, certificates).always()
     }

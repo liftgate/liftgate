@@ -33,3 +33,4 @@ jobs:
       - run: helm dependency update charts/liftgate
       - run: helm lint charts/liftgate ${{ matrix.args }}
       - run: helm template liftgate charts/liftgate ${{ matrix.args }} --api-versions cilium.io/v2/CiliumClusterwideNetworkPolicy > /dev/null
+      - run: "! helm template liftgate charts/liftgate ${{ matrix.args }} --set deployDomain=apps.example.com --set publicUrl=https://liftgate.example.com"

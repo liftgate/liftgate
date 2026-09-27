@@ -19,6 +19,8 @@ controlPlane:
       memory: 768Mi
     limits:
       memory: 1536Mi
+  clientIpHeader: ""
+  trustedProxyCidrs: []
 
 dashboard:
   image: ghcr.io/liftgate/dashboard
@@ -123,3 +125,5 @@ legal:
 
 customDomains:
   enabled: true
+
+allowSharedSite: false

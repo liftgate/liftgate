@@ -29,7 +29,8 @@ CNI. Without it the cluster must already have a GatewayClass; set the chart's
 Gateway API or cert-manager CRDs, the `cilium` DaemonSet, the `gvisor` RuntimeClass, the
 `letsencrypt` ClusterIssuer, the CloudNativePG or Barman Cloud CRDs, the `prometheus` Service),
 and nothing that exists is upgraded, so a second run changes nothing. Upgrade a component with
-its own `helm upgrade`.
+its own `helm upgrade`. A cert-manager that was already there needs Gateway API support
+(`config.gatewayAPI.enabled=true`) for the `letsencrypt` issuer to solve challenges.
 
 `LIFTGATE_GATEWAY_NAME` and `LIFTGATE_GATEWAY_NAMESPACE` (default `liftgate` in
 `liftgate-system`) name the Gateway the `letsencrypt` ClusterIssuer solves HTTP-01 challenges

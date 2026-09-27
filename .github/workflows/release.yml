@@ -56,6 +56,7 @@ jobs:
           for image in control-plane dashboard build-image; do
             docker buildx imagetools inspect "ghcr.io/$GITHUB_REPOSITORY_OWNER/$image:$version"
           done
+          mkdir pulled
           helm pull "$CHARTS/liftgate" --version "$version" --destination pulled
           helm show chart "pulled/liftgate-$version.tgz" | tee pulled/Chart.yaml
           grep -qx "version: $version" pulled/Chart.yaml

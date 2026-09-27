@@ -32,8 +32,8 @@ if [ "${LIFTGATE_INSTALL_CILIUM:-}" = 1 ]; then
   fi
 
   echo "==> Gateway API CRDs $GATEWAY_API_VERSION"
-  found crd gatewayclasses.gateway.networking.k8s.io || for crd in gatewayclasses gateways httproutes referencegrants grpcroutes backendtlspolicies tlsroutes; do
-    kubectl apply --server-side -f "https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/${GATEWAY_API_VERSION}/config/crd/standard/gateway.networking.k8s.io_${crd}.yaml"
+  for crd in gatewayclasses gateways httproutes referencegrants grpcroutes backendtlspolicies tlsroutes; do
+    found crd "$crd.gateway.networking.k8s.io" || kubectl apply --server-side -f "https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/${GATEWAY_API_VERSION}/config/crd/standard/gateway.networking.k8s.io_${crd}.yaml"
   done
 
   echo "==> Cilium $CILIUM_VERSION (API server $K8S_API_HOST)"

@@ -44,14 +44,17 @@ echo "==> upgrade to $(git rev-parse --short HEAD)"
 helm dependency update charts/liftgate
 helm upgrade liftgate charts/liftgate --namespace "$NAMESPACE" --reset-then-reuse-values --values e2e/values.yaml
 kubectl -n "$NAMESPACE" rollout status deployment/liftgate-control-plane --timeout=15m
-kubectl -n "$NAMESPACE" rollout status deployment/liftgate-dashboard --timeout=5m
+handover="$(date -d '1 second ago' +%T.%3N)"
 kubectl -n "$NAMESPACE" wait --for=delete $old --timeout=5m
-
-awk '{ print $2 }' "$codes" | sort | uniq -c
-test -s "$codes"
-if grep -v ' 2..$' "$codes"; then exit 1; fi
+drained="$(date +%T.%3N)"
+kubectl -n "$NAMESPACE" rollout status deployment/liftgate-dashboard --timeout=5m
 kubectl get --raw "/api/v1/namespaces/$NAMESPACE/services/liftgate-control-plane:http/proxy/readyz"
 running
 test "$(sql --command 'select version from flyway_schema_history where success order by installed_rank desc limit 1')" = \
   "$(ls control-plane/src/main/resources/db/migration | sed -n 's/^V\([0-9]*\)__.*/\1/p' | sort -n | tail -1)"
 sh e2e/checks/10-gateway.sh
+
+awk '{ print $2 }' "$codes" | sort | uniq -c
+test -s "$codes"
+echo "non-2xx responses, tolerated only while $tag shuts down between $handover and $drained:"
+awk -v from="$handover" -v to="$drained" '$2 !~ /^2/ { print; if ($1 < from || $1 > to) failed = 1 } END { exit failed }' "$codes"

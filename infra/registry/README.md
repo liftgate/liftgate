@@ -14,15 +14,15 @@ overwrite, every tenant's `:<sha>` and `:cache` tags, which the next build of th
 imports.
 
 [`config.yml`](config.yml) turns on token auth with the control plane as the token service
-(`registry.auth: token` in the chart), binds to `10.200.0.1:5050` only, and enables deletes for
+(`registryAuth: token` in the chart), binds to `10.200.0.1:5050` only, and enables deletes for
 image retention:
 
 | Setting | Value | Must match |
 |---|---|---|
 | `auth.token.realm` | `https://liftgate.dev/api/v1/registry/token` | chart `publicUrl` |
-| `auth.token.service` | `10.200.0.1:5050` | chart `registry.host` |
+| `auth.token.service` | `10.200.0.1:5050` | chart `registry` |
 | `auth.token.issuer` | `liftgate` | fixed in the control plane |
-| `auth.token.rootcertbundle` | `/etc/docker/registry/token.crt` | chart `registry.tokenCertificate` |
+| `auth.token.rootcertbundle` | `/etc/docker/registry/token.crt` | chart `registryTokenCertificate` |
 | `storage.delete.enabled` | `true` | |
 
 Each build logs in as `build-<build id>` and gets tokens for its own repository only, and only
@@ -44,8 +44,8 @@ have them.
    openssl rand -hex 32 > pull-password
    ```
 
-2. Upgrade Liftgate with `registry.auth=token`, `registry.tokenKey` from `token.key`,
-   `registry.tokenCertificate` from `token.crt` and `registry.pullPassword`, as in the chart
+2. Upgrade Liftgate with `registryAuth=token`, `registryTokenKey` from `token.key`,
+   `registryTokenCertificate` from `token.crt` and `registryPullPassword`, as in the chart
    README. Then run a build and confirm it pushes.
 
 3. On every node, add the pull account to `/etc/rancher/k3s/registries.yaml` and restart k3s

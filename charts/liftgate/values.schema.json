@@ -23,6 +23,15 @@
     "build",
     "prometheusUrl"
   ],
+  "if": { "required": ["registryAuth"], "properties": { "registryAuth": { "const": "token" } } },
+  "then": {
+    "required": ["registryTokenKey", "registryTokenCertificate", "registryPullPassword"],
+    "properties": {
+      "registryTokenKey": { "minLength": 1 },
+      "registryTokenCertificate": { "minLength": 1 },
+      "registryPullPassword": { "minLength": 1 }
+    }
+  },
   "properties": {
     "global": { "type": "object" },
     "profile": { "type": "string", "enum": ["single", "ha"] },
@@ -182,27 +191,7 @@
         "masterKey": { "type": "string" }
       }
     },
-    "registry": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["host", "auth"],
-      "properties": {
-        "host": { "type": "string", "minLength": 1 },
-        "auth": { "type": "string", "enum": ["shared", "token"] },
-        "tokenKey": { "type": "string" },
-        "tokenCertificate": { "type": "string" },
-        "pullPassword": { "type": "string" }
-      },
-      "if": { "properties": { "auth": { "const": "token" } } },
-      "then": {
-        "required": ["tokenKey", "tokenCertificate", "pullPassword"],
-        "properties": {
-          "tokenKey": { "minLength": 1 },
-          "tokenCertificate": { "minLength": 1 },
-          "pullPassword": { "minLength": 1 }
-        }
-      }
-    },
+    "registry": { "type": "string", "minLength": 1 },
     "build": {
       "type": "object",
       "additionalProperties": false,
@@ -235,6 +224,10 @@
     "runtimeClass": { "type": "string" },
     "nodeSelector": { "$ref": "#/definitions/nodeSelector" },
     "registryInsecure": { "type": "boolean" },
+    "registryAuth": { "type": "string", "enum": ["shared", "token"] },
+    "registryTokenKey": { "type": "string" },
+    "registryTokenCertificate": { "type": "string" },
+    "registryPullPassword": { "type": "string" },
     "prometheusUrl": { "type": "string", "pattern": "^https?://" },
     "signup": {
       "type": "object",

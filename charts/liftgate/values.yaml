@@ -98,12 +98,7 @@ passkeys:
 secrets:
   masterKey: ""
 
-registry:
-  host: registry.liftgate.internal
-  auth: shared
-  tokenKey: ""
-  tokenCertificate: ""
-  pullPassword: ""
+registry: registry.liftgate.internal
 
 build:
   image: ""
@@ -118,6 +113,11 @@ runtimeClass: gvisor
 nodeSelector: {}
 
 registryInsecure: false
+
+registryAuth: shared
+registryTokenKey: ""
+registryTokenCertificate: ""
+registryPullPassword: ""
 
 prometheusUrl: http://prometheus.liftgate-system:9090
 

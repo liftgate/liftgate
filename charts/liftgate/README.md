@@ -7,7 +7,7 @@ Helm chart for the Liftgate control plane, dashboard, database, message bus and 
 The chart expects the cluster baseline from [`infra/`](../../infra): Gateway API CRDs, a
 Gateway controller (Cilium by default), cert-manager with Gateway API support and a
 `letsencrypt` ClusterIssuer, the CloudNativePG operator and a Prometheus reachable at
-`prometheusUrl`. Build jobs push to `registry.host`; nodes must be able to pull from it.
+`prometheusUrl`. Build jobs push to `registry`; nodes must be able to pull from it.
 
 You also need a GitHub App (webhook URL `<publicUrl>/api/v1/webhooks/github`, OAuth callback
 `<publicUrl>/api/v1/auth/github/callback`) and a random `secrets.masterKey`:
@@ -352,21 +352,21 @@ empty, neither appears.
 | `passkeys.rpId` | `""` | `LIFTGATE_WEBAUTHN_RP_ID`; empty means the host of `dashboardUrl` |
 | `passkeys.rpName` | `""` | `LIFTGATE_WEBAUTHN_RP_NAME`; empty means `Liftgate` |
 | `secrets.masterKey` | `""` | `LIFTGATE_SECRETS_MASTER_KEY`, base64 of 32 bytes |
-| `registry.host` | `registry.liftgate.internal` | `LIFTGATE_REGISTRY` |
-| `registry.auth` | `shared` | `LIFTGATE_REGISTRY_AUTH`: `shared` or `token`, see [Registry authentication](#registry-authentication) |
-| `registry.tokenKey` | `""` | `LIFTGATE_REGISTRY_TOKEN_KEY`, Secret; RSA private key in PEM that signs registry tokens. Required with `token` |
-| `registry.tokenCertificate` | `""` | `LIFTGATE_REGISTRY_TOKEN_CERTIFICATE`; the certificate of `tokenKey`, which the registry trusts. Required with `token` |
-| `registry.pullPassword` | `""` | `LIFTGATE_REGISTRY_PULL_PASSWORD`, Secret; password of the `pull` account nodes use. Required with `token` |
+| `registry` | `registry.liftgate.internal` | `LIFTGATE_REGISTRY` |
 | `build.image` | `""` | `LIFTGATE_BUILD_IMAGE`; empty means `ghcr.io/liftgate/build-image:<appVersion>` |
 | `build.namespace` | `liftgate-build` | `LIFTGATE_BUILD_NAMESPACE`; the chart creates it |
 | `build.allowedEgressCidrs` | `[]` | Private addresses build jobs may reach, such as the registry, each as `{cidr: 10.0.0.5/32, ports: [5000]}` (TCP); everything else private is blocked. A bare CIDR string still works but opens every port, and the install notes warn about it |
-| `build.registryCredentials` | `""` | Docker `config.json` content; rendered as Secret `registry-credentials` in `build.namespace` and mounted by build jobs. `shared` only |
+| `build.registryCredentials` | `""` | Docker `config.json` content; rendered as Secret `registry-credentials` in `build.namespace` and mounted by build jobs. `registryAuth: shared` only |
 | `runtimeClass` | `gvisor` | `LIFTGATE_RUNTIME_CLASS`; the RuntimeClass of every tenant pod. The chart refuses to render when it is empty unless `allowUnsandboxedTenants=true` |
 | `allowUnsandboxedTenants` | `false` | With an empty `runtimeClass`, renders `LIFTGATE_ALLOW_RUNC=true` so tenant pods run under runc on the node kernel. Only for clusters where every tenant is trusted |
 | `workloads.nodeSelector` | `{}` | `LIFTGATE_WORKLOAD_NODE_SELECTOR`; node labels for tenant pods, `nodeSelector` when empty |
 | `workloads.tolerations` | `[]` | `LIFTGATE_WORKLOAD_TOLERATIONS`; taints tenant pods tolerate, written as for `kubectl taint`: `key=value:Effect`, `key:Effect` or `key` |
 | `nodeSelector` | `{}` | Node labels that pin the control plane, dashboard, CloudNativePG cluster and build jobs; rendered into `LIFTGATE_NODE_SELECTOR` as `key=value,key=value`, which tenant pods use when `workloads.nodeSelector` is empty. See [Node pools](#node-pools) for NATS |
-| `registryInsecure` | `false` | `LIFTGATE_REGISTRY_INSECURE`; build jobs push to `registry.host` over plain HTTP |
+| `registryInsecure` | `false` | `LIFTGATE_REGISTRY_INSECURE`; build jobs push to `registry` over plain HTTP |
+| `registryAuth` | `shared` | `LIFTGATE_REGISTRY_AUTH`: `shared` or `token`, see [Registry authentication](#registry-authentication) |
+| `registryTokenKey` | `""` | `LIFTGATE_REGISTRY_TOKEN_KEY`, Secret; RSA private key in PEM that signs registry tokens. Required with `token` |
+| `registryTokenCertificate` | `""` | `LIFTGATE_REGISTRY_TOKEN_CERTIFICATE`; the certificate of `registryTokenKey`, which the registry trusts. Required with `token` |
+| `registryPullPassword` | `""` | `LIFTGATE_REGISTRY_PULL_PASSWORD`, Secret; password of the `pull` account nodes use. Required with `token` |
 | `prometheusUrl` | `http://prometheus.liftgate-system:9090` | `LIFTGATE_PROMETHEUS_URL` |
 | `signup.mode` | `approval` | `LIFTGATE_SIGNUP`: `open`, `approval` or `closed`; see [Sign-up and accounts](#sign-up-and-accounts) |
 | `signup.allow` | `[]` | `LIFTGATE_SIGNUP_ALLOW`: emails, `@domains` and `github:<login>` entries that are active from their first sign-in |
@@ -418,11 +418,11 @@ reachable only from the control plane unless it brings its own NetworkPolicy.
 
 ## Registry authentication
 
-With `registry.auth: shared`, the default, every build job mounts the same
+With `registryAuth: shared`, the default, every build job mounts the same
 `build.registryCredentials`, so a build can push to and pull from every repository in the
 registry. Use it when one team owns every project.
 
-With `registry.auth: token`, the registry must be [CNCF Distribution](https://distribution.github.io/distribution/)
+With `registryAuth: token`, the registry must be [CNCF Distribution](https://distribution.github.io/distribution/)
 with token authentication that points at Liftgate:
 
 - Each build logs in as `build-<build id>` with a random password from its own Secret. The
@@ -431,7 +431,7 @@ with token authentication that points at Liftgate:
 - `<publicUrl>/api/v1/registry/token` answers the registry's token requests with a token valid
   for 5 minutes that allows pull and push on the build's own repository,
   `<org>/<project>-<service>`, and nothing else. Build jobs reach it over their internet egress.
-- Nodes pull as `pull` with `registry.pullPassword`, which reads every repository and writes
+- Nodes pull as `pull` with `registryPullPassword`, which reads every repository and writes
   none. Add it to `/etc/rancher/k3s/registries.yaml` on every node.
 
 Create the signing key and certificate, and a pull password:
@@ -444,12 +444,12 @@ openssl rand -hex 32
 
 ```sh
 helm upgrade liftgate charts/liftgate --reuse-values \
-  --set registry.auth=token --set registry.pullPassword="$PULL_PASSWORD" \
-  --set-file registry.tokenKey=registry-token.key --set-file registry.tokenCertificate=registry-token.crt
+  --set registryAuth=token --set registryPullPassword="$PULL_PASSWORD" \
+  --set-file registryTokenKey=registry-token.key --set-file registryTokenCertificate=registry-token.crt
 ```
 
 Configure the registry with `realm` `<publicUrl>/api/v1/registry/token`, `service` equal to
-`registry.host`, `issuer` `liftgate` and `rootcertbundle` pointing at `registry-token.crt`.
+`registry`, `issuer` `liftgate` and `rootcertbundle` pointing at `registry-token.crt`.
 [`infra/registry`](../../infra/registry) has the configuration Liftgate Cloud uses and the order
 of the switch-over.
 

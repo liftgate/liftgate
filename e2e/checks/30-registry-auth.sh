@@ -208,8 +208,8 @@ spec:
 EOF
 
 helm upgrade liftgate charts/liftgate --namespace liftgate-system --reuse-values \
-  --set registry.host=$registry --set registry.auth=token --set registry.pullPassword="$pull_password" \
-  --set-file registry.tokenKey="$work/token.key" --set-file registry.tokenCertificate="$work/token.crt"
+  --set registry=$registry --set registryAuth=token --set registryPullPassword="$pull_password" \
+  --set-file registryTokenKey="$work/token.key" --set-file registryTokenCertificate="$work/token.crt"
 kubectl -n liftgate-system rollout status deployment/liftgate-control-plane --timeout=10m
 kubectl -n $ns rollout status deployment/registry --timeout=5m
 

@@ -6,7 +6,7 @@ metadata:
     {{- include "liftgate.labels" . | nindent 4 }}
     pod-security.kubernetes.io/enforce: privileged
 ---
-{{- if eq .Values.registry.auth "shared" }}
+{{- if ne .Values.registryAuth "token" }}
 {{- with .Values.build.registryCredentials }}
 apiVersion: v1
 kind: Secret

@@ -33,6 +33,10 @@ WARNING: profile ha is running a single NATS server. Install with -f values-ha.y
 
 WARNING: allowSharedSite is true and *.{{ $.Values.deployDomain }} ends in {{ . }} like the dashboard and API. Browsers treat them as one site unless {{ . }} is a public suffix.
 {{- end }}
+{{- if and .Values.postgres.managed (not .Values.postgres.backup.enabled) }}
+
+WARNING: postgres.backup.enabled is false. The database has no WAL archive and no base backups, so a lost volume cannot be restored. See Backups in the chart README.
+{{- end }}
 {{- if .Values.gateway.create }}
 
 DNS: point {{ include "liftgate.hosts" . | fromJsonArray | join ", " }} and *.{{ .Values.deployDomain }} at the nodes running the {{ .Values.gateway.className }} gateway.

@@ -82,13 +82,40 @@
     "postgres": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["managed", "externalUrl", "externalUser", "externalPassword", "storage"],
+      "required": ["managed", "externalUrl", "externalUser", "externalPassword", "storage", "maxConnections", "backup"],
       "properties": {
         "managed": { "type": "boolean" },
         "externalUrl": { "type": "string" },
         "externalUser": { "type": "string" },
         "externalPassword": { "type": "string" },
-        "storage": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?(Ki|Mi|Gi|Ti|k|M|G|T)?$" }
+        "storage": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?(Ki|Mi|Gi|Ti|k|M|G|T)?$" },
+        "maxConnections": { "type": "integer", "minimum": 1 },
+        "backup": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "endpointUrl", "destinationPath", "credentialsSecret", "retention", "schedule", "serverName", "recoverFrom", "recoverTo"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "endpointUrl": { "type": "string", "pattern": "^(https?://.*)?$" },
+            "destinationPath": { "type": "string", "pattern": "^(s3://[^/]+.*)?$" },
+            "credentialsSecret": { "type": "string", "minLength": 1 },
+            "retention": { "type": "string", "pattern": "^[1-9][0-9]*[dwm]$" },
+            "schedule": { "type": "string", "minLength": 1 },
+            "serverName": { "type": "string", "pattern": "^([a-z0-9]([-a-z0-9]*[a-z0-9])?)?$" },
+            "recoverFrom": { "type": "string" },
+            "recoverTo": { "type": "string", "pattern": "^([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2}))?$" }
+          },
+          "allOf": [
+            {
+              "if": { "properties": { "recoverFrom": { "minLength": 1 } } },
+              "then": { "properties": { "enabled": { "const": true } } }
+            },
+            {
+              "if": { "properties": { "recoverTo": { "minLength": 1 } } },
+              "then": { "properties": { "recoverFrom": { "minLength": 1 } } }
+            }
+          ]
+        }
       },
       "if": { "properties": { "managed": { "const": false } } },
       "then": {
@@ -271,5 +298,18 @@
       "type": "array",
       "items": { "type": "string", "pattern": "^[A-Za-z0-9_./-]+(=[A-Za-z0-9_.-]*)?(:(NoSchedule|PreferNoSchedule|NoExecute))?$" }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "profile": { "const": "ha" },
+          "postgres": { "properties": { "managed": { "const": true } } }
+        }
+      },
+      "then": {
+        "properties": { "postgres": { "properties": { "backup": { "properties": { "enabled": { "const": true } } } } } }
+      }
+    }
+  ]
 }

@@ -110,7 +110,7 @@ secrets:
   masterKey: "..."
 ```
 
-Generate `masterKey` with `openssl rand -base64 32`. `registry` is where build jobs push images, and `signup.allow` lists the accounts approved on their first sign-in, so the first admin is not left waiting for approval. [documentation/self-hosting.md](documentation/self-hosting.md) walks through an install on a fresh VM. Keep `deployDomain` on a different registrable domain from `publicUrl` so tenant apps are not same-site with the dashboard; the chart refuses a shared one, as `charts/liftgate/README.md` explains under Separate sites. `dashboardUrl` defaults to `publicUrl`, which serves the dashboard and the API on one host. With `postgres.managed` and `nats.managed` left at `true` the chart renders a CloudNativePG cluster and installs the NATS chart; set `externalUrl` on either to bring your own. For high availability add `--set profile=ha --set nats.config.cluster.enabled=true`, the contents of `charts/liftgate/values-ha.yaml`: `profile=ha` runs three `api`, two `reconciler`, two `builder` and one `meter` replica and a three-instance database, and the second flag turns on the three-server NATS cluster, which `profile=ha` alone leaves at one server. Every value is documented in `charts/liftgate/README.md`.
+Generate `masterKey` with `openssl rand -base64 32`. `registry` is where build jobs push images, and `signup.allow` lists the accounts approved on their first sign-in, so the first admin is not left waiting for approval. [documentation/self-hosting.md](documentation/self-hosting.md) walks through an install on a fresh VM. Keep `deployDomain` on a different registrable domain from `publicUrl` so tenant apps are not same-site with the dashboard; the chart refuses a shared one, as `charts/liftgate/README.md` explains under Separate sites. `dashboardUrl` defaults to `publicUrl`, which serves the dashboard and the API on one host. With `postgres.managed` and `nats.managed` left at `true` the chart renders a CloudNativePG cluster and installs the NATS chart; set `externalUrl` on either to bring your own. For high availability add `--set profile=ha --set nats.config.cluster.enabled=true --set postgres.backup.enabled=true`, the contents of `charts/liftgate/values-ha.yaml`: `profile=ha` runs three `api`, two `reconciler`, two `builder` and one `meter` replica and a three-instance database, the second flag turns on the three-server NATS cluster, which `profile=ha` alone leaves at one server, and the third enables Postgres backups, which need `postgres.backup.destinationPath`, the Barman Cloud plugin and a credentials Secret (see Backups in `charts/liftgate/README.md`). Every value is documented in `charts/liftgate/README.md`.
 
 ### GitHub App
 
@@ -168,7 +168,7 @@ Chart:
 ```sh
 helm dependency update charts/liftgate
 helm lint charts/liftgate --set profile=single
-helm template liftgate charts/liftgate --values charts/liftgate/values-ha.yaml
+helm template liftgate charts/liftgate --values charts/liftgate/values-ha.yaml --set postgres.backup.destinationPath=s3://liftgate-pg/
 ```
 
 ## Repository layout

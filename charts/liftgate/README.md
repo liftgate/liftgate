@@ -37,8 +37,10 @@ helm upgrade --install liftgate oci://ghcr.io/liftgate/charts/liftgate --version
   --set-file github.privateKey=github-app.pem
 ```
 
-Add `--set profile=ha --set nats.config.cluster.enabled=true`, the contents of `values-ha.yaml`,
-for the `ha` profile. Values files keep secrets out of shell history; pass them with `-f` instead
+Add `--set profile=ha --set nats.config.cluster.enabled=true --set postgres.backup.enabled=true`,
+the contents of `values-ha.yaml`, for the `ha` profile. The backups it turns on also need
+`postgres.backup.destinationPath`, the Barman Cloud plugin and a credentials Secret; see
+[Backups](#backups). Values files keep secrets out of shell history; pass them with `-f` instead
 of `--set` in production.
 
 ## Profiles
@@ -122,6 +124,53 @@ nats:
 ```
 
 PostgreSQL 16 or newer; NATS 2.10 or newer with JetStream enabled.
+
+## Backups
+
+With `postgres.backup.enabled=true` the CloudNativePG cluster archives every WAL segment to an
+S3-compatible object store and takes a base backup on `postgres.backup.schedule` and once right
+after the schedule is created, through the
+[Barman Cloud plugin](https://cloudnative-pg.io/plugin-barman-cloud/). The chart renders a
+`barmancloud.cnpg.io/v1` `ObjectStore`, registers the plugin as the cluster's WAL archiver and
+adds a `ScheduledBackup`. Backups and WAL that fall out of the `postgres.backup.retention`
+recovery window are deleted. Enabling backups requires `postgres.backup.destinationPath`, and
+with a managed database the `ha` profile refuses to render without backups.
+
+Install the plugin into the operator's namespace; it needs cert-manager:
+
+```sh
+kubectl apply -f https://github.com/cloudnative-pg/plugin-barman-cloud/releases/download/v0.15.0/manifest.yaml
+kubectl -n cnpg-system rollout status deployment/barman-cloud
+```
+
+Create a bucket and a key that can read and write it on any S3-compatible store (Garage, MinIO,
+AWS S3), then the Secret named by `postgres.backup.credentialsSecret`. `ACCESS_REGION` must be
+the region the store signs for (Garage: its `s3_region`):
+
+```sh
+kubectl -n liftgate-system create secret generic liftgate-postgres-backup \
+  --from-literal=ACCESS_KEY_ID=<key id> \
+  --from-literal=ACCESS_SECRET_KEY=<secret key> \
+  --from-literal=ACCESS_REGION=<region>
+```
+
+```yaml
+postgres:
+  backup:
+    enabled: true
+    endpointUrl: http://garage.example.internal:3900
+    destinationPath: s3://liftgate-pg/
+```
+
+Enabling backups on a running cluster replaces its Postgres pods once to add the plugin
+sidecar. Then check that a backup completed:
+
+```sh
+kubectl -n liftgate-system get backups
+```
+
+Restoring, the point-in-time drill and key escrow are in
+[`infra/cnpg/README.md`](../../infra/cnpg/README.md).
 
 ## Sign-in providers
 
@@ -321,6 +370,16 @@ empty, neither appears.
 | `postgres.externalUser` | `""` | |
 | `postgres.externalPassword` | `""` | |
 | `postgres.storage` | `10Gi` | Volume per instance |
+| `postgres.maxConnections` | `100` | PostgreSQL `max_connections` |
+| `postgres.backup.enabled` | `false` | WAL archiving and scheduled base backups, see [Backups](#backups); required for `ha` with a managed database |
+| `postgres.backup.endpointUrl` | `""` | S3 endpoint; empty means AWS S3 |
+| `postgres.backup.destinationPath` | `""` | `s3://<bucket>/<optional prefix>`; required when `enabled` with a managed database |
+| `postgres.backup.credentialsSecret` | `liftgate-postgres-backup` | Secret with `ACCESS_KEY_ID`, `ACCESS_SECRET_KEY` and `ACCESS_REGION` |
+| `postgres.backup.retention` | `30d` | Recovery window: `<n>d`, `<n>w` or `<n>m` |
+| `postgres.backup.schedule` | `0 0 3 * * *` | Base backup schedule, cron with a leading seconds field |
+| `postgres.backup.serverName` | `""` | Folder under `destinationPath` the cluster archives to; empty means the Cluster name. Give each restored cluster a new one |
+| `postgres.backup.recoverFrom` | `""` | Folder to restore from when the Cluster is created; empty creates an empty database |
+| `postgres.backup.recoverTo` | `""` | RFC 3339 time to stop the restore at; empty replays all archived WAL |
 | `nats.managed` | `true` | Install the `nats` subchart |
 | `nats.externalUrl` | `""` | NATS URL when not managed |
 | `nats.config.*` | JetStream on, 5Gi | Passed through to the nats chart |
@@ -468,4 +527,20 @@ else there.
 helm uninstall liftgate --namespace liftgate-system
 ```
 
-The CloudNativePG cluster and its volumes are deleted with the release; take a backup first.
+The CloudNativePG `Cluster` and the backup `ObjectStore` carry `helm.sh/resource-policy: keep`,
+so the database, its volumes and its `-app` Secret survive the uninstall. Installing the same
+release name into the same namespace again adopts them and keeps the data. Install with the same
+`secrets.masterKey`: the Secret holding it is deleted with the release. To delete the data too:
+
+```sh
+kubectl -n liftgate-system delete cluster liftgate-postgres
+kubectl -n liftgate-system delete objectstore liftgate-postgres
+```
+
+The `ObjectStore` only points at the bucket, so the backups and WAL stay there, and nothing in the
+cluster prunes them once the `Cluster` is gone. Delete everything under
+`postgres.backup.destinationPath` with any S3 client to remove the data for good. Before installing
+again, do that or set a `destinationPath` that has never been used: CloudNativePG refuses to archive
+into a folder that already holds WAL. Also remove `recoverFrom`, `recoverTo` and `serverName` from the
+values file: with `recoverFrom` set, the new `Cluster` restores from the archive instead of starting
+empty.

@@ -1,6 +1,7 @@
 package dev.liftgate.config
 
 import dev.liftgate.minimalEnv
+import io.fabric8.kubernetes.api.model.TolerationBuilder
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -13,6 +14,14 @@ import kotlin.test.assertTrue
  * @date 9/17/2026
  */
 class ConfigTest {
+    private val github = mapOf(
+        "LIFTGATE_GITHUB_APP_ID" to "1",
+        "LIFTGATE_GITHUB_APP_PRIVATE_KEY" to "pem",
+        "LIFTGATE_GITHUB_WEBHOOK_SECRET" to "wh",
+        "LIFTGATE_GITHUB_CLIENT_ID" to "cid",
+        "LIFTGATE_GITHUB_CLIENT_SECRET" to "cs",
+    )
+
     @Test
     fun `defaults resolve`() {
         val config = Config.fromEnv(minimalEnv)
@@ -27,8 +36,9 @@ class ConfigTest {
         assertTrue(config.leaderElection)
         assertFalse(config.hazelcastKubernetes)
         assertNull(config.github)
-        assertNull(config.runtimeClass)
+        assertEquals("gvisor", config.runtimeClass)
         assertTrue(config.nodeSelector.isEmpty())
+        assertTrue(config.workloadTolerations.isEmpty() && config.buildTolerations.isEmpty())
         assertFalse(config.registryInsecure)
     }
 
@@ -58,31 +68,76 @@ class ConfigTest {
     }
 
     @Test
+    fun `tenant and build pods take their own node selector and fall back to the platform one`() {
+        val platform = minimalEnv + ("LIFTGATE_NODE_SELECTOR" to "liftgate.dev/pool=platform")
+        val shared = Config.fromEnv(platform)
+        assertEquals(mapOf("liftgate.dev/pool" to "platform"), shared.workloadNodeSelector)
+        assertEquals(mapOf("liftgate.dev/pool" to "platform"), shared.buildNodeSelector)
+        val pools = Config.fromEnv(platform + mapOf("LIFTGATE_WORKLOAD_NODE_SELECTOR" to "liftgate.dev/pool=workloads", "LIFTGATE_BUILD_NODE_SELECTOR" to "liftgate.dev/pool=build"))
+        assertEquals(mapOf("liftgate.dev/pool" to "platform"), pools.nodeSelector)
+        assertEquals(mapOf("liftgate.dev/pool" to "workloads"), pools.workloadNodeSelector)
+        assertEquals(mapOf("liftgate.dev/pool" to "build"), pools.buildNodeSelector)
+    }
+
+    @Test
     fun `malformed node selector names the variable`() {
-        listOf("n1", "=n1", "a=b,").forEach {
-            val error = assertFailsWith<IllegalStateException> { Config.fromEnv(minimalEnv + ("LIFTGATE_NODE_SELECTOR" to it)) }
-            assertTrue("LIFTGATE_NODE_SELECTOR" in error.message.orEmpty())
+        listOf("LIFTGATE_NODE_SELECTOR", "LIFTGATE_WORKLOAD_NODE_SELECTOR", "LIFTGATE_BUILD_NODE_SELECTOR").forEach { name ->
+            listOf("n1", "=n1", "a=b,").forEach {
+                val error = assertFailsWith<IllegalStateException> { Config.fromEnv(minimalEnv + (name to it)) }
+                assertTrue(name in error.message.orEmpty())
+            }
         }
+    }
+
+    @Test
+    fun `tolerations parse from taints in kubectl form`() {
+        val config = Config.fromEnv(
+            minimalEnv + mapOf(
+                "LIFTGATE_WORKLOAD_TOLERATIONS" to "liftgate.dev/pool=workloads:NoSchedule, dedicated",
+                "LIFTGATE_BUILD_TOLERATIONS" to "liftgate.dev/pool:NoExecute",
+            ),
+        )
+        assertEquals(
+            listOf(
+                TolerationBuilder().withKey("liftgate.dev/pool").withOperator("Equal").withValue("workloads").withEffect("NoSchedule").build(),
+                TolerationBuilder().withKey("dedicated").withOperator("Exists").build(),
+            ),
+            config.workloadTolerations,
+        )
+        assertEquals(listOf(TolerationBuilder().withKey("liftgate.dev/pool").withOperator("Exists").withEffect("NoExecute").build()), config.buildTolerations)
+    }
+
+    @Test
+    fun `malformed tolerations name the variable`() {
+        listOf("pool=build:Sometimes", ":NoSchedule", "a=b,", "a b").forEach {
+            val error = assertFailsWith<IllegalStateException> { Config.fromEnv(minimalEnv + ("LIFTGATE_BUILD_TOLERATIONS" to it)) }
+            assertTrue("LIFTGATE_BUILD_TOLERATIONS" in error.message.orEmpty())
+        }
+    }
+
+    @Test
+    fun `reconciling roles refuse to start without a runtime class unless runc is allowed`() {
+        listOf(minimalEnv, minimalEnv + github + ("LIFTGATE_ROLE" to "all")).map { it - "LIFTGATE_RUNTIME_CLASS" }.forEach { env ->
+            val error = assertFailsWith<IllegalStateException> { Config.fromEnv(env) }
+            assertTrue("LIFTGATE_RUNTIME_CLASS" in error.message.orEmpty() && "LIFTGATE_ALLOW_RUNC" in error.message.orEmpty())
+            assertNull(Config.fromEnv(env + ("LIFTGATE_ALLOW_RUNC" to "true")).runtimeClass)
+        }
+        listOf("builder", "meter").forEach { assertNull(Config.fromEnv(minimalEnv + github - "LIFTGATE_RUNTIME_CLASS" + ("LIFTGATE_ROLE" to it)).runtimeClass) }
     }
 
     @Test
     fun `github credentials, runtime class and leader election parse`() {
         val config = Config.fromEnv(
-            minimalEnv + mapOf(
+            minimalEnv + github + mapOf(
                 "LIFTGATE_ROLE" to "all",
-                "LIFTGATE_GITHUB_APP_ID" to "1",
-                "LIFTGATE_GITHUB_APP_PRIVATE_KEY" to "pem",
-                "LIFTGATE_GITHUB_WEBHOOK_SECRET" to "wh",
-                "LIFTGATE_GITHUB_CLIENT_ID" to "cid",
-                "LIFTGATE_GITHUB_CLIENT_SECRET" to "cs",
                 "LIFTGATE_LEADER_ELECTION" to "off",
-                "LIFTGATE_RUNTIME_CLASS" to "gvisor",
+                "LIFTGATE_RUNTIME_CLASS" to "runsc-debug",
             ),
         )
         assertEquals(Role.ALL, config.role)
         assertEquals(GitHubConfig("1", "pem", "wh", "cid", "cs"), config.github)
         assertFalse(config.leaderElection)
-        assertEquals("gvisor", config.runtimeClass)
+        assertEquals("runsc-debug", config.runtimeClass)
     }
 
     @Test

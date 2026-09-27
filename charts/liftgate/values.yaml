@@ -105,8 +105,10 @@ build:
   namespace: liftgate-build
   registryCredentials: ""
   allowedEgressCidrs: []
+  nodeSelector: {}
+  tolerations: []
 
-runtimeClass: ""
+runtimeClass: gvisor
 
 nodeSelector: {}
 
@@ -127,3 +129,9 @@ customDomains:
   enabled: true
 
 allowSharedSite: false
+
+allowUnsandboxedTenants: false
+
+workloads:
+  nodeSelector: {}
+  tolerations: []

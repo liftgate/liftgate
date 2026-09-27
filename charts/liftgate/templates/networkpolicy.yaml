@@ -15,14 +15,6 @@ spec:
     - ports:
         - protocol: TCP
           port: 8080
-    - from:
-        - podSelector:
-            matchLabels:
-              {{- include "liftgate.selectorLabels" . | nindent 14 }}
-              app.kubernetes.io/component: control-plane
-      ports:
-        - protocol: TCP
-          port: 5701
 {{- if .Values.nats.managed }}
 ---
 apiVersion: networking.k8s.io/v1
@@ -43,11 +35,6 @@ spec:
         - podSelector:
             matchLabels:
               app.kubernetes.io/instance: {{ .Release.Name }}
-    - ports:
-        - protocol: TCP
-          port: 7777
-        - protocol: TCP
-          port: 8222
 {{- end }}
 ---
 apiVersion: networking.k8s.io/v1
@@ -81,7 +68,16 @@ spec:
               - 192.168.0.0/16
               - 100.64.0.0/10
               - 169.254.0.0/16
-        {{- range .Values.build.allowedEgressCidrs }}
+    {{- range .Values.build.allowedEgressCidrs }}
+    {{- $entry := kindIs "string" . | ternary (dict "cidr" .) . }}
+    - to:
         - ipBlock:
-            cidr: {{ . | quote }}
+            cidr: {{ $entry.cidr | quote }}
+      {{- with $entry.ports }}
+      ports:
+        {{- range . }}
+        - protocol: TCP
+          port: {{ . }}
         {{- end }}
+      {{- end }}
+    {{- end }}

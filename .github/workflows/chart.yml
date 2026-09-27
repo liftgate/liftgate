@@ -34,3 +34,11 @@ jobs:
       - run: helm lint charts/liftgate ${{ matrix.args }}
       - run: helm template liftgate charts/liftgate ${{ matrix.args }} --api-versions cilium.io/v2/CiliumClusterwideNetworkPolicy > /dev/null
       - run: "! helm template liftgate charts/liftgate ${{ matrix.args }} --set deployDomain=apps.example.com --set publicUrl=https://liftgate.example.com"
+      - name: sandbox and build egress guards
+        run: |
+          set -o pipefail
+          if helm template liftgate charts/liftgate ${{ matrix.args }} --set runtimeClass= 2> render.err; then exit 1; fi
+          grep "runtimeClass is empty" render.err
+          helm template liftgate charts/liftgate ${{ matrix.args }} --set runtimeClass= --set allowUnsandboxedTenants=true --show-only templates/configmap.yaml | grep 'LIFTGATE_ALLOW_RUNC: "true"'
+          helm template liftgate charts/liftgate ${{ matrix.args }} --set-json 'build.allowedEgressCidrs=[{"cidr":"10.200.0.1/32","ports":[5050]}]' --show-only templates/networkpolicy.yaml \
+            | yq -e 'select(.metadata.name == "build-isolation") | .spec.egress | (length == 3 and .[1].to[0].ipBlock.except[0] == "10.0.0.0/8" and .[2].to[0].ipBlock.cidr == "10.200.0.1/32" and (.[2].ports | length) == 1 and .[2].ports[0].protocol == "TCP" and .[2].ports[0].port == 5050)'

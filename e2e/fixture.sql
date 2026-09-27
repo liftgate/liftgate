@@ -34,3 +34,31 @@ insert into deployments (id, service_id, build_id, status) values
 
 insert into outbox (subject, payload) values
     ('liftgate.release.requested', '{"deploymentId": "00000000-0000-4000-8000-000000000008"}');
+
+insert into organizations (id, slug, name) values
+    ('00000000-0000-4000-8000-000000000010', 'e2e-b', 'End to end B');
+
+insert into github_installations (id, org_id, account_login) values
+    (2, '00000000-0000-4000-8000-000000000010', 'e2e-b');
+
+insert into projects (id, org_id, slug, name, repo_full_name, installation_id) values
+    ('00000000-0000-4000-8000-000000000011', '00000000-0000-4000-8000-000000000010', 'hello-b', 'Hello B', 'e2e-b/hello-b', 2);
+
+insert into environments (id, project_id, slug, name, kind, branch, namespace) values
+    ('00000000-0000-4000-8000-000000000012', '00000000-0000-4000-8000-000000000011', 'production', 'Production', 'production', 'main', 'env-e2e-b');
+
+insert into services (id, environment_id, slug, name, kind, port, cpu_millis, memory_mb, start_command) values
+    ('00000000-0000-4000-8000-000000000013', '00000000-0000-4000-8000-000000000012', 'web', 'Web', 'web', 8080, 100, 64,
+     'echo liftgate-b > /tmp/index.html && exec httpd -f -p 8080 -h /tmp');
+
+insert into domains (id, service_id, hostname, kind, verified_at, certificate_status) values
+    ('00000000-0000-4000-8000-000000000014', '00000000-0000-4000-8000-000000000013', 'web-hello-e2e-b.liftgate.app', 'platform', now(), 'issued');
+
+insert into builds (id, service_id, commit_sha, branch, status, image_ref, started_at, finished_at) values
+    ('00000000-0000-4000-8000-000000000015', '00000000-0000-4000-8000-000000000013', '0000000000000000000000000000000000000000', 'main', 'succeeded', 'busybox:1.36', now(), now());
+
+insert into deployments (id, service_id, build_id, status) values
+    ('00000000-0000-4000-8000-000000000016', '00000000-0000-4000-8000-000000000013', '00000000-0000-4000-8000-000000000015', 'pending');
+
+insert into outbox (subject, payload) values
+    ('liftgate.release.requested', '{"deploymentId": "00000000-0000-4000-8000-000000000016"}');

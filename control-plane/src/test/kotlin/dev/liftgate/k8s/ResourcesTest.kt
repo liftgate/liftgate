@@ -3,6 +3,7 @@ package dev.liftgate.k8s
 import dev.liftgate.service.ServiceKind
 import io.fabric8.kubernetes.api.model.PodSpec
 import io.fabric8.kubernetes.api.model.Quantity
+import io.fabric8.kubernetes.api.model.TolerationBuilder
 import java.time.Instant
 import java.util.Base64
 import kotlin.test.Test
@@ -67,7 +68,7 @@ class ResourcesTest {
         assertEquals("/", container.readinessProbe.httpGet.path)
         assertEquals(3000, container.readinessProbe.httpGet.port.intVal)
         assertNull(container.readinessProbe.tcpSocket)
-        assertEquals(mapOf("cpu" to Quantity("250m"), "memory" to Quantity("256Mi")), container.resources.requests)
+        assertEquals(mapOf("cpu" to Quantity("250m"), "memory" to Quantity("256Mi"), "ephemeral-storage" to Quantity("2Gi")), container.resources.requests)
         assertEquals(container.resources.requests, container.resources.limits)
         assertTrue(container.command.isNullOrEmpty())
     }
@@ -107,11 +108,19 @@ class ResourcesTest {
     }
 
     @Test
-    fun `node selector pins the deployment and the cron job`() {
-        val selector = mapOf("kubernetes.io/hostname" to "n1")
-        assertTrue(Resources.deployment(release, null).spec.template.spec.nodeSelector.isNullOrEmpty())
-        assertEquals(selector, Resources.deployment(release, null, selector).spec.template.spec.nodeSelector)
-        assertEquals(selector, Resources.cronJob(release, null, selector).spec.jobTemplate.spec.template.spec.nodeSelector)
+    fun `node selector and tolerations place the deployment and the cron job on the workload pool`() {
+        val selector = mapOf("liftgate.dev/pool" to "workloads")
+        val tolerations = listOf(TolerationBuilder().withKey("liftgate.dev/pool").withOperator("Equal").withValue("workloads").withEffect("NoSchedule").build())
+        val unpinned = Resources.deployment(release, null).spec.template.spec
+        assertTrue(unpinned.nodeSelector.isNullOrEmpty() && unpinned.tolerations.isNullOrEmpty())
+        listOf(
+            Resources.deployment(release, "gvisor", selector, tolerations).spec.template.spec,
+            Resources.cronJob(release, "gvisor", selector, tolerations).spec.jobTemplate.spec.template.spec,
+        ).forEach {
+            assertEquals(selector, it.nodeSelector)
+            assertEquals(tolerations, it.tolerations)
+            assertEquals("gvisor", it.runtimeClassName)
+        }
     }
 
     @Test
@@ -208,10 +217,10 @@ class ResourcesTest {
     }
 
     @Test
-    fun `resource quota caps what one environment can request`() {
+    fun `resource quota caps what one environment can request, disk included`() {
         val quota = Resources.resourceQuota(release)
         assertEquals(release.namespace, quota.metadata.namespace)
-        assertEquals(setOf("pods", "limits.cpu", "limits.memory"), quota.spec.hard.keys)
+        assertEquals(setOf("pods", "limits.cpu", "limits.memory", "requests.ephemeral-storage", "limits.ephemeral-storage"), quota.spec.hard.keys)
     }
 
     @Test

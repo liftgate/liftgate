@@ -29,3 +29,6 @@ publicUrl: http://liftgate.test
 
 gateway:
   issuer: selfsigned
+
+runtimeClass: ""
+allowUnsandboxedTenants: true

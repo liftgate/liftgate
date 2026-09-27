@@ -191,11 +191,29 @@
         "image": { "type": "string", "minLength": 1 },
         "namespace": { "type": "string", "minLength": 1 },
         "registryCredentials": { "type": "string" },
-        "allowedEgressCidrs": { "type": "array", "items": { "type": "string" } }
+        "allowedEgressCidrs": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              { "type": "string" },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["cidr", "ports"],
+                "properties": {
+                  "cidr": { "type": "string", "minLength": 1 },
+                  "ports": { "type": "array", "minItems": 1, "items": { "type": "integer", "minimum": 1, "maximum": 65535 } }
+                }
+              }
+            ]
+          }
+        },
+        "nodeSelector": { "$ref": "#/definitions/nodeSelector" },
+        "tolerations": { "$ref": "#/definitions/tolerations" }
       }
     },
     "runtimeClass": { "type": "string" },
-    "nodeSelector": { "type": "object", "additionalProperties": { "type": "string" } },
+    "nodeSelector": { "$ref": "#/definitions/nodeSelector" },
     "registryInsecure": { "type": "boolean" },
     "prometheusUrl": { "type": "string", "pattern": "^https?://" },
     "signup": {
@@ -223,6 +241,22 @@
         "enabled": { "type": "boolean" }
       }
     },
-    "allowSharedSite": { "type": "boolean" }
+    "allowSharedSite": { "type": "boolean" },
+    "allowUnsandboxedTenants": { "type": "boolean" },
+    "workloads": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "nodeSelector": { "$ref": "#/definitions/nodeSelector" },
+        "tolerations": { "$ref": "#/definitions/tolerations" }
+      }
+    }
+  },
+  "definitions": {
+    "nodeSelector": { "type": "object", "additionalProperties": { "type": "string" } },
+    "tolerations": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[A-Za-z0-9_./-]+(=[A-Za-z0-9_.-]*)?(:(NoSchedule|PreferNoSchedule|NoExecute))?$" }
+    }
   }
 }

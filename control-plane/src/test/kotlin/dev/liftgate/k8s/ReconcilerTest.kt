@@ -55,7 +55,7 @@ class ReconcilerTest {
     private val deployments = mockk<Deployments>(relaxUnitFun = true)
     private val services = mockk<Services>()
     private val app = mockk<App>().also {
-        every { it.config } returns testConfig(mapOf("LIFTGATE_RUNTIME_CLASS" to "gvisor"))
+        every { it.config } returns testConfig(mapOf("LIFTGATE_WORKLOAD_NODE_SELECTOR" to "liftgate.dev/pool=workloads", "LIFTGATE_WORKLOAD_TOLERATIONS" to "liftgate.dev/pool:NoSchedule"))
         every { it.deployments } returns deployments
         every { it.services } returns services
         every { it.builds } returns mockk<Builds> { coEvery { byId(testBuild.id) } returns testBuild }
@@ -109,7 +109,8 @@ class ReconcilerTest {
         assertEquals((listOf(namespacePath, quotaPath, secretPath) + policyPaths + deploymentPath + servicePath + routePath + certificatePath + gatewayPath).map { it + apply }, applied.map { it.path })
         assertTrue("\"hostname\":\"api.acme.dev\"" in applied.last().utf8Body)
         assertTrue(applied.all { it.getHeader("Content-Type").startsWith("application/apply-patch+yaml") })
-        assertTrue("\"runtimeClassName\":\"gvisor\"" in applied.single { it.path.startsWith(deploymentPath) }.utf8Body)
+        val pod = applied.single { it.path.startsWith(deploymentPath) }.utf8Body
+        listOf("\"runtimeClassName\":\"gvisor\"", "\"nodeSelector\":{\"liftgate.dev/pool\":\"workloads\"}", "\"key\":\"liftgate.dev/pool\"").forEach { assertTrue(it in pod, it) }
         coVerify(exactly = 1) { deployments.transition(testDeployment.id, DeploymentStatus.RELEASING) }
         coVerify(exactly = 0) { deployments.transition(testDeployment.id, DeploymentStatus.RUNNING, any(), any()) }
         coVerify(exactly = 0) { deployments.transition(testDeployment.id, DeploymentStatus.FAILED, any(), any()) }

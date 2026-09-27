@@ -32,6 +32,7 @@ import io.fabric8.kubernetes.api.model.ResourceRequirementsBuilder
 import io.fabric8.kubernetes.api.model.Secret
 import io.fabric8.kubernetes.api.model.SecretBuilder
 import io.fabric8.kubernetes.api.model.ServiceBuilder
+import io.fabric8.kubernetes.api.model.Toleration
 import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder
 import io.fabric8.kubernetes.api.model.batch.v1.CronJob
 import io.fabric8.kubernetes.api.model.batch.v1.CronJobBuilder
@@ -92,6 +93,7 @@ object Resources {
     private const val HTTPS_PORT = 443
     private const val TENANT_UID = 1000L
     private const val MAX_PORT = 65535
+    private const val EPHEMERAL_STORAGE = "2Gi"
     private val privateRanges = listOf("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "169.254.0.0/16")
     private val tcpWithoutSmtp = listOf(1 to 24, 26 to 464, 466 to 586, 588 to MAX_PORT)
 
@@ -102,7 +104,12 @@ object Resources {
     fun resourceQuota(r: Release): ResourceQuota = ResourceQuotaBuilder()
         .withMetadata(meta("liftgate", r.namespace, r.environmentLabels()))
         .withNewSpec()
-        .withHard<String, Quantity>(mapOf("pods" to Quantity("50"), "limits.cpu" to Quantity("40"), "limits.memory" to Quantity("80Gi")))
+        .withHard<String, Quantity>(
+            mapOf(
+                "pods" to Quantity("50"), "limits.cpu" to Quantity("40"), "limits.memory" to Quantity("80Gi"),
+                "requests.ephemeral-storage" to Quantity("100Gi"), "limits.ephemeral-storage" to Quantity("100Gi"),
+            ),
+        )
         .endSpec()
         .build()
 
@@ -112,7 +119,7 @@ object Resources {
         .withData<String, String>(r.envVars.associate { it.name to Base64.getEncoder().encodeToString(it.value.orEmpty().toByteArray()) })
         .build()
 
-    fun deployment(r: Release, runtimeClass: String?, nodeSelector: Map<String, String> = emptyMap()): KubeDeployment = DeploymentBuilder()
+    fun deployment(r: Release, runtimeClass: String?, nodeSelector: Map<String, String> = emptyMap(), tolerations: List<Toleration> = emptyList()): KubeDeployment = DeploymentBuilder()
         .withMetadata(meta(r.service.slug, r.namespace, r.deploymentLabels()))
         .withNewSpec()
         .withReplicas(if (r.suspended) 0 else r.service.replicas)
@@ -120,11 +127,11 @@ object Resources {
         .withProgressDeadlineSeconds(600)
         .withSelector(r.selector())
         .withNewStrategy().withType("RollingUpdate").endStrategy()
-        .withTemplate(podTemplate(r, runtimeClass, nodeSelector, "Always"))
+        .withTemplate(podTemplate(r, runtimeClass, nodeSelector, tolerations, "Always"))
         .endSpec()
         .build()
 
-    fun cronJob(r: Release, runtimeClass: String?, nodeSelector: Map<String, String> = emptyMap()): CronJob = CronJobBuilder()
+    fun cronJob(r: Release, runtimeClass: String?, nodeSelector: Map<String, String> = emptyMap(), tolerations: List<Toleration> = emptyList()): CronJob = CronJobBuilder()
         .withMetadata(meta(r.service.slug, r.namespace, r.deploymentLabels()))
         .withNewSpec()
         .withSchedule(r.service.cronSchedule)
@@ -134,7 +141,7 @@ object Resources {
         .withFailedJobsHistoryLimit(3)
         .withNewJobTemplate().withNewSpec()
         .withBackoffLimit(2)
-        .withTemplate(podTemplate(r, runtimeClass, nodeSelector, "OnFailure"))
+        .withTemplate(podTemplate(r, runtimeClass, nodeSelector, tolerations, "OnFailure"))
         .endSpec().endJobTemplate()
         .endSpec()
         .build()
@@ -203,11 +210,12 @@ object Resources {
 
     private fun Domain.tlsSecret() = "$hostname-tls"
 
-    private fun podTemplate(r: Release, runtimeClass: String?, nodeSelector: Map<String, String>, restartPolicy: String): PodTemplateSpec = PodTemplateSpecBuilder()
+    private fun podTemplate(r: Release, runtimeClass: String?, nodeSelector: Map<String, String>, tolerations: List<Toleration>, restartPolicy: String): PodTemplateSpec = PodTemplateSpecBuilder()
         .withMetadata(meta(null, null, r.deploymentLabels()))
         .withNewSpec()
         .withRuntimeClassName(runtimeClass)
         .withNodeSelector<String, String>(nodeSelector)
+        .withTolerations(tolerations)
         .withRestartPolicy(restartPolicy)
         .withAutomountServiceAccountToken(false)
         .withEnableServiceLinks(false)
@@ -220,7 +228,7 @@ object Resources {
         .build()
 
     private fun container(r: Release): Container {
-        val resources = mapOf("cpu" to Quantity("${r.service.cpuMillis}m"), "memory" to Quantity("${r.service.memoryMb}Mi"))
+        val resources = mapOf("cpu" to Quantity("${r.service.cpuMillis}m"), "memory" to Quantity("${r.service.memoryMb}Mi"), "ephemeral-storage" to Quantity(EPHEMERAL_STORAGE))
         return ContainerBuilder()
             .withName("app")
             .withImage(r.build.imageRef)

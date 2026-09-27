@@ -4,7 +4,7 @@ Everything the Liftgate chart expects from a cluster, in install order:
 
 | Step | Component | Version | Source |
 |---|---|---|---|
-| 1 | k3s without flannel, kube-proxy, Traefik and ServiceLB | latest stable | [`k3s/install.md`](k3s/install.md) |
+| 1 | k3s without flannel, kube-proxy, Traefik and ServiceLB, with kubelet limits | v1.34.8+k3s1 | [`k3s/install.md`](k3s/install.md) |
 | 2 | gVisor `runsc` on every node | latest release | [`gvisor/`](gvisor) |
 | 3 | Gateway API CRDs | v1.6.1 | [`gateway-api/README.md`](gateway-api/README.md) |
 | 4 | Cilium with kube-proxy replacement and Gateway API in host network mode | 1.20.2 | [`cilium/values.yaml`](cilium/values.yaml) |

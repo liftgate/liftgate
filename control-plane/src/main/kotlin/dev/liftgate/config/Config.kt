@@ -1,5 +1,7 @@
 package dev.liftgate.config
 
+import io.fabric8.kubernetes.api.model.Toleration
+import io.fabric8.kubernetes.api.model.TolerationBuilder
 import io.ktor.http.Url
 import io.netty.handler.ipfilter.IpFilterRuleType
 import io.netty.handler.ipfilter.IpSubnetFilterRule
@@ -83,17 +85,31 @@ data class Config(
     val customDomainsEnabled: Boolean,
     val clientIpHeader: String?,
     val trustedProxyCidrs: List<IpSubnetFilterRule>,
+    val workloadNodeSelector: Map<String, String>,
+    val workloadTolerations: List<Toleration>,
+    val buildNodeSelector: Map<String, String>,
+    val buildTolerations: List<Toleration>,
 ) {
     companion object {
+        private val taint = Regex("""([\w./-]+)(?:=([\w.-]*))?(?::(NoSchedule|PreferNoSchedule|NoExecute))?""")
+
         fun fromEnv(env: Map<String, String> = System.getenv()): Config {
             fun optional(name: String) = env["LIFTGATE_$name"]?.takeIf { it.isNotBlank() }
             fun required(name: String) = optional(name) ?: error("LIFTGATE_$name is required")
             fun text(name: String, default: String) = optional(name) ?: default
             fun oauthClient(name: String) = optional("${name}_CLIENT_ID")?.let { OAuthClient(it, required("${name}_CLIENT_SECRET")) }
+            fun tolerations(name: String) = optional(name)?.split(',')?.map {
+                val match = taint.matchEntire(it.trim()) ?: error("LIFTGATE_$name must be key[=value][:effect][,key[=value][:effect]]")
+                val value = match.groups[2]?.value
+                TolerationBuilder().withKey(match.groupValues[1]).withOperator(if (value == null) "Exists" else "Equal").withValue(value).withEffect(match.groups[3]?.value).build()
+            }.orEmpty()
 
             val roleName = text("ROLE", "all")
             val role = Role.entries.firstOrNull { it.name.equals(roleName, ignoreCase = true) }
                 ?: error("LIFTGATE_ROLE must be one of api, reconciler, builder, meter, all")
+            check(role !in setOf(Role.RECONCILER, Role.ALL) || optional("RUNTIME_CLASS") != null || text("ALLOW_RUNC", "false").toBoolean()) {
+                "LIFTGATE_RUNTIME_CLASS is required for the reconciler; set LIFTGATE_ALLOW_RUNC=true to run tenant pods under runc without a sandbox"
+            }
             val github = if (role in setOf(Role.API, Role.BUILDER, Role.ALL) || optional("GITHUB_APP_ID") != null) GitHubConfig(
                 appId = required("GITHUB_APP_ID"),
                 privateKeyPem = required("GITHUB_APP_PRIVATE_KEY"),
@@ -106,10 +122,11 @@ data class Config(
             val encodedKey = required("SECRETS_MASTER_KEY")
             val masterKey = runCatching { Base64.getDecoder().decode(encodedKey) }.getOrNull()?.takeIf { it.size == 32 }
                 ?: error("LIFTGATE_SECRETS_MASTER_KEY must be the base64 of 32 random bytes")
-            val nodeSelector = optional("NODE_SELECTOR")?.split(',')?.associate { pair ->
+            fun selector(name: String) = optional(name)?.split(',')?.associate { pair ->
                 pair.split('=', limit = 2).map(String::trim).takeIf { it.size == 2 && it[0].isNotEmpty() }?.let { (key, value) -> key to value }
-                    ?: error("LIFTGATE_NODE_SELECTOR must be key=value[,key=value]")
-            }.orEmpty()
+                    ?: error("LIFTGATE_$name must be key=value[,key=value]")
+            }
+            val nodeSelector = selector("NODE_SELECTOR").orEmpty()
             val signup = text("SIGNUP", "approval").let { name -> Signup.entries.firstOrNull { it.name.equals(name, ignoreCase = true) } }
                 ?: error("LIFTGATE_SIGNUP must be one of open, approval, closed")
             val allowEntry = Regex("github:[a-z0-9-]+|@[^@\\s]+|[^@\\s]+@[^@\\s]+")
@@ -162,6 +179,10 @@ data class Config(
                 customDomainsEnabled = text("CUSTOM_DOMAINS_ENABLED", "true").toBoolean(),
                 clientIpHeader = clientIpHeader,
                 trustedProxyCidrs = trustedProxyCidrs,
+                workloadNodeSelector = selector("WORKLOAD_NODE_SELECTOR") ?: nodeSelector,
+                workloadTolerations = tolerations("WORKLOAD_TOLERATIONS"),
+                buildNodeSelector = selector("BUILD_NODE_SELECTOR") ?: nodeSelector,
+                buildTolerations = tolerations("BUILD_TOLERATIONS"),
             )
         }
     }

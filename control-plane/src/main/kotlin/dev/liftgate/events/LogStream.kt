@@ -10,9 +10,11 @@ import io.nats.client.impl.Headers
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.channels.trySendBlocking
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.launch
 import java.time.Duration
 import java.util.UUID
 
@@ -45,10 +47,11 @@ class LogStream(private val connection: Connection, private val config: Config) 
     fun end(buildId: UUID, failure: String?) =
         jetStream.publishAsync(buildLogSubject(buildId), Headers().put(END, "true"), (failure?.let { "Build failed: $it" } ?: "Build succeeded").toByteArray())
 
-    fun follow(buildId: UUID, finished: Boolean): Flow<String> = callbackFlow {
+    fun follow(buildId: UUID, recheck: Duration = Duration.ofSeconds(30), finished: suspend () -> Boolean): Flow<String> = callbackFlow {
         val subject = buildLogSubject(buildId)
         val stream = connection.getStreamContext(STREAM)
-        if (finished && runCatching { stream.getLastMessage(subject) }.isFailure) {
+        val done = finished()
+        if (done && runCatching { stream.getLastMessage(subject) }.isFailure) {
             close()
             return@callbackFlow
         }
@@ -57,8 +60,13 @@ class LogStream(private val connection: Connection, private val config: Config) 
             val consumer = stream.createOrderedConsumer(OrderedConsumerConfiguration().filterSubject(subject).deliverPolicy(DeliverPolicy.All))
                 .consume(dispatcher) { message ->
                     trySendBlocking(String(message.data))
-                    if (message.headers?.containsKey(END) == true || finished && message.metaData().pendingCount() == 0L) close()
+                    if (message.headers?.containsKey(END) == true || done && message.metaData().pendingCount() == 0L) close()
                 }
+            if (!done) launch {
+                while (!finished()) delay(recheck.toMillis())
+                delay(recheck.toMillis())
+                close()
+            }
             awaitClose { consumer.close() }
         } finally {
             connection.closeDispatcher(dispatcher)

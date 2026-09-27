@@ -9,6 +9,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import java.time.Duration
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.time.Duration.Companion.seconds
@@ -27,13 +28,13 @@ class LogStreamTest {
     fun `a late subscriber to a finished build receives every line from the first and stops at the end marker`() = runBlocking {
         publish("cloning", "building", "pushing")
         logs.end(build, null).get()
-        assertEquals(listOf("cloning", "building", "pushing", "Build succeeded"), withTimeout(10.seconds) { logs.follow(build, finished = true).toList() })
+        assertEquals(listOf("cloning", "building", "pushing", "Build succeeded"), withTimeout(10.seconds) { logs.follow(build) { true }.toList() })
     }
 
     @Test
     fun `a viewer who joins mid-build gets the history and then live lines until the end marker`() = runBlocking {
         publish("cloning")
-        val lines = async { logs.follow(build, finished = false).toList() }
+        val lines = async { logs.follow(build) { false }.toList() }
         delay(1.seconds)
         publish("building")
         logs.end(build, "the build job failed").get()
@@ -43,8 +44,19 @@ class LogStreamTest {
     @Test
     fun `a finished build without an end marker stops after its last line and at once when nothing was kept`() = runBlocking {
         publish("cloning", "building")
-        assertEquals(listOf("cloning", "building"), withTimeout(10.seconds) { logs.follow(build, finished = true).toList() })
-        assertEquals(emptyList<String>(), withTimeout(10.seconds) { logs.follow(UUID.randomUUID(), finished = true).toList() })
+        assertEquals(listOf("cloning", "building"), withTimeout(10.seconds) { logs.follow(build) { true }.toList() })
+        assertEquals(emptyList<String>(), withTimeout(10.seconds) { logs.follow(UUID.randomUUID()) { true }.toList() })
+    }
+
+    @Test
+    fun `a live viewer is released once the build has ended even if its end marker never arrives`() = runBlocking {
+        val ended = AtomicBoolean()
+        publish("cloning")
+        val lines = async { logs.follow(build, Duration.ofMillis(200)) { ended.get() }.toList() }
+        delay(1.seconds)
+        publish("building")
+        ended.set(true)
+        assertEquals(listOf("cloning", "building"), withTimeout(10.seconds) { lines.await() })
     }
 
     @Test

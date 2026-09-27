@@ -28,7 +28,7 @@ fail() {
   echo "FAIL: $1"
   cat -v "$work/$2" | tail -c 2000
   kubectl -n $ns get pods -o wide || true
-  kubectl -n liftgate-system logs deployment/liftgate-control-plane --tail=80 || true
+  kubectl -n liftgate-system logs deployment/liftgate-control-plane --since=10m | grep -E "PodLogs|LogRoutes|WARN|ERROR" | tail -n 40 || true
   exit 1
 }
 
@@ -94,8 +94,15 @@ for attempt in $(seq 60); do
   test "$(kubectl -n $ns get pod "$replacement" -o jsonpath='{.status.containerStatuses[0].restartCount}')" -ge 1 2>/dev/null && break
   sleep 2
 done
-socket 30 previous "$token" "?previous=true"
-grep -aq "crashed $replacement" "$work/previous" || fail "?previous=true did not return the crashed container's output" previous
+for attempt in $(seq 10); do
+  socket 5 previous "$token" "?previous=true"
+  grep -aq "crashed $replacement" "$work/previous" && break
+  sleep 3
+done
+grep -aq "crashed $replacement" "$work/previous" || {
+  kubectl -n $ns logs "$replacement" --previous --timestamps || true
+  fail "?previous=true did not return the crashed container's output" previous
+}
 echo "?previous=true returned the crashed container's output"
 
 socket 10 rival "$rival_token"

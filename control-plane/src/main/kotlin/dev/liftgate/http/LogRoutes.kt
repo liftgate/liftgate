@@ -21,7 +21,10 @@ fun Route.logRoutes(app: App) {
     val sockets = ConcurrentHashMap<UUID, Int>()
     route("/logs") {
         webSocket("/builds/{id}") {
-            relay(app, sockets) { call.build(app).let { app.nats.logs.follow(it.id, it.status != BuildStatus.QUEUED && it.status != BuildStatus.RUNNING) } }
+            relay(app, sockets) {
+                val id = call.build(app).id
+                app.nats.logs.follow(id) { app.builds.byId(id)?.status.let { it != BuildStatus.QUEUED && it != BuildStatus.RUNNING } }
+            }
         }
         webSocket("/services/{id}") {
             relay(app, sockets) {

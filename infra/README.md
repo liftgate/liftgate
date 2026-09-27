@@ -26,11 +26,15 @@ Steps 3 and 4 run only with `LIFTGATE_INSTALL_CILIUM=1`, and then only when ever
 `Ready` condition says `NetworkReady=false`, so the script never installs Cilium over another
 CNI. Without it the cluster must already have a GatewayClass; set the chart's
 `gateway.className` to it. Every step is skipped when its component is already there (the
-Gateway API or cert-manager CRDs, the `cilium` DaemonSet, the `gvisor` RuntimeClass, the
-`letsencrypt` ClusterIssuer, the CloudNativePG or Barman Cloud CRDs, the `prometheus` Service),
-and nothing that exists is upgraded, so a second run changes nothing. Upgrade a component with
-its own `helm upgrade`. A cert-manager that was already there needs Gateway API support
-(`config.gatewayAPI.enabled=true`) for the `letsencrypt` issuer to solve challenges.
+Gateway API CRDs, the `cilium` DaemonSet, the `gvisor` RuntimeClass, the cert-manager controller
+Deployment, the `letsencrypt` ClusterIssuer, the CloudNativePG operator Deployment, the Service
+that registers the Barman Cloud plugin, the `prometheus` Service), and nothing that exists is
+upgraded, so a second run changes nothing. CRDs left behind by an uninstalled cert-manager or
+CloudNativePG do not count. The plugin is installed into the namespace the CloudNativePG
+operator runs in, and the script stops if the operator runs in several namespaces or the plugin
+runs in another one. Upgrade a component with its own `helm upgrade`. A cert-manager that was
+already there needs Gateway API support (`config.gatewayAPI.enabled=true`) for the `letsencrypt`
+issuer to solve challenges.
 
 `LIFTGATE_GATEWAY_NAME` and `LIFTGATE_GATEWAY_NAMESPACE` (default `liftgate` in
 `liftgate-system`) name the Gateway the `letsencrypt` ClusterIssuer solves HTTP-01 challenges

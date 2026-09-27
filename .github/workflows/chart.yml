@@ -105,6 +105,23 @@ jobs:
           before="$(helm list --all-namespaces --output json)"
           sh infra/install.sh
           test "$(helm list --all-namespaces --output json)" = "$before"
+      - name: controllers whose CRDs outlived them are reinstalled
+        run: |
+          helm uninstall cert-manager --namespace cert-manager --wait
+          helm uninstall plugin-barman-cloud cnpg --namespace cnpg-system --wait
+          kubectl get crd certificates.cert-manager.io clusters.postgresql.cnpg.io objectstores.barmancloud.cnpg.io
+          sh infra/install.sh
+          kubectl --namespace cert-manager get deployment cert-manager
+          kubectl --namespace cnpg-system get deployment cnpg-cloudnative-pg plugin-barman-cloud
+      - name: the plugin joins an operator in another namespace
+        run: |
+          helm uninstall plugin-barman-cloud cnpg --namespace cnpg-system --wait
+          kubectl delete crd objectstores.barmancloud.cnpg.io
+          helm install cnpg cloudnative-pg --repo https://cloudnative-pg.github.io/charts --version "$(sed -n 's/^CNPG_VERSION=//p' infra/install.sh)" \
+            --namespace postgres-operator --create-namespace --take-ownership --wait --timeout 10m
+          sh infra/install.sh
+          kubectl --namespace postgres-operator get deployment plugin-barman-cloud
+          test -z "$(helm list --namespace cnpg-system --short)"
       - name: diagnostics
         if: failure()
         run: |

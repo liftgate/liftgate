@@ -22,6 +22,11 @@ found() {
   echo "    found $*, skipping"
 }
 
+labelled() {
+  namespace="$(kubectl get "$1" --all-namespaces --selector "$2" --output jsonpath='{.items[*].metadata.namespace}')"
+  [ -n "$namespace" ] && echo "    found $1 $2 in $namespace, skipping"
+}
+
 if [ "${LIFTGATE_INSTALL_CILIUM:-}" = 1 ]; then
   if ! kubectl -n kube-system get daemonset cilium >/dev/null 2>&1; then
     networks="$(kubectl get nodes -o jsonpath='{range .items[*]}{.status.conditions[?(@.type=="Ready")].message}{"\n"}{end}')"
@@ -51,7 +56,7 @@ echo "==> gVisor RuntimeClass"
 found runtimeclass gvisor || kubectl apply -f gvisor/runtimeclass.yaml
 
 echo "==> cert-manager $CERT_MANAGER_VERSION"
-found crd certificates.cert-manager.io || helm install cert-manager cert-manager --repo https://charts.jetstack.io --version "$CERT_MANAGER_VERSION" \
+labelled deployments app.kubernetes.io/name=cert-manager,app.kubernetes.io/component=controller || helm install cert-manager cert-manager --repo https://charts.jetstack.io --version "$CERT_MANAGER_VERSION" \
   --namespace cert-manager --create-namespace \
   --set crds.enabled=true \
   --set config.gatewayAPI.enabled=true \
@@ -65,14 +70,20 @@ found clusterissuer letsencrypt || sed \
   cert-manager/clusterissuer.yaml | kubectl apply -f -
 
 echo "==> CloudNativePG operator $CNPG_VERSION"
-found crd clusters.postgresql.cnpg.io || helm install cnpg cloudnative-pg --repo https://cloudnative-pg.github.io/charts --version "$CNPG_VERSION" \
+labelled deployments app.kubernetes.io/name=cloudnative-pg || helm install cnpg cloudnative-pg --repo https://cloudnative-pg.github.io/charts --version "$CNPG_VERSION" \
   --namespace cnpg-system --create-namespace \
   --wait --timeout 10m
+CNPG_NAMESPACE="${namespace:-cnpg-system}"
+case "$CNPG_NAMESPACE" in *" "*) echo "CloudNativePG operators run in several namespaces ($CNPG_NAMESPACE); keep one, because the Barman Cloud plugin must run in the operator's namespace" >&2; exit 1 ;; esac
 
-echo "==> Barman Cloud plugin $BARMAN_CLOUD_VERSION"
-found crd objectstores.barmancloud.cnpg.io || helm install plugin-barman-cloud plugin-barman-cloud --repo https://cloudnative-pg.github.io/charts --version "$BARMAN_CLOUD_VERSION" \
-  --namespace cnpg-system \
-  --wait --timeout 10m
+echo "==> Barman Cloud plugin $BARMAN_CLOUD_VERSION in $CNPG_NAMESPACE"
+if labelled services cnpg.io/pluginName=barman-cloud.cloudnative-pg.io; then
+  [ "$namespace" = "$CNPG_NAMESPACE" ] || { echo "the Barman Cloud plugin runs in $namespace, but it must run in $CNPG_NAMESPACE with the CloudNativePG operator" >&2; exit 1; }
+else
+  helm install plugin-barman-cloud plugin-barman-cloud --repo https://cloudnative-pg.github.io/charts --version "$BARMAN_CLOUD_VERSION" \
+    --namespace "$CNPG_NAMESPACE" \
+    --wait --timeout 10m
+fi
 
 echo "==> Prometheus $PROMETHEUS_VERSION"
 found service prometheus -n liftgate-system || helm install prometheus prometheus --repo https://prometheus-community.github.io/helm-charts --version "$PROMETHEUS_VERSION" \

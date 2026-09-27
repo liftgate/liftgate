@@ -15,6 +15,8 @@ import io.ktor.server.engine.embeddedServer
 import io.ktor.server.metrics.micrometer.MicrometerMetrics
 import io.ktor.server.netty.Netty
 import io.ktor.server.plugins.BadRequestException
+import io.ktor.server.plugins.PayloadTooLargeException
+import io.ktor.server.plugins.bodylimit.RequestBodyLimit
 import io.ktor.server.plugins.calllogging.CallLogging
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.plugins.cors.routing.CORS
@@ -29,6 +31,8 @@ import org.jetbrains.exposed.v1.exceptions.ExposedSQLException
 import org.slf4j.LoggerFactory
 
 private const val UNIQUE_VIOLATION = "23505"
+private const val BODY_LIMIT = 1024L * 1024
+private val tooLarge = ErrorBody("payload_too_large", "the request body is too large")
 private val log = LoggerFactory.getLogger("dev.liftgate.http")
 
 fun Application.liftgate(app: App) {
@@ -45,7 +49,11 @@ fun Application.liftgate(app: App) {
     }
     install(StatusPages) {
         exception<LiftgateException> { call, e -> call.respond(e.status, ErrorBody(e.code, e.message)) }
-        exception<BadRequestException> { call, e -> call.respond(HttpStatusCode.BadRequest, ErrorBody("bad_request", e.cause?.message ?: e.message ?: "bad request")) }
+        exception<PayloadTooLargeException> { call, _ -> call.respond(HttpStatusCode.PayloadTooLarge, tooLarge) }
+        exception<BadRequestException> { call, e ->
+            if (generateSequence<Throwable>(e) { it.cause }.any { it is PayloadTooLargeException }) call.respond(HttpStatusCode.PayloadTooLarge, tooLarge)
+            else call.respond(HttpStatusCode.BadRequest, ErrorBody("bad_request", e.cause?.message ?: e.message ?: "bad request"))
+        }
         exception<SerializationException> { call, e -> call.respond(HttpStatusCode.BadRequest, ErrorBody("bad_request", e.message ?: "malformed body")) }
         exception<ExposedSQLException> { call, e ->
             if (e.sqlState == UNIQUE_VIOLATION) call.respond(HttpStatusCode.Conflict, ErrorBody("conflict", "already exists")) else internalError(call, e)
@@ -53,7 +61,10 @@ fun Application.liftgate(app: App) {
         exception<Throwable> { call, e -> internalError(call, e) }
     }
     install(authPlugin(app))
-    routing { apiRoutes(app) }
+    routing {
+        install(RequestBodyLimit) { bodyLimit { BODY_LIMIT } }
+        apiRoutes(app)
+    }
 }
 
 fun httpServer(app: App) = embeddedServer(Netty, port = app.config.httpPort, host = "0.0.0.0") { liftgate(app) }

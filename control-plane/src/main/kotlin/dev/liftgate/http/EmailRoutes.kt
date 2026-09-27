@@ -26,7 +26,7 @@ data class EmailVerify(val email: String, val code: String)
 fun Route.emailRoutes(app: App) {
     route("/auth/email") {
         post("/start") {
-            app.emailCodes().start(call.receive<EmailStart>().email, call.clientIp(app.config.trustedProxies))
+            app.emailCodes().start(call.receive<EmailStart>().email, call.clientIp(app.config))
             call.respond(HttpStatusCode.NoContent)
         }
         post("/verify") {

@@ -1,6 +1,9 @@
 package dev.liftgate
 
+import dev.liftgate.cache.Cache
 import dev.liftgate.config.Config
+import io.mockk.every
+import io.mockk.mockk
 import java.util.Base64
 
 val minimalEnv = mapOf(
@@ -9,3 +12,5 @@ val minimalEnv = mapOf(
 )
 
 fun testConfig(overrides: Map<String, String> = emptyMap()) = Config.fromEnv(minimalEnv + overrides)
+
+val unlimitedCache = mockk<Cache> { every { allow(any(), any(), any()) } returns true }

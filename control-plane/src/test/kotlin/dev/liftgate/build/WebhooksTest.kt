@@ -1,8 +1,10 @@
 package dev.liftgate.build
 
 import dev.liftgate.App
+import dev.liftgate.cache.Cache
 import dev.liftgate.config.GitHubConfig
 import dev.liftgate.deploy.Builds
+import dev.liftgate.http.WEBHOOKS_PER_MINUTE
 import dev.liftgate.http.liftgate
 import dev.liftgate.k8s.testBuild
 import dev.liftgate.k8s.testEnvironment
@@ -27,6 +29,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.minutes
 
 /**
  * @author Dean
@@ -35,7 +38,9 @@ import kotlin.test.assertTrue
 class WebhooksTest {
     private val secret = "It's a Secret to Everybody"
     private val builds = mockk<Builds> { coEvery { request(any(), any(), any(), any()) } returns testBuild }
+    private val cache = mockk<Cache> { every { allow(any(), any(), any()) } returns true }
     private val app = mockk<App> {
+        every { this@mockk.cache } returns this@WebhooksTest.cache
         every { config } returns testConfig().copy(github = GitHubConfig("1", "unused", secret, "client", "client-secret"))
         every { metrics } returns PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
         every { this@mockk.builds } returns this@WebhooksTest.builds
@@ -102,6 +107,19 @@ class WebhooksTest {
             }
             assertEquals(HttpStatusCode.NoContent, response.status)
         }
+        coVerify(exactly = 0) { builds.request(any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `pushes past their installation's limit are refused`() = testApplication {
+        every { cache.allow("rate:webhook:42", WEBHOOKS_PER_MINUTE, 1.minutes) } returns false
+        application { liftgate(app) }
+        val response = client.post("/api/v1/webhooks/github") {
+            header("X-GitHub-Event", "push")
+            header("X-Hub-Signature-256", sign(push()))
+            setBody(push())
+        }
+        assertEquals(HttpStatusCode.TooManyRequests, response.status)
         coVerify(exactly = 0) { builds.request(any(), any(), any(), any()) }
     }
 }

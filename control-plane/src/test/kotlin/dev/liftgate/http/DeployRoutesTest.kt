@@ -14,11 +14,14 @@ import dev.liftgate.org.User
 import dev.liftgate.service.ServiceScope
 import dev.liftgate.service.Services
 import dev.liftgate.testConfig
+import dev.liftgate.unlimitedCache
 import io.ktor.client.request.cookie
+import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.testing.ApplicationTestBuilder
@@ -46,12 +49,14 @@ class DeployRoutesTest {
         every { sessions } returns mockk<Sessions> { coEvery { resolve("s") } returns User(UUID.randomUUID(), "dean", null, null, null) }
         every { metrics } returns PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
         every { config } returns testConfig()
+        every { cache } returns unlimitedCache
         every { github } returns null
         every { this@mockk.builds } returns this@DeployRoutesTest.builds
     }
 
     private suspend fun ApplicationTestBuilder.deploy(body: String) = client.post("/api/v1/services/${testService.id}/deploy") {
         cookie(SESSION_COOKIE, "s")
+        header(HttpHeaders.Origin, "http://localhost:3000")
         contentType(ContentType.Application.Json)
         setBody(body)
     }

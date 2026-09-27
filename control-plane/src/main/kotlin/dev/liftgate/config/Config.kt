@@ -1,6 +1,8 @@
 package dev.liftgate.config
 
 import io.ktor.http.Url
+import io.netty.handler.ipfilter.IpFilterRuleType
+import io.netty.handler.ipfilter.IpSubnetFilterRule
 import java.util.Base64
 
 private const val GITLAB_COM = "https://gitlab.com"
@@ -79,6 +81,8 @@ data class Config(
     val aupUrl: String?,
     val gitlabTrustEmail: Boolean,
     val customDomainsEnabled: Boolean,
+    val clientIpHeader: String?,
+    val trustedProxyCidrs: List<IpSubnetFilterRule>,
 ) {
     companion object {
         fun fromEnv(env: Map<String, String> = System.getenv()): Config {
@@ -111,6 +115,10 @@ data class Config(
             val allowEntry = Regex("github:[a-z0-9-]+|@[^@\\s]+|[^@\\s]+@[^@\\s]+")
             val signupAllow = optional("SIGNUP_ALLOW")?.split(',')?.map { it.trim().lowercase() }?.filter(String::isNotEmpty).orEmpty()
                 .onEach { if (!allowEntry.matches(it)) error("LIFTGATE_SIGNUP_ALLOW entries must be emails, @domains or github:<login>, not $it") }
+            val trustedProxyCidrs = optional("TRUSTED_PROXY_CIDRS")?.split(',')?.map {
+                runCatching { IpSubnetFilterRule(it.trim(), IpFilterRuleType.ACCEPT) }.getOrElse { error("LIFTGATE_TRUSTED_PROXY_CIDRS must be CIDRs such as 10.0.0.0/8[,fd00::/8]") }
+            }.orEmpty()
+            val clientIpHeader = optional("CLIENT_IP_HEADER")?.also { if (trustedProxyCidrs.isEmpty()) error("LIFTGATE_CLIENT_IP_HEADER needs LIFTGATE_TRUSTED_PROXY_CIDRS") }
 
             return Config(
                 role = role,
@@ -152,6 +160,8 @@ data class Config(
                 aupUrl = optional("AUP_URL"),
                 gitlabTrustEmail = text("GITLAB_TRUST_EMAIL", (gitlabUrl == GITLAB_COM).toString()).toBoolean(),
                 customDomainsEnabled = text("CUSTOM_DOMAINS_ENABLED", "true").toBoolean(),
+                clientIpHeader = clientIpHeader,
+                trustedProxyCidrs = trustedProxyCidrs,
             )
         }
     }

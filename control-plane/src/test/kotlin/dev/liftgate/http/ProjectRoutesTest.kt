@@ -11,7 +11,7 @@ import dev.liftgate.org.insertUser
 import dev.liftgate.project.Project
 import dev.liftgate.project.Projects
 import dev.liftgate.testConfig
-import io.ktor.client.request.cookie
+import dev.liftgate.unlimitedCache
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
@@ -38,6 +38,7 @@ class ProjectRoutesTest {
     private val orgs = Orgs(db)
     private val app = mockk<App> {
         every { config } returns testConfig()
+        every { cache } returns unlimitedCache
         every { metrics } returns PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
         every { sessions } returns mockk<Sessions> { coEvery { resolve("s") } returns user }
         every { access } returns mockk<Access>(relaxUnitFun = true)
@@ -53,7 +54,7 @@ class ProjectRoutesTest {
         orgs.create("rival", "Rival", user.id)
         application { liftgate(app) }
         suspend fun import(org: String, repo: String) = client.post("/api/v1/orgs/$org/projects") {
-            cookie(SESSION_COOKIE, "s")
+            session()
             contentType(ContentType.Application.Json)
             setBody("""{"slug":"shop","name":"Shop","repoFullName":"$repo"}""")
         }

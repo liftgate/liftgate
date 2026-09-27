@@ -13,11 +13,7 @@ enum class Subject(val value: String) {
     DEPLOYMENT_UPDATED("liftgate.deployment.updated"),
     DOMAIN_VERIFY_REQUESTED("liftgate.domain.verify.requested"),
     TEARDOWN_REQUESTED("liftgate.teardown.requested"),
-    USAGE_RECORDED("liftgate.usage.recorded");
-
-    companion object {
-        fun of(value: String) = entries.first { it.value == value }
-    }
+    USAGE_RECORDED("liftgate.usage.recorded"),
 }
 
 fun buildLogSubject(buildId: UUID) = "liftgate.logs.build.$buildId"

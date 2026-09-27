@@ -293,6 +293,7 @@ Derived variables: `LIFTGATE_DATABASE_URL` points at the CloudNativePG `-rw` Ser
 the CloudNativePG `<fullname>-postgres-app` Secret (or the `external*` values; `<fullname>`
 is the release name when it contains `liftgate`, otherwise `<release>-liftgate`),
 `LIFTGATE_NATS_URL` points at the subchart Service (or `nats.externalUrl`),
+`LIFTGATE_NATS_REPLICAS` is `3` when the managed NATS cluster is enabled and `1` otherwise,
 `LIFTGATE_HAZELCAST_KUBERNETES` is `true` in `ha`, `LIFTGATE_GATEWAY_NAMESPACE` is the release
 namespace, `LIFTGATE_LEADER_ELECTION` is `kubernetes` and `LIFTGATE_HTTP_PORT` is `8080`.
 Empty optional values are left out of the ConfigMap and Secret so the control plane reports

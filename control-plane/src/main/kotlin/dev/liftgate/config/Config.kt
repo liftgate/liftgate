@@ -69,6 +69,7 @@ data class Config(
     val gatewayName: String,
     val prometheusUrl: String,
     val leaderElection: Boolean,
+    val natsReplicas: Int,
 ) {
     companion object {
         fun fromEnv(env: Map<String, String> = System.getenv()): Config {
@@ -128,6 +129,7 @@ data class Config(
                 gatewayName = text("GATEWAY_NAME", "liftgate"),
                 prometheusUrl = text("PROMETHEUS_URL", "http://prometheus.liftgate-system:9090"),
                 leaderElection = text("LEADER_ELECTION", "kubernetes") != "off",
+                natsReplicas = text("NATS_REPLICAS", "1").toInt(),
             )
         }
     }

@@ -16,13 +16,11 @@ import org.slf4j.LoggerFactory
 import java.time.Duration
 import java.util.UUID
 
-private const val LEASE = "liftgate-outbox-relay"
-
 /**
  * @author Dean
  * @date 9/17/2026
  */
-class LeaderElection(private val config: Config, private val kube: KubernetesClient) {
+class LeaderElection(private val config: Config, private val kube: KubernetesClient, private val lease: String) {
     private val log = LoggerFactory.getLogger(LeaderElection::class.java)
     private val identity = System.getenv("HOSTNAME") ?: UUID.randomUUID().toString()
 
@@ -36,11 +34,11 @@ class LeaderElection(private val config: Config, private val kube: KubernetesCli
 
     private suspend fun CoroutineScope.campaign(onLead: suspend () -> Unit) {
         var lead: Job? = null
-        val callbacks = LeaderCallbacks({ lead = launch { onLead() } }, { lead?.cancel() }, { log.info("outbox relay leader is {}", it) })
+        val callbacks = LeaderCallbacks({ lead = launch { onLead() } }, { lead?.cancel() }, { log.info("{} leader is {}", lease, it) })
         val election = kube.leaderElector().withConfig(
             LeaderElectionConfigBuilder()
-                .withName(LEASE)
-                .withLock(LeaseLock(kube.namespace ?: "default", LEASE, identity))
+                .withName(lease)
+                .withLock(LeaseLock(kube.namespace ?: "default", lease, identity))
                 .withLeaseDuration(Duration.ofSeconds(15))
                 .withRenewDeadline(Duration.ofSeconds(10))
                 .withRetryPeriod(Duration.ofSeconds(2))

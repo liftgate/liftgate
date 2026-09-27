@@ -11,6 +11,7 @@ import { Loaded } from "@/components/loaded";
 import { NameSlugFields } from "@/components/name-slug-fields";
 import { PageHeader } from "@/components/page-header";
 import { ProviderLink } from "@/components/provider";
+import { Badge } from "@/components/ui/badge";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
@@ -127,7 +128,11 @@ function UsageCard({ org }: { org: string }) {
   const usage = useApi<Usage>(`/orgs/${org}/usage`);
   return (
     <Card>
-      <CardHeader title="Usage" description={usage.data && `What this organization uses on the ${usage.data.plan} plan`} />
+      <CardHeader
+        title="Usage"
+        description="What this organization uses against its plan"
+        actions={usage.data && <Badge>{usage.data.plan} plan</Badge>}
+      />
       <div className="p-6">
         <Loaded query={usage} skeleton={<UsageSkeleton />}>
           {(u) => (

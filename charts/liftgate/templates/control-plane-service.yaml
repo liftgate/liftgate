@@ -26,7 +26,7 @@ spec:
   clusterIP: None
   selector:
     {{- include "liftgate.selectorLabels" . | nindent 4 }}
-    app.kubernetes.io/component: control-plane
+    liftgate.dev/hazelcast: "true"
   ports:
     - name: hazelcast
       port: 5701

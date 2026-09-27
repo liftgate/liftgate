@@ -1,0 +1,71 @@
+{{- $fullname := include "liftgate.fullname" . }}
+{{- $build := .Values.build.namespace }}
+{{- $gateway := include "liftgate.gatewayNamespace" . }}
+{{- $users := list }}
+{{- range $role, $_ := include "liftgate.roles" . | fromJson }}
+{{- $users = append $users (printf "system:serviceaccount:%s:%s" $.Release.Namespace (include "liftgate.roleName" (list $ $role))) }}
+{{- end }}
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: {{ $fullname }}
+  labels:
+    {{- include "liftgate.labels" . | nindent 4 }}
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["*"]
+        apiVersions: ["*"]
+        operations: [CREATE, UPDATE, DELETE]
+        resources: ["*/*"]
+    excludeResourceRules:
+      - apiGroups: [authentication.k8s.io, authorization.k8s.io]
+        apiVersions: ["*"]
+        operations: ["*"]
+        resources: ["*"]
+  matchConditions:
+    - name: control-plane
+      expression: {{ printf "request.userInfo.username in %s" (toJson $users) | quote }}
+  variables:
+    - name: managed
+      expression: >-
+        namespaceObject != null && namespaceObject.metadata.?labels[?'liftgate.dev/managed'].orValue('') == 'true'
+    - name: pod
+      expression: object.spec.template.spec
+  validations:
+    - expression: >-
+        request.resource.resource != 'namespaces' ||
+        (request.operation == 'DELETE' ||
+        object.metadata.?labels[?'liftgate.dev/managed'].orValue('') == 'true' &&
+        object.metadata.?labels[?'pod-security.kubernetes.io/enforce'].orValue('') == 'restricted') &&
+        (request.operation == 'CREATE' || oldObject.metadata.?labels[?'liftgate.dev/managed'].orValue('') == 'true')
+      message: the control plane only creates, changes and deletes namespaces labelled liftgate.dev/managed=true and pod-security.kubernetes.io/enforce=restricted
+      reason: Forbidden
+    - expression: >-
+        request.resource.resource == 'namespaces' || variables.managed ||
+        request.namespace == '{{ .Release.Namespace }}' && request.resource.resource == 'leases' ||
+        request.namespace == '{{ $build }}' && request.resource.resource in ['jobs', 'secrets'] ||
+        request.namespace == '{{ $gateway }}' && request.resource.resource in ['gateways', 'certificates']
+      message: >-
+        the control plane only writes inside namespaces labelled liftgate.dev/managed=true, apart from leases in {{ .Release.Namespace }},
+        jobs and secrets in {{ $build }}, and gateways and certificates in {{ $gateway }}
+      reason: Forbidden
+    - expression: >-
+        request.namespace != '{{ $build }}' || request.resource.resource != 'jobs' || request.operation == 'DELETE' ||
+        !variables.pod.?hostNetwork.orValue(false) && !variables.pod.?hostPID.orValue(false) && !variables.pod.?hostIPC.orValue(false) &&
+        variables.pod.?volumes.orValue([]).all(v, !has(v.hostPath)) &&
+        (variables.pod.containers + variables.pod.?initContainers.orValue([])).all(c,
+        !c.?securityContext.?privileged.orValue(false) && c.?securityContext.?capabilities.?add.orValue([]).size() == 0)
+      message: build jobs may not use host namespaces, hostPath volumes, privileged containers or added capabilities
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: {{ $fullname }}
+  labels:
+    {{- include "liftgate.labels" . | nindent 4 }}
+spec:
+  policyName: {{ $fullname }}
+  validationActions: [Deny]

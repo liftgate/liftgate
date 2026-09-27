@@ -1,58 +1,143 @@
+{{- $fullname := include "liftgate.fullname" . }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: {{ include "liftgate.fullname" . }}
+  name: {{ $fullname }}
   labels:
     {{- include "liftgate.labels" . | nindent 4 }}
 rules:
   - apiGroups: [""]
-    resources: [namespaces, secrets, configmaps, services, resourcequotas]
+    resources: [namespaces, resourcequotas]
     verbs: [get, list, watch, create, update, patch, delete]
   - apiGroups: [""]
+    resources: [services]
+    verbs: [get, list, watch, create, update, patch, delete, deletecollection]
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [create, update, patch, delete, deletecollection]
+  - apiGroups: [""]
     resources: [pods]
-    verbs: [get, list, watch, delete]
+    verbs: [get, list, watch]
   - apiGroups: [""]
     resources: [pods/log]
     verbs: [get]
-  - apiGroups: [""]
-    resources: [endpoints, nodes]
-    verbs: [get, list]
-  - apiGroups: [discovery.k8s.io]
-    resources: [endpointslices]
-    verbs: [get, list]
   - apiGroups: [apps]
     resources: [deployments]
-    verbs: [get, list, watch, create, update, patch, delete]
+    verbs: [get, list, watch, create, update, patch, delete, deletecollection]
   - apiGroups: [batch]
-    resources: [jobs, cronjobs]
-    verbs: [get, list, watch, create, update, patch, delete]
+    resources: [cronjobs]
+    verbs: [get, list, watch, create, update, patch, delete, deletecollection]
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [get, list, watch, delete]
   - apiGroups: [networking.k8s.io]
     resources: [networkpolicies]
     verbs: [get, list, watch, create, update, patch, delete]
-  - apiGroups: [coordination.k8s.io]
-    resources: [leases]
-    verbs: [get, list, watch, create, update, patch, delete]
   - apiGroups: [gateway.networking.k8s.io]
     resources: [httproutes]
-    verbs: [get, list, watch, create, update, patch, delete]
+    verbs: [get, list, watch, create, update, patch, delete, deletecollection]
   - apiGroups: [gateway.networking.k8s.io]
     resources: [gateways]
     verbs: [get, patch]
   - apiGroups: [cert-manager.io]
     resources: [certificates]
     verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [rbac.authorization.k8s.io]
+    resources: [rolebindings]
+    verbs: [create, update, patch, delete]
+  - apiGroups: [rbac.authorization.k8s.io]
+    resources: [clusterroles]
+    verbs: [bind]
+    resourceNames: [{{ $fullname }}-log-reader]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
+kind: ClusterRole
 metadata:
-  name: {{ include "liftgate.fullname" . }}
+  name: {{ $fullname }}-meter
   labels:
     {{- include "liftgate.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ $fullname }}-log-reader
+  labels:
+    {{- include "liftgate.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $fullname }}
+  labels:
+    {{- include "liftgate.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [coordination.k8s.io]
+    resources: [leases]
+    verbs: [get, create, update, patch]
+  - apiGroups: [""]
+    resources: [endpoints]
+    verbs: [get, list]
+  - apiGroups: [discovery.k8s.io]
+    resources: [endpointslices]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $fullname }}-builder
+  namespace: {{ .Values.build.namespace }}
+  labels:
+    {{- include "liftgate.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [get, list, watch, create, delete]
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [get, create]
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get]
+{{- range list
+  (dict "kind" "ClusterRole" "name" $fullname "roles" (list "reconciler"))
+  (dict "kind" "ClusterRole" "name" (printf "%s-meter" $fullname) "roles" (list "meter"))
+  (dict "kind" "Role" "name" $fullname "namespace" .Release.Namespace "roles" (list "api" "reconciler" "builder" "meter"))
+  (dict "kind" "Role" "name" (printf "%s-builder" $fullname) "namespace" .Values.build.namespace "roles" (list "builder")) }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: {{ .kind }}Binding
+metadata:
+  name: {{ .name }}
+  {{- with .namespace }}
+  namespace: {{ . }}
+  {{- end }}
+  labels:
+    {{- include "liftgate.labels" $ | nindent 4 }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: {{ include "liftgate.fullname" . }}
+  kind: {{ .kind }}
+  name: {{ .name }}
 subjects:
+  {{- $binding := . }}
+  {{- range $role, $_ := include "liftgate.roles" $ | fromJson }}
+  {{- if or (eq $role "all") (has $role $binding.roles) }}
   - kind: ServiceAccount
-    name: {{ include "liftgate.fullname" . }}
-    namespace: {{ .Release.Namespace }}
+    name: {{ include "liftgate.roleName" (list $ $role) }}
+    namespace: {{ $.Release.Namespace }}
+  {{- end }}
+  {{- end }}
+{{- end }}

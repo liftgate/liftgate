@@ -91,3 +91,12 @@ nats://{{ include "liftgate.natsService" . }}.{{ .Release.Namespace }}.svc:4222
 {{- define "liftgate.postgresServerName" -}}
 {{- .Values.postgres.backup.serverName | default (include "liftgate.postgresCluster" .) -}}
 {{- end -}}
+
+{{- define "liftgate.roles" -}}
+{{- eq (include "liftgate.ha" .) "true" | ternary .Values.controlPlane.replicas (dict "all" 1) | toJson -}}
+{{- end -}}
+
+{{- define "liftgate.roleName" -}}
+{{- $fullname := include "liftgate.fullname" (index . 0) -}}
+{{- eq (index . 1) "all" | ternary $fullname (printf "%s-%s" $fullname (index . 1)) -}}
+{{- end -}}

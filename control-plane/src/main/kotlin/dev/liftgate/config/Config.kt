@@ -95,6 +95,8 @@ data class Config(
     val githubClient: OAuthClient?,
     val certIssuer: String,
     val databasePoolSize: Int,
+    val internalUrl: String,
+    val registryJanitorPassword: String?,
 ) {
     companion object {
         private val taint = Regex("""([\w./-]+)(?:=([\w.-]*))?(?::(NoSchedule|PreferNoSchedule|NoExecute))?""")
@@ -151,10 +153,11 @@ data class Config(
                 else -> error("LIFTGATE_LEADER_ELECTION must be kubernetes or off")
             }
             val publicUrl = text("PUBLIC_URL", "http://localhost:8080")
+            val httpPort = text("HTTP_PORT", "8080").toInt()
 
             return Config(
                 role = role,
-                httpPort = text("HTTP_PORT", "8080").toInt(),
+                httpPort = httpPort,
                 databaseUrl = text("DATABASE_URL", "jdbc:postgresql://localhost:5432/liftgate"),
                 databaseUser = text("DATABASE_USER", "liftgate"),
                 databasePassword = optional("DATABASE_PASSWORD")
@@ -216,6 +219,8 @@ data class Config(
                 githubClient = oauthClient("GITHUB"),
                 certIssuer = text("CERT_ISSUER", "letsencrypt"),
                 databasePoolSize = text("DATABASE_POOL_SIZE", if (serving) "10" else "3").toInt(),
+                internalUrl = text("INTERNAL_URL", "http://localhost:$httpPort"),
+                registryJanitorPassword = if (registryTokenAuth && role in setOf(Role.API, Role.BUILDER, Role.ALL)) required("REGISTRY_JANITOR_PASSWORD") else null,
             )
         }
     }

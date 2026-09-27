@@ -1,5 +1,6 @@
 package dev.liftgate.project
 
+import dev.liftgate.build.orphanRepositories
 import dev.liftgate.db.Db
 import dev.liftgate.db.Environments
 import dev.liftgate.db.GitHubInstallations
@@ -85,6 +86,7 @@ class Projects(private val db: Db, private val limits: Limits = Limits()) {
     suspend fun delete(id: UUID) {
         db.tx {
             enqueueTeardown { ProjectsTable.id eq id }
+            orphanRepositories(ProjectsTable.id eq id)
             ProjectsTable.deleteWhere { ProjectsTable.id eq id }
         }
     }

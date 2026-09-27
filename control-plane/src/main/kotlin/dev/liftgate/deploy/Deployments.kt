@@ -1,5 +1,6 @@
 package dev.liftgate.deploy
 
+import dev.liftgate.db.Builds as BuildsTable
 import dev.liftgate.db.Db
 import dev.liftgate.db.Deployments as DeploymentsTable
 import dev.liftgate.db.now
@@ -8,8 +9,10 @@ import dev.liftgate.db.toEnum
 import dev.liftgate.events.Subject
 import dev.liftgate.events.enqueue
 import dev.liftgate.events.requestedSince
+import dev.liftgate.http.LiftgateException
 import dev.liftgate.http.conflict
 import dev.liftgate.http.notFound
+import io.ktor.http.HttpStatusCode
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.jetbrains.exposed.v1.core.ResultRow
@@ -32,7 +35,7 @@ import java.util.UUID
 private const val REQUEUE_MINUTES = 5L
 private const val TIMEOUT_MINUTES = 45L
 private val unreleased = listOf(DeploymentStatus.PENDING, DeploymentStatus.RELEASING).map { it.sql }
-private val live = unreleased + DeploymentStatus.RUNNING.sql
+val live = unreleased + DeploymentStatus.RUNNING.sql
 
 fun ResultRow.toDeployment() = Deployment(
     this[DeploymentsTable.id],
@@ -79,6 +82,9 @@ class Deployments(private val db: Db) {
     suspend fun rollback(deploymentId: UUID): Deployment = db.tx {
         val target = find(deploymentId) ?: notFound("deployment")
         if (running(target.serviceId).any { it[DeploymentsTable.buildId] == target.buildId }) conflict("that build is already running")
+        if (BuildsTable.select(BuildsTable.imagePruned).where { BuildsTable.id eq target.buildId }.forUpdate().single()[BuildsTable.imagePruned]) {
+            throw LiftgateException(HttpStatusCode.Conflict, "image_pruned", "the image of that build has been pruned; deploy its commit again")
+        }
         DeploymentsTable.update({ (DeploymentsTable.serviceId eq target.serviceId) and (DeploymentsTable.status eq DeploymentStatus.RUNNING.sql) }) {
             it[status] = DeploymentStatus.ROLLED_BACK.sql
         }
@@ -94,6 +100,7 @@ class Deployments(private val db: Db) {
                 it[status] = to.sql
                 it[DeploymentsTable.replicasReady] = replicasReady
                 it[DeploymentsTable.error] = error
+                if (to == DeploymentStatus.RUNNING) it[reachedRunning] = true
             }
             if (to == DeploymentStatus.RUNNING) supersedeOlder(current)
             updated(id, to)

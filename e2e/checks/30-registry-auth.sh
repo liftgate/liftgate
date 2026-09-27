@@ -9,6 +9,7 @@ rival=00000000-0000-4000-8000-000000000312
 own_password=$(openssl rand -hex 16)
 rival_password=$(openssl rand -hex 16)
 pull_password=$(openssl rand -hex 16)
+janitor_password=$(openssl rand -hex 16)
 work=$(mktemp -d)
 
 report() {
@@ -209,6 +210,7 @@ EOF
 
 helm upgrade liftgate charts/liftgate --namespace liftgate-system --reuse-values \
   --set registry=$registry --set registryAuth=token --set registryPullPassword="$pull_password" \
+  --set registryJanitorPassword="$janitor_password" \
   --set-file registryTokenKey="$work/token.key" --set-file registryTokenCertificate="$work/token.crt"
 kubectl -n liftgate-system rollout status deployment/liftgate-control-plane --timeout=10m
 kubectl -n $ns rollout status deployment/registry --timeout=5m
@@ -281,6 +283,9 @@ expect "docker config listed from a build step" "$(sed -n 's/.* docker-config //
 pulled=$(token pull "$pull_password" e2e-rival/app-web:pull,push)
 expect "node pull of a tenant image" "$(registry_status GET e2e-rival/app-web/tags/list "$pulled")" 200
 expect "node push" "$(registry_status POST e2e-rival/app-web/blobs/uploads/ "$pulled")" 401
+pruning=$(token janitor "$janitor_password" e2e-rival/app-web:pull,push,delete)
+expect "janitor read of a tenant image" "$(registry_status GET e2e-rival/app-web/tags/list "$pruning")" 200
+expect "janitor push" "$(registry_status POST e2e-rival/app-web/blobs/uploads/ "$pruning")" 401
 theirs=$(token "build-$own" "$own_password" e2e-rival/app-web:pull)
 expect "read of another org's image" "$(registry_status GET e2e-rival/app-web/tags/list "$theirs")" 401
 

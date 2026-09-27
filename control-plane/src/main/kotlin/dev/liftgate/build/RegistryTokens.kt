@@ -23,6 +23,7 @@ import java.util.Base64
 import java.util.UUID
 
 const val REGISTRY_TOKEN_SECONDS = 300L
+const val JANITOR_ACCOUNT = "janitor"
 private const val PULL_ACCOUNT = "pull"
 private const val ISSUER = "liftgate"
 
@@ -51,12 +52,13 @@ class RegistryTokens(private val db: Db, private val services: Services, private
         return sign(account, access)
     }
 
-    private suspend fun grant(account: String, password: String): Pair<String?, Set<String>>? =
-        if (account == PULL_ACCOUNT) {
-            (null to setOf("pull")).takeIf { config.registryTokens?.pullPassword?.let { MessageDigest.isEqual(it.toByteArray(), password.toByteArray()) } == true }
-        } else {
-            buildRepository(account, password)?.let { it to setOf("pull", "push") }
-        }
+    private suspend fun grant(account: String, password: String): Pair<String?, Set<String>>? = when (account) {
+        PULL_ACCOUNT -> (null to setOf("pull")).takeIf { matches(config.registryTokens?.pullPassword, password) }
+        JANITOR_ACCOUNT -> (null to setOf("pull", "delete")).takeIf { matches(config.registryJanitorPassword, password) }
+        else -> buildRepository(account, password)?.let { it to setOf("pull", "push") }
+    }
+
+    private fun matches(expected: String?, password: String) = expected != null && MessageDigest.isEqual(expected.toByteArray(), password.toByteArray())
 
     private suspend fun buildRepository(account: String, password: String): String? {
         val buildId = runCatching { UUID.fromString(account.substringAfter('-')) }.getOrNull()?.takeIf { BuildJobs.name(it) == account } ?: return null

@@ -19,7 +19,7 @@ import kotlinx.serialization.Serializable
 private val slugPattern = Regex("[a-z0-9][a-z0-9-]{0,38}[a-z0-9]")
 private val reservedOrgSlugs = setOf(
     "account", "api", "login", "docs", "new", "settings", "admin", "status", "pricing", "blog", "changelog", "help", "support",
-    "legal", "terms", "privacy", "security", "sso", "signup", "logout", "www", "app", "dashboard",
+    "legal", "terms", "privacy", "security", "sso", "signup", "logout", "www", "app", "dashboard", "liftgate",
 )
 val reservedProjectSlugs = setOf("settings")
 

@@ -40,6 +40,7 @@ data class Build(
     val startedAt: Instant?,
     val finishedAt: Instant?,
     val createdAt: Instant,
+    val imagePruned: Boolean = false,
 )
 
 /**

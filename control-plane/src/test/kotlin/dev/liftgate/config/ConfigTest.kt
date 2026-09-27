@@ -32,6 +32,7 @@ class ConfigTest {
         assertEquals("jdbc:postgresql://localhost:5432/liftgate", config.databaseUrl)
         assertEquals("liftgate", config.databaseUser)
         assertEquals(8080, config.httpPort)
+        assertEquals("http://localhost:9090", Config.fromEnv(minimalEnv + ("LIFTGATE_HTTP_PORT" to "9090")).internalUrl)
         assertEquals("nats://localhost:4222", config.natsUrl)
         assertEquals("liftgate.app", config.deployDomain)
         assertEquals("liftgate-system", config.gatewayNamespace)
@@ -280,10 +281,20 @@ class ConfigTest {
         val reconciler = Config.fromEnv(minimalEnv + ("LIFTGATE_REGISTRY_AUTH" to "token"))
         assertTrue(reconciler.registryTokenAuth)
         assertNull(reconciler.registryTokens)
+        assertNull(reconciler.registryJanitorPassword)
         val api = minimalEnv + github + mapOf("LIFTGATE_ROLE" to "api", "LIFTGATE_REGISTRY_AUTH" to "token")
         assertTrue("LIFTGATE_REGISTRY_TOKEN_KEY" in assertFailsWith<IllegalStateException> { Config.fromEnv(api) }.message.orEmpty())
         val signing = mapOf("LIFTGATE_REGISTRY_TOKEN_KEY" to "key", "LIFTGATE_REGISTRY_TOKEN_CERTIFICATE" to "cert", "LIFTGATE_REGISTRY_PULL_PASSWORD" to "pull")
-        assertEquals(RegistryTokenConfig("key", "cert", "pull"), Config.fromEnv(api + signing).registryTokens)
+        assertTrue("LIFTGATE_REGISTRY_JANITOR_PASSWORD" in assertFailsWith<IllegalStateException> { Config.fromEnv(api + signing) }.message.orEmpty())
+        assertEquals(RegistryTokenConfig("key", "cert", "pull"), Config.fromEnv(api + signing + ("LIFTGATE_REGISTRY_JANITOR_PASSWORD" to "janitor")).registryTokens)
         assertTrue("LIFTGATE_REGISTRY_AUTH" in assertFailsWith<IllegalStateException> { Config.fromEnv(minimalEnv + ("LIFTGATE_REGISTRY_AUTH" to "none")) }.message.orEmpty())
+    }
+
+    @Test
+    fun `the builder gets the registry janitor password and no signing key`() {
+        val builder = minimalEnv + github + mapOf("LIFTGATE_ROLE" to "builder", "LIFTGATE_REGISTRY_AUTH" to "token")
+        assertTrue("LIFTGATE_REGISTRY_JANITOR_PASSWORD" in assertFailsWith<IllegalStateException> { Config.fromEnv(builder) }.message.orEmpty())
+        val config = Config.fromEnv(builder + ("LIFTGATE_REGISTRY_JANITOR_PASSWORD" to "janitor"))
+        assertEquals(null to "janitor", config.registryTokens to config.registryJanitorPassword)
     }
 }

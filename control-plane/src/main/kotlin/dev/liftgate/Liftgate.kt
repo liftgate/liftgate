@@ -15,6 +15,7 @@ import dev.liftgate.auth.Sso
 import dev.liftgate.build.BuildAdmission
 import dev.liftgate.build.Builder
 import dev.liftgate.build.GitHubApp
+import dev.liftgate.build.RegistryJanitor
 import dev.liftgate.build.RegistryTokens
 import dev.liftgate.cache.Cache
 import dev.liftgate.config.Config
@@ -126,7 +127,10 @@ class App(val config: Config) : AutoCloseable {
             Suspension(this, kube).start()
             Sweeper(this, kube).start()
         }
-        if (runs(Role.BUILDER)) Builder(this, kube).start()
+        if (runs(Role.BUILDER)) {
+            Builder(this, kube).start()
+            LeaderElection(config, kube, "liftgate-registry-janitor").start(scope) { coroutineScope { RegistryJanitor(this@App, kube).start(this) } }
+        }
         if (runs(Role.METER)) Meter(this, Prometheus(config.prometheusUrl, http)).start()
     }
 

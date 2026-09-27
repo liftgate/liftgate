@@ -1,5 +1,6 @@
 package dev.liftgate.service
 
+import dev.liftgate.build.orphanRepositories
 import dev.liftgate.db.Db
 import dev.liftgate.db.Environments
 import dev.liftgate.db.Memberships
@@ -94,6 +95,7 @@ class Services(private val db: Db, private val limits: Limits = Limits()) {
             val namespace = (ServicesTable innerJoin Environments).select(Environments.namespace)
                 .where { ServicesTable.id eq id }
                 .singleOrNull()?.get(Environments.namespace) ?: return@tx
+            orphanRepositories(ServicesTable.id eq id)
             ServicesTable.deleteWhere { ServicesTable.id eq id }
             enqueue(Subject.TEARDOWN_REQUESTED, buildJsonObject { put("namespace", namespace); put("serviceId", id.toString()) })
         }

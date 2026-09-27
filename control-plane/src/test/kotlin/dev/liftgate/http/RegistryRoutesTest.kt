@@ -5,8 +5,7 @@ import dev.liftgate.App
 import dev.liftgate.TestDatabase
 import dev.liftgate.build.BuildJobs
 import dev.liftgate.build.RegistryTokens
-import dev.liftgate.build.TestKeys
-import dev.liftgate.config.RegistryTokenConfig
+import dev.liftgate.build.TestRegistry
 import dev.liftgate.deploy.Builds
 import dev.liftgate.org.Orgs
 import dev.liftgate.org.insertUser
@@ -28,14 +27,6 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import org.testcontainers.containers.GenericContainer
-import org.testcontainers.images.builder.Transferable
-import org.testcontainers.utility.DockerImageName
-import java.io.File
-import java.net.URI
-import java.net.http.HttpClient
-import java.net.http.HttpRequest
-import java.net.http.HttpResponse
 import java.time.Instant
 import java.util.UUID
 import kotlin.test.Test
@@ -48,11 +39,7 @@ import kotlin.test.assertTrue
  */
 class RegistryRoutesTest {
     private val db = TestDatabase.clean()
-    private val config = testConfig().copy(
-        registry = "10.200.0.1:5050",
-        registryTokenAuth = true,
-        registryTokens = RegistryTokenConfig(TestKeys.privateKeyPem, TestKeys.certificatePem, "pull-password"),
-    )
+    private val config = TestRegistry.config
     private val services = Services(db)
     private val builds = Builds(db)
     private val tokens = RegistryTokens(db, services, config)
@@ -71,7 +58,7 @@ class RegistryRoutesTest {
 
     private suspend fun ApplicationTestBuilder.token(account: String, password: String, vararg scopes: String) = client.get("/api/v1/registry/token") {
         basicAuth(account, password)
-        parameter("service", "10.200.0.1:5050")
+        parameter("service", TestRegistry.ADDRESS)
         scopes.forEach { parameter("scope", it) }
     }
 
@@ -83,13 +70,7 @@ class RegistryRoutesTest {
 
     private fun access(token: String) = JWT.decode(token).getClaim("access").asList(Map::class.java)
 
-    private fun registry(method: String, path: String, token: String): Int = http.send(
-        HttpRequest.newBuilder(URI("http://${distribution.host}:${distribution.getMappedPort(5000)}/v2/$path"))
-            .method(method, HttpRequest.BodyPublishers.noBody())
-            .header("Authorization", "Bearer $token")
-            .build(),
-        HttpResponse.BodyHandlers.discarding(),
-    ).statusCode()
+    private fun registry(method: String, path: String, token: String): Int = TestRegistry.send(method, "/v2/$path", token).statusCode()
 
     @Test
     fun `a build token reaches only its own repository on a token-auth distribution`() = testApplication {
@@ -125,6 +106,7 @@ class RegistryRoutesTest {
             token(BuildJobs.name(revoked), revokedPassword, "repository:rival/shop-api:pull"),
             token(BuildJobs.name(revoked), finishedPassword, "repository:rival/shop-api:pull"),
             token("pull", "wrong", "repository:acme/shop-api:pull"),
+            token("janitor", "pull-password", "repository:acme/shop-api:delete"),
             client.get("/api/v1/registry/token?scope=repository:acme/shop-api:pull"),
         ).forEach { assertEquals(HttpStatusCode.Unauthorized, it.status) }
     }
@@ -139,20 +121,17 @@ class RegistryRoutesTest {
     }
 
     @Test
+    fun `the janitor account may pull and delete in any repository and push to none`() = testApplication {
+        application { liftgate(app) }
+        val janitor = jwt("janitor", "janitor-password", "repository:acme/shop-api:pull,push,delete")
+        assertEquals(listOf(mapOf("type" to "repository", "name" to "acme/shop-api", "actions" to listOf("pull", "delete"))), access(janitor))
+        assertEquals(401, registry("POST", "acme/shop-api/blobs/uploads/", janitor))
+    }
+
+    @Test
     fun `shared registry auth serves no tokens`() = testApplication {
         every { app.config } returns testConfig()
         application { liftgate(app) }
         assertEquals(HttpStatusCode.NotFound, token("pull", "pull-password", "repository:acme/shop-api:pull").status)
-    }
-
-    companion object {
-        private val http = HttpClient.newHttpClient()
-        private val distribution = GenericContainer<Nothing>(DockerImageName.parse("registry:2.8.3")).apply {
-            withCopyToContainer(Transferable.of(File("../infra/registry/config.yml").readText()), "/etc/docker/registry/config.yml")
-            withCopyToContainer(Transferable.of(TestKeys.certificatePem), "/etc/docker/registry/token.crt")
-            withEnv("REGISTRY_HTTP_ADDR", ":5000")
-            addExposedPort(5000)
-            start()
-        }
     }
 }

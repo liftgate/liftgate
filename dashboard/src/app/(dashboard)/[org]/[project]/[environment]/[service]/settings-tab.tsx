@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAction } from "@/lib/hooks";
 import type { Service, ServiceSpec } from "@/lib/types";
-import { redeploy, SaveActions } from "@/components/save-actions";
+import { SaveActions, saved } from "@/components/save-actions";
 import { ServiceForm } from "@/components/service-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -16,7 +16,7 @@ export function SettingsTab({ service, projectHref, onChanged }: { service: Serv
   const [status, setStatus] = useState<string>();
   const save = useAction(async (spec: ServiceSpec, andRedeploy: boolean) => {
     await api(`/services/${service.id}`, { method: "PATCH", body: spec });
-    setStatus(andRedeploy ? await redeploy(service.id) : "Saved. Applies on the next deploy.");
+    setStatus(await saved(service.id, andRedeploy));
     onChanged();
   });
   const remove = useAction(async () => {

@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import { useAction } from "@/lib/hooks";
 import type { EnvVar } from "@/lib/types";
 import { envPayload, keepsStoredValue, storedRows } from "@/lib/util";
-import { redeploy, redeployRequested, SaveActions } from "./save-actions";
+import { redeployRequested, SaveActions, saved } from "./save-actions";
 import { Button } from "./ui/button";
 import { Card, CardHeader } from "./ui/card";
 import { EmptyState } from "./ui/empty-state";
@@ -18,7 +18,7 @@ export function EnvEditor({ serviceId, initial }: { serviceId: string; initial: 
     const body = envPayload(rows);
     await api(`/services/${serviceId}/env`, { method: "PUT", body });
     setRows(storedRows(body));
-    setStatus(andRedeploy ? await redeploy(serviceId) : "Saved. Applies on the next deploy.");
+    setStatus(await saved(serviceId, andRedeploy));
   });
   const change = (next: EnvVar[]) => {
     setStatus(undefined);

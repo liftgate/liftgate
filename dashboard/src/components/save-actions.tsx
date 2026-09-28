@@ -6,7 +6,8 @@ import { Button, type ButtonVariant } from "./ui/button";
 
 export const redeployRequested = (e: FormEvent<HTMLFormElement>) => ((e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null)?.value === "redeploy";
 
-export async function redeploy(serviceId: string) {
+export async function saved(serviceId: string, redeploy: boolean) {
+  if (!redeploy) return "Saved. Applies on the next deploy.";
   try {
     await api(`/services/${serviceId}/redeploy`, { method: "POST" });
     return "Saved. Redeploying without a rebuild.";

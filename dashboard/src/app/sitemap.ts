@@ -1,6 +1,8 @@
 import type { MetadataRoute } from "next";
-import { landingEnabled } from "@/lib/landing";
+import { connection } from "next/server";
+import { landingOn } from "@/lib/landing";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  return (await landingEnabled()) ? [{ url: "https://liftgate.dev/" }] : [];
+  await connection();
+  return landingOn(process.env.LIFTGATE_LANDING) ? [{ url: "https://liftgate.dev/" }] : [];
 }

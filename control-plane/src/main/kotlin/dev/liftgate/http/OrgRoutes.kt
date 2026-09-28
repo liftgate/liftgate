@@ -84,7 +84,7 @@ fun Route.orgRoutes(app: App) {
                 post {
                     val org = call.sessionOrg(app, OrgRole.ADMIN)
                     val body = call.receive<CreateToken>()
-                    val name = body.name.trim().takeIf { it.length in 1..100 } ?: invalid("name must be 1 to 100 characters")
+                    val name = requireName(body.name)
                     if (body.expiresInDays != null && body.expiresInDays !in 1..365) invalid("expiresInDays must be 1 to 365, or null for a token that never expires")
                     call.respond(HttpStatusCode.Created, CreatedToken(app.apiTokens.create(org.id, name, call.principal.user.id, body.expiresInDays)))
                 }
@@ -101,6 +101,8 @@ fun requireSlug(slug: String, reserved: Set<String> = emptySet()) {
     if (!slugPattern.matches(slug)) invalid("slug must be 2 to 40 lowercase letters, digits or hyphens")
     if (slug in reserved) invalid("$slug is reserved, choose another slug")
 }
+
+fun requireName(name: String) = name.trim().takeIf { it.length in 1..100 } ?: invalid("name must be 1 to 100 characters")
 
 suspend fun ApplicationCall.org(app: App, min: OrgRole = OrgRole.MEMBER): Organization {
     val org = app.orgs.bySlug(parameters["slug"]!!) ?: notFound("organization")

@@ -72,11 +72,15 @@ class CommitStatusesTest {
         }) { install(ContentNegotiation) { json(json) } },
     )
     private var build = testBuild.copy(status = BuildStatus.FAILED, error = "the build job failed")
+    private var newer = emptyList<Build>()
     private var deployments = emptyList<Deployment>()
     private val app = mockk<App> {
         every { config } returns testConfig()
         every { github } returns this@CommitStatusesTest.github
-        every { builds } returns mockk<Builds> { coEvery { byId(testBuild.id) } answers { this@CommitStatusesTest.build } }
+        every { builds } returns mockk<Builds> {
+            coEvery { byId(testBuild.id) } answers { this@CommitStatusesTest.build }
+            coEvery { forService(testService.id) } answers { newer + this@CommitStatusesTest.build }
+        }
         every { this@mockk.deployments } returns mockk<Deployments> { coEvery { forService(testService.id) } answers { this@CommitStatusesTest.deployments } }
         every { services } returns mockk<Services> { coEvery { scope(testService.id) } answers { ServiceScope(testService, testEnvironment, this@CommitStatusesTest.project, testOrg) } }
     }
@@ -128,6 +132,21 @@ class CommitStatusesTest {
         assertEquals("success" to "Deployed", post(succeeded, deployment(DeploymentStatus.RUNNING)))
         assertEquals("failure" to "Deployment failed: crash loop", post(succeeded, deployment(DeploymentStatus.FAILED, "crash loop")))
         assertEquals(140, post(testBuild.copy(status = BuildStatus.FAILED, error = "x".repeat(500))).second.length)
+    }
+
+    @Test
+    fun `a commit shows its newest build, or a newer deployment of any of its builds`() = runBlocking {
+        val rebuild = testBuild.copy(id = UUID.randomUUID(), status = BuildStatus.QUEUED, createdAt = testBuild.createdAt.plusSeconds(60))
+        fun deployment(buildId: UUID) = testDeployment.copy(buildId = buildId, status = DeploymentStatus.RUNNING, createdAt = testBuild.createdAt.plusSeconds(120))
+        fun target() = sent(requests.lastIndex).jsonObject.getValue("target_url").jsonPrimitive.content.substringAfter("build=")
+        newer = listOf(rebuild)
+        assertEquals("pending" to "Queued", post(testBuild.copy(status = BuildStatus.CANCELLED)))
+        newer = listOf(rebuild.copy(status = BuildStatus.SUCCEEDED))
+        assertEquals("success" to "Deployed", post(testBuild.copy(status = BuildStatus.FAILED, error = "the build job failed"), deployment(rebuild.id)))
+        assertEquals(rebuild.id.toString(), target())
+        newer = listOf(rebuild.copy(status = BuildStatus.FAILED, error = "the build job failed"))
+        assertEquals("success" to "Deployed", post(testBuild, deployment(testBuild.id)))
+        assertEquals(testBuild.id.toString(), target())
     }
 
     @Test

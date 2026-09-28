@@ -24,8 +24,6 @@ private const val TESTS_PER_MINUTE = 10
  */
 @Serializable
 private data class ChannelRequest(val name: String, val events: Set<Event>, val kind: Kind? = null, val url: String? = null) {
-    fun channelName() = name.trim().takeIf { it.length in 1..100 } ?: invalid("name must be 1 to 100 characters")
-
     fun channelEvents() = events.ifEmpty { invalid("choose at least one event") }
 }
 
@@ -35,7 +33,7 @@ fun Route.notificationRoutes(app: App) {
         post {
             val org = call.org(app, OrgRole.ADMIN)
             val body = call.receive<ChannelRequest>()
-            val name = body.channelName()
+            val name = requireName(body.name)
             val events = body.channelEvents()
             val kind = body.kind ?: invalid("kind is required")
             call.respond(HttpStatusCode.Created, app.notificationChannels.create(org.id, name, kind, app.notifier.check(body.url ?: invalid("url is required")), events))
@@ -44,7 +42,7 @@ fun Route.notificationRoutes(app: App) {
             patch {
                 val org = call.org(app, OrgRole.ADMIN)
                 val body = call.receive<ChannelRequest>()
-                call.respond(app.notificationChannels.update(org.id, call.uuid("id"), body.channelName(), body.channelEvents()))
+                call.respond(app.notificationChannels.update(org.id, call.uuid("id"), requireName(body.name), body.channelEvents()))
             }
             delete {
                 app.notificationChannels.delete(call.org(app, OrgRole.ADMIN).id, call.uuid("id"))

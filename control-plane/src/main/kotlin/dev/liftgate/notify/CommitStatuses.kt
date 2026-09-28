@@ -37,10 +37,13 @@ class CommitStatuses(private val app: App) {
         val github = app.github ?: return
         var posted: GitHubApp.CommitStatus? = null
         while (true) {
-            val build = app.builds.byId(buildId) ?: return
+            val requested = app.builds.byId(buildId) ?: return
+            val builds = app.builds.forService(requested.serviceId).filter { it.commitSha == requested.commitSha }.ifEmpty { listOf(requested) }
+            val deployment = app.deployments.forService(requested.serviceId).firstOrNull { d -> d.createdAt >= builds.first().createdAt && builds.any { it.id == d.buildId } }
+            val build = builds.firstOrNull { it.id == deployment?.buildId } ?: builds.first()
             val scope = app.services.scope(build.serviceId) ?: return
-            val (state, description) = state(build, app.deployments.forService(build.serviceId).firstOrNull { it.buildId == buildId })
-            val status = GitHubApp.CommitStatus(state, scope.buildUrl(app.config.dashboardUrl, buildId), description.take(MAX_DESCRIPTION), "liftgate/${scope.service.slug}")
+            val (state, description) = state(build, deployment)
+            val status = GitHubApp.CommitStatus(state, scope.buildUrl(app.config.dashboardUrl, build.id), description.take(MAX_DESCRIPTION), "liftgate/${scope.service.slug}")
             if (status == posted) return
             try {
                 val project = scope.project
@@ -50,7 +53,7 @@ class CommitStatuses(private val app: App) {
             } catch (e: ClientRequestException) {
                 val headers = e.response.headers
                 if (e.response.status == HttpStatusCode.TooManyRequests || headers["x-ratelimit-remaining"] == "0" || headers[HttpHeaders.RetryAfter] != null) throw e
-                return log.warn("GitHub refused the commit status of build {}: {}", buildId, e.response.status)
+                return log.warn("GitHub refused the commit status of build {}: {}", build.id, e.response.status)
             }
             posted = status
         }

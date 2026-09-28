@@ -1,6 +1,6 @@
 import { buttonClasses } from "@/components/ui/button";
 import { CopyField } from "@/components/ui/copy-field";
-import { chartVersion, repoUrl, sourceUrl } from "./links";
+import { repoUrl, sourceUrl } from "./links";
 import { Section } from "./section";
 import { h3, sourceLink } from "./styles";
 
@@ -13,17 +13,8 @@ const steps = [
   {
     label: "Install the cluster baseline",
     value: "LIFTGATE_INSTALL_CILIUM=1 LETSENCRYPT_EMAIL=you@example.com sh infra/install.sh",
-    hint: "Adds the Gateway API, Cilium, the gVisor runtime class, cert-manager, CloudNativePG and Prometheus, and skips anything already installed.",
+    hint: "Adds the Gateway API, Cilium, the gVisor runtime class, cert-manager, CloudNativePG and Prometheus, and skips anything already installed. It stops before changing anything on a cluster that runs another CNI. If that cluster has a Gateway API implementation, leave out LIFTGATE_INSTALL_CILIUM=1 and set the chart's gateway.className.",
   },
-  ...(chartVersion
-    ? [
-        {
-          label: "Install the chart",
-          value: `helm install liftgate oci://ghcr.io/liftgate/charts/liftgate --version ${chartVersion} --namespace liftgate-system --create-namespace --values my-values.yaml`,
-          hint: "Put your domains, registry, GitHub App and master key in my-values.yaml first.",
-        },
-      ]
-    : []),
 ];
 
 export function SelfHost() {

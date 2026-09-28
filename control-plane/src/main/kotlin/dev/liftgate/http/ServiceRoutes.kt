@@ -91,6 +91,7 @@ private fun ServiceSpec.validated(): ServiceSpec {
     if (kind == ServiceKind.CRON && cronSchedule.isNullOrBlank()) invalid("cron services need a cronSchedule")
     if (healthCheckPath != null && (!healthCheckPath.startsWith('/') || healthCheckPath.length > MAX_HEALTH_CHECK_PATH)) invalid("the health check path must start with / and be at most $MAX_HEALTH_CHECK_PATH characters")
     if (healthCheckPath != null && port == null && !kind.servesHttp) invalid("a health check path needs a port to probe")
+    if (watchPaths.any { it.isBlank() } || runCatching { watches(emptyList()) }.isFailure) invalid("watch paths must be glob patterns such as apps/web/**")
     return this
 }
 

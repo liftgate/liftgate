@@ -16,7 +16,9 @@ import dev.liftgate.deploy.toBuild
 import dev.liftgate.http.json
 import dev.liftgate.http.shaPattern
 import dev.liftgate.org.toOrganization
+import dev.liftgate.project.toEnvironment
 import dev.liftgate.project.toProject
+import dev.liftgate.service.ServiceScope
 import dev.liftgate.service.toService
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.ktor.client.call.body
@@ -115,7 +117,7 @@ class RegistryJanitor(private val app: App, private val kube: KubernetesClient) 
 
     private fun JdbcTransaction.images(): Pair<Set<String>, List<Build>> {
         val services = (ServicesTable innerJoin Environments innerJoin Projects innerJoin Organizations).selectAll().associateBy { it[ServicesTable.id] }
-        fun image(serviceId: UUID, tag: String) = services[serviceId]?.let { BuildJobs.imageRef(registry, it.toOrganization(), it.toProject(), it.toService(), tag) }
+        fun image(serviceId: UUID, tag: String) = services[serviceId]?.let { BuildJobs.imageRef(registry, ServiceScope(it.toService(), it.toEnvironment(), it.toProject(), it.toOrganization()), tag) }
         val inFlight = BuildsTable.select(BuildsTable.serviceId, BuildsTable.commitSha).where { BuildsTable.status inList building }
             .mapNotNull { image(it[BuildsTable.serviceId], it[BuildsTable.commitSha]) }
         val succeeded = BuildsTable.selectAll()

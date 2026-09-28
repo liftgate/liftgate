@@ -14,6 +14,9 @@ import dev.liftgate.k8s.testEnvironment
 import dev.liftgate.k8s.testOrg
 import dev.liftgate.k8s.testProject
 import dev.liftgate.k8s.testService
+import dev.liftgate.project.EnvironmentKind
+import dev.liftgate.service.EnvVar
+import dev.liftgate.service.EnvVars
 import dev.liftgate.service.ServiceScope
 import dev.liftgate.service.Services
 import dev.liftgate.testConfig
@@ -44,6 +47,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import java.time.Duration
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -62,7 +66,7 @@ class BuilderTest {
     lateinit var server: KubernetesMockServer
 
     private val queued = testBuild.copy(status = BuildStatus.QUEUED, imageRef = null)
-    private val image = "registry.liftgate.internal/acme/shop-api:abc123"
+    private val image = "registry.liftgate.internal/acme/shop-production-api:abc123"
     private var permission = HttpStatusCode.OK to """{"permission":"write"}"""
     private val github = GitHubApp(
         GitHubConfig("1", TestKeys.privateKeyPem),
@@ -88,6 +92,10 @@ class BuilderTest {
         every { this@mockk.builds } returns this@BuilderTest.builds
         every { services } returns mockk<Services> {
             coEvery { scope(testService.id) } returns ServiceScope(testService, testEnvironment, testProject.copy(importedByLogin = "dean"), testOrg)
+            coEvery { production(any()) } returns null
+        }
+        every { envVars } returns mockk<EnvVars> {
+            coEvery { list(testService.id, reveal = true) } returns listOf(EnvVar("NEXT_PUBLIC_GREETING", "hello"), EnvVar("STRIPE_KEY", "sk_live_build", secret = true))
         }
         every { github } returns this@BuilderTest.github
         every { registryTokens } returns this@BuilderTest.registryTokens
@@ -136,7 +144,7 @@ class BuilderTest {
         verify(exactly = 1) { logs.end(queued.id, "the build job failed") }
         coVerify(exactly = 0) { registryTokens.issue(any()) }
         assertNotNull(job().get())
-        assertEquals(mapOf("token" to "ghs_token"), secret().stringData)
+        assertEquals(mapOf("token" to "ghs_token", "env.NEXT_PUBLIC_GREETING" to "hello", "env.STRIPE_KEY" to "sk_live_build"), secret().stringData)
         assertEquals(1L, metrics.timer("liftgate.build.duration", "status", "failed").count())
     }
 
@@ -153,7 +161,10 @@ class BuilderTest {
 
     @Test
     fun `a project imported before the check existed builds without it`() {
-        every { app.services } returns mockk<Services> { coEvery { scope(testService.id) } returns ServiceScope(testService, testEnvironment, testProject, testOrg) }
+        every { app.services } returns mockk<Services> {
+            coEvery { scope(testService.id) } returns ServiceScope(testService, testEnvironment, testProject, testOrg)
+            coEvery { production(any()) } returns null
+        }
         permission = HttpStatusCode.NotFound to """{"message":"Not Found"}"""
         build(JobStatusBuilder().withSucceeded(1).build())
         coVerify(exactly = 1) { builds.markSucceeded(queued.id, image) }
@@ -182,6 +193,21 @@ class BuilderTest {
         assertEquals(BuildJobs.name(queued.id), job().get().spec.template.spec.volumes.single { it.name == "docker-config" }.secret.secretName)
         coVerify(exactly = 1) { registryTokens.issue(queued.id) }
         coVerify(exactly = 1) { registryTokens.revoke(queued.id) }
+    }
+
+    @Test
+    fun `a preview build pushes to its own repository and imports the production cache`() {
+        val preview = testEnvironment.copy(id = UUID.randomUUID(), slug = "preview", kind = EnvironmentKind.PREVIEW)
+        val previewScope = ServiceScope(testService.copy(environmentId = preview.id), preview, testProject, testOrg)
+        every { app.services } returns mockk<Services> {
+            coEvery { scope(testService.id) } returns previewScope
+            coEvery { production(previewScope) } returns ServiceScope(testService, testEnvironment, testProject, testOrg)
+        }
+        build(JobStatusBuilder().withFailed(1).build())
+        val env = job().get().spec.template.spec.containers.single().env.associate { it.name to it.value }
+        assertEquals("registry.liftgate.internal/acme/shop-preview-api:abc123", env["IMAGE"])
+        assertEquals("registry.liftgate.internal/acme/shop-preview-api:cache", env["CACHE"])
+        assertEquals("registry.liftgate.internal/acme/shop-production-api:cache", env["PRODUCTION_CACHE"])
     }
 
     @Test

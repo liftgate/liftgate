@@ -40,12 +40,12 @@ export function EnvEditor({ serviceId, initial }: { serviceId: string; initial: 
       <Card>
         <CardHeader
           title="Environment variables"
-          description="Injected into every container of this service. Save and redeploy applies them without a rebuild. Secret values are write-only."
+          description="Available to builds and injected into every container of this service. Save and redeploy applies them without a rebuild. Secret values are write-only and never become Docker build arguments."
           actions={addRow}
         />
         {rows.length === 0 ? (
           <div className="p-6">
-            <EmptyState title="No variables" description="Variables are encrypted at rest and injected at runtime." action={addRow} />
+            <EmptyState title="No variables" description="Variables are encrypted at rest and available at build time and runtime." action={addRow} />
           </div>
         ) : (
           <div className="divide-y divide-graphite-700">

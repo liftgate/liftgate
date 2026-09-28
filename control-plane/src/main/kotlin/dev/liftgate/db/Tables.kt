@@ -260,6 +260,7 @@ object Services : Table("services") {
     val memoryMb = integer("memory_mb").default(512)
     val cronSchedule = text("cron_schedule").nullable()
     val startCommand = text("start_command").nullable()
+    val watchPaths = array<String>("watch_paths").databaseGenerated()
     val createdAt = createdAtColumn()
     val healthCheckPath = text("health_check_path").nullable()
     override val primaryKey = PrimaryKey(id)

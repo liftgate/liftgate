@@ -21,8 +21,10 @@ jobs:
     permissions:
       contents: read
       packages: read
+  build-image:
+    uses: ./.github/workflows/build-image.yml
   images:
-    needs: [control-plane, dashboard, chart, e2e, upgrade]
+    needs: [control-plane, dashboard, chart, e2e, upgrade, build-image]
     uses: ./.github/workflows/images.yml
     permissions:
       contents: read

@@ -23,6 +23,7 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import java.util.UUID
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 import kotlin.test.Test
@@ -51,8 +52,8 @@ class WebhooksTest {
         every { services } returns mockk<Services> { coEvery { forEnvironment(testEnvironment.id) } returns listOf(testService) }
     }
 
-    private fun push(ref: String = "refs/heads/main", deleted: Boolean = false, installation: Long = 42) =
-        """{"ref":"$ref","after":"abc123","deleted":$deleted,"repository":{"full_name":"acme/shop"},"installation":{"id":$installation},"head_commit":{"message":"ship it"}}"""
+    private fun push(ref: String = "refs/heads/main", deleted: Boolean = false, installation: Long = 42, forced: Boolean = false, commits: String = "[]") =
+        """{"ref":"$ref","after":"abc123","deleted":$deleted,"forced":$forced,"commits":$commits,"repository":{"full_name":"acme/shop"},"installation":{"id":$installation},"head_commit":{"message":"ship it"}}"""
 
     private fun sign(body: String) = Mac.getInstance("HmacSHA256").run {
         init(SecretKeySpec(secret.toByteArray(), "HmacSHA256"))
@@ -82,6 +83,25 @@ class WebhooksTest {
         }
         assertEquals(HttpStatusCode.NoContent, response.status)
         coVerify(exactly = 1) { builds.request(testService.id, "abc123", "ship it", "main") }
+    }
+
+    @Test
+    fun `a push builds only the services whose watch paths or root directory match a changed file, and a forced push builds them all`() = testApplication {
+        val web = testService.copy(id = UUID.randomUUID(), slug = "web", rootDir = "/apps/web")
+        val api = testService.copy(id = UUID.randomUUID(), slug = "api", rootDir = "/apps/api", watchPaths = listOf("apps/api/**", "packages/**"))
+        every { app.services } returns mockk<Services> { coEvery { forEnvironment(testEnvironment.id) } returns listOf(web, api) }
+        application { liftgate(app) }
+        val commits = """[{"added":["apps/web/app/page.tsx"],"modified":["apps/web/package.json"],"removed":[]},{"added":[],"modified":[],"removed":["apps/web/old.css"]}]"""
+        listOf(push(commits = commits), push(commits = commits, forced = true)).forEach { body ->
+            val response = client.post("/api/v1/webhooks/github") {
+                header("X-GitHub-Event", "push")
+                header("X-Hub-Signature-256", sign(body))
+                setBody(body)
+            }
+            assertEquals(HttpStatusCode.NoContent, response.status)
+        }
+        coVerify(exactly = 2) { builds.request(web.id, "abc123", "ship it", "main") }
+        coVerify(exactly = 1) { builds.request(api.id, "abc123", "ship it", "main") }
     }
 
     @Test

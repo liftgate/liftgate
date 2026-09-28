@@ -43,8 +43,8 @@ class Builder(private val app: App, private val kube: KubernetesClient) {
         val github = app.github ?: return fail(buildId, "the GitHub App is not configured")
         val config = app.config
         val project = scope.project
-        val image = BuildJobs.imageRef(config.registry, scope.org, project, scope.service, build.commitSha)
-        val cache = BuildJobs.imageRef(config.registry, scope.org, project, scope.service, "cache")
+        val image = BuildJobs.imageRef(config.registry, scope, build.commitSha)
+        val cache = BuildJobs.imageRef(config.registry, scope, "cache")
         val jobs = kube.batch().v1().jobs().inNamespace(config.buildNamespace)
         val sample = Timer.start()
         val failure = try {
@@ -55,6 +55,8 @@ class Builder(private val app: App, private val kube: KubernetesClient) {
                 val spec = BuildJobSpec(
                     build, scope.service, project, token, image, cache, config.buildImage, config.buildNamespace,
                     config.buildNodeSelector, config.registryInsecure, config.registryTokenAuth, config.buildTolerations,
+                    app.services.production(scope)?.let { BuildJobs.imageRef(config.registry, it, "cache") },
+                    app.envVars.list(scope.service.id, reveal = true),
                 )
                 "the build job failed".takeUnless { run(jobs.resource(BuildJobs.job(spec)), spec) }
             }

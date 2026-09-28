@@ -9,6 +9,7 @@ import dev.liftgate.db.Builds as BuildsTable
 import dev.liftgate.db.Db
 import dev.liftgate.db.sql
 import dev.liftgate.deploy.BuildStatus
+import dev.liftgate.service.ServiceScope
 import dev.liftgate.service.Services
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
@@ -43,31 +44,34 @@ class RegistryTokens(private val db: Db, private val services: Services, private
     suspend fun revoke(buildId: UUID) = store(buildId, null)
 
     suspend fun token(account: String, password: String, scopes: List<String>): String? {
-        val (repository, actions) = grant(account, password) ?: return null
+        val grants = grant(account, password) ?: return null
         val access = scopes.filter { it.startsWith("repository:") }.mapNotNull { scope ->
             val name = scope.substringAfter(':').substringBeforeLast(':')
-            scope.substringAfterLast(':').split(',').filter { it in actions && (repository == null || repository == name) }
+            val actions = grants[name] ?: grants[null].orEmpty()
+            scope.substringAfterLast(':').split(',').filter { it in actions }
                 .takeIf { it.isNotEmpty() }?.let { mapOf("type" to "repository", "name" to name, "actions" to it) }
         }
         return sign(account, access)
     }
 
-    private suspend fun grant(account: String, password: String): Pair<String?, Set<String>>? = when (account) {
-        PULL_ACCOUNT -> (null to setOf("pull")).takeIf { matches(config.registryTokens?.pullPassword, password) }
-        JANITOR_ACCOUNT -> (null to setOf("pull", "delete")).takeIf { matches(config.registryJanitorPassword, password) }
-        else -> buildRepository(account, password)?.let { it to setOf("pull", "push") }
+    private suspend fun grant(account: String, password: String): Map<out String?, Set<String>>? = when (account) {
+        PULL_ACCOUNT -> mapOf(null to setOf("pull")).takeIf { matches(config.registryTokens?.pullPassword, password) }
+        JANITOR_ACCOUNT -> mapOf(null to setOf("pull", "delete")).takeIf { matches(config.registryJanitorPassword, password) }
+        else -> buildScope(account, password)?.let { scope ->
+            mapOf(BuildJobs.repository(scope) to setOf("pull", "push")) + listOfNotNull(services.production(scope)).associate { BuildJobs.repository(it) to setOf("pull") }
+        }
     }
 
     private fun matches(expected: String?, password: String) = expected != null && MessageDigest.isEqual(expected.toByteArray(), password.toByteArray())
 
-    private suspend fun buildRepository(account: String, password: String): String? {
+    private suspend fun buildScope(account: String, password: String): ServiceScope? {
         val buildId = runCatching { UUID.fromString(account.substringAfter('-')) }.getOrNull()?.takeIf { BuildJobs.name(it) == account } ?: return null
         val serviceId = db.tx {
             BuildsTable.select(BuildsTable.serviceId)
                 .where { (BuildsTable.id eq buildId) and (BuildsTable.status eq BuildStatus.RUNNING.sql) and (BuildsTable.registrySecretHash eq ApiTokens.hash(password)) }
                 .singleOrNull()?.get(BuildsTable.serviceId)
         } ?: return null
-        return services.scope(serviceId)?.let { BuildJobs.repository(it.org, it.project, it.service) }
+        return services.scope(serviceId)
     }
 
     private fun sign(subject: String, access: List<Map<String, Any>>): String {

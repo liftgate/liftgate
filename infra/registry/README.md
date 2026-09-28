@@ -97,9 +97,9 @@ have them.
    ```sh
    curl -si http://10.200.0.1:5050/v2/ | grep -i -e '^HTTP' -e '^www-authenticate'
    TOKEN=$(curl -s -u "pull:$(cat /etc/liftgate-registry/pull-password)" \
-     "https://liftgate.dev/api/v1/registry/token?service=10.200.0.1:5050&scope=repository:<org>/<project>-<service>:pull,push" | jq -r .token)
-   curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer $TOKEN" http://10.200.0.1:5050/v2/<org>/<project>-<service>/tags/list
-   curl -s -o /dev/null -w '%{http_code}\n' -X POST -H "Authorization: Bearer $TOKEN" http://10.200.0.1:5050/v2/<org>/<project>-<service>/blobs/uploads/
+     "https://liftgate.dev/api/v1/registry/token?service=10.200.0.1:5050&scope=repository:<org>/<project>-<environment>-<service>:pull,push" | jq -r .token)
+   curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer $TOKEN" http://10.200.0.1:5050/v2/<org>/<project>-<environment>-<service>/tags/list
+   curl -s -o /dev/null -w '%{http_code}\n' -X POST -H "Authorization: Bearer $TOKEN" http://10.200.0.1:5050/v2/<org>/<project>-<environment>-<service>/blobs/uploads/
    ```
 
    Expect 401 with `Bearer realm="https://liftgate.dev/api/v1/registry/token"`, then 200 for

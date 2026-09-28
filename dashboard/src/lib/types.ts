@@ -48,6 +48,7 @@ export type ServiceSpec = {
   cronSchedule: string | null;
   startCommand: string | null;
   healthCheckPath: string | null;
+  watchPaths: string[];
 };
 
 export type Service = ServiceSpec & { id: string; environmentId: string; internalHost: string | null };

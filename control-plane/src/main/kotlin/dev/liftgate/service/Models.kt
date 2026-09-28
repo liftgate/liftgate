@@ -9,6 +9,8 @@ import dev.liftgate.project.Project
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
+import java.nio.file.FileSystems
+import java.nio.file.Path
 import java.util.UUID
 
 /**
@@ -54,11 +56,12 @@ data class Service(
     val cronSchedule: String?,
     val startCommand: String?,
     val healthCheckPath: String? = null,
+    val watchPaths: List<String> = emptyList(),
     val internalHost: String? = null,
 ) {
     val listens get() = port != null || kind.servesHttp
 
-    fun spec() = ServiceSpec(slug, name, kind, rootDir, buildStrategy, dockerfilePath, port, replicas, cpuMillis, memoryMb, cronSchedule, startCommand, healthCheckPath)
+    fun spec() = ServiceSpec(slug, name, kind, rootDir, buildStrategy, dockerfilePath, port, replicas, cpuMillis, memoryMb, cronSchedule, startCommand, healthCheckPath, watchPaths)
 }
 
 /**
@@ -80,9 +83,16 @@ data class ServiceSpec(
     val cronSchedule: String? = null,
     val startCommand: String? = null,
     val healthCheckPath: String? = null,
+    val watchPaths: List<String> = emptyList(),
 ) {
     fun service(id: UUID, environmentId: UUID) =
-        Service(id, environmentId, slug, name, kind, rootDir, buildStrategy, dockerfilePath, port, replicas, cpuMillis, memoryMb, cronSchedule, startCommand, healthCheckPath)
+        Service(id, environmentId, slug, name, kind, rootDir, buildStrategy, dockerfilePath, port, replicas, cpuMillis, memoryMb, cronSchedule, startCommand, healthCheckPath, watchPaths)
+
+    fun watches(files: Collection<String>): Boolean {
+        val globs = watchPaths.ifEmpty { listOfNotNull(rootDir.trim('/').takeIf { it.isNotEmpty() }?.let { "$it/**" }) }
+            .map { FileSystems.getDefault().getPathMatcher("glob:${it.trimStart('/')}") }
+        return globs.isEmpty() || files.any { file -> globs.any { it.matches(Path.of(file)) } }
+    }
 }
 
 /**

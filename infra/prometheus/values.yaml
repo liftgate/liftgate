@@ -46,6 +46,7 @@ alertmanager:
       group_by: [alertname]
 kube-state-metrics:
   enabled: true
+  collectors: [pods, nodes, persistentvolumeclaims]
   metricLabelsAllowlist:
     - pods=[liftgate.dev/service-id,liftgate.dev/org-id]
     - persistentvolumeclaims=[cnpg.io/cluster]

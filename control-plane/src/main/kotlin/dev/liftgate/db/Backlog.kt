@@ -1,6 +1,6 @@
 package dev.liftgate.db
 
-import dev.liftgate.deploy.BuildStatus
+import dev.liftgate.deploy.active
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.coroutines.CoroutineScope
@@ -21,7 +21,6 @@ import java.time.Instant
 import kotlin.time.Duration.Companion.seconds
 
 private val interval = 15.seconds
-private val waiting = listOf(BuildStatus.QUEUED, BuildStatus.RUNNING).map { it.sql }
 
 /**
  * @author Dean
@@ -48,7 +47,7 @@ class Backlog(private val db: Db, private val metrics: MeterRegistry) {
             val outbox = Outbox.select(rows, first).where { Outbox.publishedAt.isNull() }.single()
             pending = outbox[rows]
             oldest = outbox[first]?.toInstant()
-            builds = Builds.select(Builds.status, count).where { Builds.status inList waiting }.groupBy(Builds.status).associate { it[Builds.status] to it[count] }
+            builds = Builds.select(Builds.status, count).where { Builds.status inList active }.groupBy(Builds.status).associate { it[Builds.status] to it[count] }
         }
     }
 
@@ -59,7 +58,7 @@ class Backlog(private val db: Db, private val metrics: MeterRegistry) {
                 Gauge.builder("liftgate.outbox.oldest.pending") { oldest?.let { Duration.between(it, Instant.now()).toMillis() / 1000.0 } ?: 0.0 }
                     .baseUnit("seconds")
                     .register(metrics),
-            ) + waiting.map { status -> Gauge.builder("liftgate.builds") { builds[status] ?: 0L }.tag("status", status).register(metrics) }
+            ) + active.map { status -> Gauge.builder("liftgate.builds") { builds[status] ?: 0L }.tag("status", status).register(metrics) }
             try {
                 while (true) {
                     runCatching { sample() }.onFailure { ensureActive(); log.warn("backlog sampling failed", it) }

@@ -81,6 +81,16 @@ tests:
         values: 1x150
       - series: kube_pod_labels{namespace="env-acme", pod="web-1", label_liftgate_dev_org_id="org-1"}
         values: 1x150
+      - series: kube_pod_status_phase{namespace="env-acme", pod="web-1", phase="Running"}
+        values: 1x150
+      - series: kube_pod_container_resource_limits{namespace="env-acme", pod="job-28000001-abcde", container="job", resource="cpu", unit="core"}
+        values: 1x150
+      - series: kube_pod_labels{namespace="env-acme", pod="job-28000001-abcde", label_liftgate_dev_org_id="org-1"}
+        values: 1x150
+      - series: kube_pod_status_phase{namespace="env-acme", pod="job-28000001-abcde", phase="Running"}
+        values: 0x150
+      - series: kube_pod_status_phase{namespace="env-acme", pod="job-28000001-abcde", phase="Succeeded"}
+        values: 1x150
     alert_rule_test:
       - eval_time: 1h
         alertname: OrgCpuSaturated

@@ -34,7 +34,7 @@ import java.util.UUID
 private const val REQUEUE_MINUTES = 5L
 private const val STALLED_MINUTES = 2L
 private const val TIMEOUT_MINUTES = 45L
-private val active = listOf(BuildStatus.QUEUED, BuildStatus.RUNNING).map { it.sql }
+val active = listOf(BuildStatus.QUEUED, BuildStatus.RUNNING).map { it.sql }
 
 fun ResultRow.toBuild() = Build(
     this[BuildsTable.id],

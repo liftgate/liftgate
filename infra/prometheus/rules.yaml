@@ -153,6 +153,7 @@ groups:
           )
           / sum by (label_liftgate_dev_org_id) (
             sum by (namespace, pod) (kube_pod_container_resource_limits{namespace=~"env-.+", resource="cpu"})
+            * on (namespace, pod) group_left () (kube_pod_status_phase{namespace=~"env-.+", phase="Running"} == 1)
             * on (namespace, pod) group_left (label_liftgate_dev_org_id) kube_pod_labels{namespace=~"env-.+", label_liftgate_dev_org_id!=""}
           ) >= 0.90
         for: 2h

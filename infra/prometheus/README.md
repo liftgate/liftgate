@@ -5,7 +5,8 @@
 [`rules.yaml`](rules.yaml). It runs Prometheus with 15 days of retention, capped at 6 GB,
 Alertmanager, kube-state-metrics and node-exporter. kube-state-metrics adds
 `label_liftgate_dev_org_id` and `label_liftgate_dev_service_id` to `kube_pod_labels`, and
-`label_cnpg_io_cluster` to `kube_persistentvolumeclaim_labels`. Every alert has a section in
+`label_cnpg_io_cluster` to `kube_persistentvolumeclaim_labels`. It runs only its pods, nodes and
+persistentvolumeclaims collectors, so its ClusterRole cannot list Secrets. Every alert has a section in
 [`RUNBOOK.md`](../RUNBOOK.md).
 
 ## Targets

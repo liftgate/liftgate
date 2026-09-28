@@ -22,14 +22,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.jetbrains.exposed.v1.core.JoinType
-import org.jetbrains.exposed.v1.core.RowNumber
 import org.jetbrains.exposed.v1.core.SortOrder
-import org.jetbrains.exposed.v1.core.alias
+import org.jetbrains.exposed.v1.core.count
 import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.core.inList
-import org.jetbrains.exposed.v1.core.lessEq
-import org.jetbrains.exposed.v1.core.or
+import org.jetbrains.exposed.v1.core.greater
+import org.jetbrains.exposed.v1.core.innerJoin
 import org.jetbrains.exposed.v1.jdbc.select
 import org.slf4j.LoggerFactory
 import java.util.UUID
@@ -87,19 +84,21 @@ class Sweeper(private val app: App, private val kube: KubernetesClient) {
     }
 
     suspend fun pruneSecrets() {
-        val recency = RowNumber().over().partitionBy(Deployments.serviceId).orderBy(Deployments.createdAt, SortOrder.DESC).alias("recency")
-        val ranked = Deployments.select(Deployments.id, Deployments.serviceId, Deployments.status, recency).alias("ranked")
-        val (id, status, rank) = Triple(ranked[Deployments.id], ranked[Deployments.status], ranked[recency])
         val services = app.db.tx {
-            ranked.join(Services, JoinType.INNER, ranked[Deployments.serviceId], Services.id).innerJoin(Environments)
-                .select(Environments.namespace, Services.id, id, status, rank)
-                .where { (rank lessEq KEPT_SECRETS + 1L) or (status inList live) }
-                .groupBy({ it[Environments.namespace] to it[Services.id].toString() }, { it[id].toString().takeIf { _ -> it[rank] <= KEPT_SECRETS || it[status] in live } })
+            (Deployments innerJoin Services innerJoin Environments).select(Services.id, Environments.namespace)
+                .groupBy(Services.id, Environments.namespace)
+                .having { Deployments.id.count() greater KEPT_SECRETS.toLong() }
+                .map { it[Services.id] to it[Environments.namespace] }
         }
-        services.filterValues { it.size > KEPT_SECRETS }.entries.toList().each("pruning of the env secrets of") { (service, kept) ->
-            withContext(Dispatchers.IO) {
-                kube.secrets().inNamespace(service.first).withLabel(SERVICE_ID_LABEL, service.second).withLabel(DEPLOYMENT_LABEL)
-                    .withLabelNotIn(DEPLOYMENT_LABEL, *kept.filterNotNull().toTypedArray()).delete()
+        services.each("pruning of the env secrets of") { (serviceId, namespace) ->
+            app.db.tx {
+                Services.select(Services.id).where { Services.id eq serviceId }.forUpdate().toList()
+                val kept = Deployments.select(Deployments.id, Deployments.status).where { Deployments.serviceId eq serviceId }
+                    .orderBy(Deployments.createdAt, SortOrder.DESC).toList()
+                    .filterIndexed { i, row -> i < KEPT_SECRETS || row[Deployments.status] in live }
+                    .map { it[Deployments.id].toString() }
+                kube.secrets().inNamespace(namespace).withLabel(SERVICE_ID_LABEL, serviceId.toString()).withLabel(DEPLOYMENT_LABEL)
+                    .withLabelNotIn(DEPLOYMENT_LABEL, *kept.toTypedArray()).delete()
             }
         }
     }

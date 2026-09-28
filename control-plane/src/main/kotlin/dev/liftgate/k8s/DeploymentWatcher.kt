@@ -71,9 +71,11 @@ class DeploymentWatcher(private val app: App, private val kube: KubernetesClient
         while (true) {
             try {
                 val fallback = if (rollout.status == DeploymentStatus.FAILED) app.deployments.fallback(rollout.deploymentId) else null
-                val error = listOfNotNull(rollout.error, fallback?.let { "reverted to ${it.id}" }).joinToString("; ").ifEmpty { null }
-                app.deployments.transition(rollout.deploymentId, rollout.status, rollout.replicasReady, error)
-                fallback?.let { reconciler.reapply(it.serviceId) }
+                app.deployments.transition(rollout.deploymentId, rollout.status, rollout.replicasReady, rollout.error)
+                fallback?.let {
+                    reconciler.reapply(it.serviceId)
+                    app.deployments.transition(rollout.deploymentId, rollout.status, rollout.replicasReady, listOfNotNull(rollout.error, "reverted to ${it.id}").joinToString("; "))
+                }
                 return
             } catch (e: LiftgateException) {
                 return log.debug("ignored rollout of deployment {}: {}", rollout.deploymentId, e.message)

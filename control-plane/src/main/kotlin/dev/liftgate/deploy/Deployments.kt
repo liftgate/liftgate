@@ -61,14 +61,14 @@ fun ResultRow.toDeployment() = Deployment(
 )
 
 fun JdbcTransaction.createDeployment(serviceId: UUID, buildId: UUID, snapshotOf: Deployment? = null): Deployment {
-    val spec = snapshotOf?.config ?: ServicesTable.selectAll().where { ServicesTable.id eq serviceId }.single().toService().spec()
+    val spec = ServicesTable.selectAll().where { ServicesTable.id eq serviceId }.forUpdate().single().toService().spec()
     val sealed = snapshotOf?.env ?: sealedEnv(serviceId)
     val deployment = DeploymentsTable.insertReturning {
         it[id] = UUID.randomUUID()
         it[DeploymentsTable.serviceId] = serviceId
         it[DeploymentsTable.buildId] = buildId
         it[status] = DeploymentStatus.PENDING.sql
-        it[config] = spec
+        it[config] = snapshotOf?.config ?: spec
         it[env] = sealed
     }.single().toDeployment()
     requestRelease(deployment.id)

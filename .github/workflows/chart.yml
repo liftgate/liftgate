@@ -54,8 +54,10 @@ jobs:
           jq -e '.[] | select(.kind == "ConfigMap" and .metadata.name == "liftgate") | .data.LIFTGATE_DENIED_EGRESS_CIDRS == "172.93.106.84/32"' rendered.json
           jq -e '[.[] | select(.kind == "StatefulSet" and .metadata.name == "liftgate-nats") | .spec.template.spec.containers[] | select(.name == "nats") | .resources.requests.memory] == ["128Mi"]' rendered.json
           jq -e '[.[] | select(.kind == "Cluster") | .spec.resources.requests.memory] == ["512Mi"]' rendered.json
-          if helm template liftgate charts/liftgate ${{ matrix.args }} --set-json 'deniedEgressCidrs=["fd00::/8"]' 2> render.err; then exit 1; fi
-          grep "/deniedEgressCidrs" render.err
+          for cidr in fd00::/8 999.0.0.1/32; do
+            if helm template liftgate charts/liftgate ${{ matrix.args }} --set-json "deniedEgressCidrs=[\"$cidr\"]" 2> render.err; then exit 1; fi
+            grep "/deniedEgressCidrs" render.err
+          done
       - name: gitlab, deploy domain and client ip guards
         run: |
           set -o pipefail

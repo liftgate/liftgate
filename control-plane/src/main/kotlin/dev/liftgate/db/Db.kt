@@ -33,7 +33,7 @@ class Db(config: Config) : AutoCloseable {
     private val database = Database.connect(dataSource)
 
     fun migrate() {
-        Flyway.configure().dataSource(dataSource).initSql("set lock_timeout = '10s'").lockRetryCount(-1).load().migrate()
+        Flyway.configure().dataSource(dataSource).lockRetryCount(-1).load().migrate()
     }
 
     suspend fun <T> tx(block: JdbcTransaction.() -> T): T = withContext(Dispatchers.IO) { transaction(database) { block() } }

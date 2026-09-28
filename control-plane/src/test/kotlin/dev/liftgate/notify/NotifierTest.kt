@@ -53,7 +53,7 @@ class NotifierTest {
     private val channelId = UUID.randomUUID()
     private val channels = mockk<NotificationChannels>()
     private val app = mockk<App> {
-        every { config } returns testConfig(mapOf("LIFTGATE_NOTIFICATION_DENIED_CIDRS" to "203.0.113.7/32"))
+        every { config } returns testConfig(mapOf("LIFTGATE_NOTIFICATION_DENIED_CIDRS" to "1.2.3.4/32"))
         every { notificationChannels } returns channels
     }
     private val buildId = UUID.fromString("00000000-0000-0000-0000-000000000001")
@@ -97,7 +97,7 @@ class NotifierTest {
         val notifier = Notifier(app, lookup = { listOf(InetAddress.getByName(address)) })
         listOf(
             "10.0.0.1", "172.16.0.1", "192.168.1.1", "100.64.0.1", "169.254.169.254", "127.0.0.1", "0.0.0.0", "224.0.0.1",
-            "255.255.255.255", "::ffff:10.0.0.1", "::1", "fd00::1", "2606:4700:4700::1111", "203.0.113.7",
+            "255.255.255.255", "198.18.0.1", "203.0.113.7", "::ffff:10.0.0.1", "::1", "fd00::1", "2606:4700:4700::1111", "1.2.3.4",
         ).forEach {
             address = it
             assertEquals(HttpStatusCode.UnprocessableEntity, assertFailsWith<LiftgateException>(it) { notifier.check(hook) }.status, it)

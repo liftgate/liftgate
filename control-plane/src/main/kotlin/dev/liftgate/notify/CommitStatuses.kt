@@ -10,6 +10,7 @@ import dev.liftgate.events.Subject
 import dev.liftgate.events.changed
 import dev.liftgate.events.uuid
 import io.ktor.client.plugins.ClientRequestException
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import org.slf4j.LoggerFactory
 import java.util.UUID
@@ -34,15 +35,21 @@ class CommitStatuses(private val app: App) {
 
     suspend fun post(buildId: UUID) {
         val github = app.github ?: return
-        val build = app.builds.byId(buildId) ?: return
-        val scope = app.services.scope(build.serviceId) ?: return
-        val (state, description) = state(build, app.deployments.forService(build.serviceId).firstOrNull { it.buildId == buildId })
-        val status = GitHubApp.CommitStatus(state, scope.buildUrl(app.config.dashboardUrl, buildId), description.take(MAX_DESCRIPTION), "liftgate/${scope.service.slug}")
-        try {
-            github.postStatus(scope.project.installationId, scope.project.repoFullName, build.commitSha, status)
-        } catch (e: ClientRequestException) {
-            if (e.response.status == HttpStatusCode.TooManyRequests) throw e
-            log.warn("GitHub refused the commit status of build {}: {}", buildId, e.response.status)
+        var posted: GitHubApp.CommitStatus? = null
+        while (true) {
+            val build = app.builds.byId(buildId) ?: return
+            val scope = app.services.scope(build.serviceId) ?: return
+            val (state, description) = state(build, app.deployments.forService(build.serviceId).firstOrNull { it.buildId == buildId })
+            val status = GitHubApp.CommitStatus(state, scope.buildUrl(app.config.dashboardUrl, buildId), description.take(MAX_DESCRIPTION), "liftgate/${scope.service.slug}")
+            if (status == posted) return
+            try {
+                github.postStatus(scope.project.installationId, scope.project.repoFullName, build.commitSha, status)
+            } catch (e: ClientRequestException) {
+                val headers = e.response.headers
+                if (e.response.status == HttpStatusCode.TooManyRequests || headers["x-ratelimit-remaining"] == "0" || headers[HttpHeaders.RetryAfter] != null) throw e
+                return log.warn("GitHub refused the commit status of build {}: {}", buildId, e.response.status)
+            }
+            posted = status
         }
     }
 

@@ -51,6 +51,8 @@ import kotlin.test.assertFailsWith
 class CommitStatusesTest {
     private val requests = mutableListOf<HttpRequestData>()
     private var answer = HttpStatusCode.Created
+    private var rateLimited = false
+    private var onStatus = {}
     private val github = GitHubApp(
         GitHubConfig("1", TestKeys.privateKeyPem),
         HttpClient(MockEngine { request ->
@@ -58,7 +60,10 @@ class CommitStatusesTest {
             val headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
             when (request.url.encodedPath) {
                 "/app/installations/42/access_tokens" -> respond("""{"token":"ghs_status"}""", HttpStatusCode.Created, headers)
-                "/repos/acme/shop/statuses/abc123" -> respond("{}", answer, headers)
+                "/repos/acme/shop/statuses/abc123" -> {
+                    onStatus()
+                    respond("{}", answer, if (rateLimited) headersOf("x-ratelimit-remaining", "0") else headers)
+                }
                 else -> respond("""{"message":"Not Found"}""", HttpStatusCode.NotFound, headers)
             }
         }) { install(ContentNegotiation) { json(json) } },
@@ -111,13 +116,27 @@ class CommitStatusesTest {
     }
 
     @Test
+    fun `a build that finishes while its pending status is posted ends on the final status`() = runBlocking {
+        build = testBuild.copy(status = BuildStatus.QUEUED)
+        onStatus = { build = testBuild.copy(status = BuildStatus.FAILED, error = "the build job failed") }
+        CommitStatuses(app).post(testBuild.id)
+        assertEquals(listOf("pending", "failure"), listOf(1, 3).map { sent(it).jsonObject.getValue("state").jsonPrimitive.content })
+        assertEquals(4, requests.size)
+    }
+
+    @Test
     fun `github refusing a status drops it, while rate limits and server errors are retried`() = runBlocking {
         answer = HttpStatusCode.UnprocessableEntity
         CommitStatuses(app).post(testBuild.id)
+        answer = HttpStatusCode.Forbidden
+        CommitStatuses(app).post(testBuild.id)
+        rateLimited = true
+        assertFailsWith<ClientRequestException> { CommitStatuses(app).post(testBuild.id) }
+        rateLimited = false
         answer = HttpStatusCode.TooManyRequests
         assertFailsWith<ClientRequestException> { CommitStatuses(app).post(testBuild.id) }
         answer = HttpStatusCode.BadGateway
         assertFailsWith<ServerResponseException> { CommitStatuses(app).post(testBuild.id) }
-        assertEquals(6, requests.size)
+        assertEquals(10, requests.size)
     }
 }

@@ -359,18 +359,18 @@ empty, neither appears.
 With the GitHub App configured, the `api` role posts a `liftgate/<service>` commit status on every
 commit it builds: pending while the build is queued, running and deploying, success once the
 deployment runs, failure when the build or the deployment fails, and error when a newer push cancels
-the queued build. It uses an installation token scoped to that one repository with only `statuses:
-write`, so the App needs the repository permission Commit statuses: Read and write, and each
-installation has to accept it. Until it does, the status is not posted and the build is unaffected.
+the queued build. It uses an installation token scoped to that one repository with only
+`statuses: write`, so the App needs the repository permission Commit statuses: Read and write, and
+each installation has to accept it. Until it does, the status is not posted and the build is unaffected.
 
 Organization admins add Slack, Discord or webhook channels under Settings, Notifications. A webhook
 request carries `X-Liftgate-Signature: sha256=<hex HMAC-SHA256 of the body>`, keyed with the secret
 shown once when the channel is created, the same scheme as GitHub's webhook signature. On every
 delivery the control plane resolves the channel's hostname and connects only to a public IPv4
-address it resolved: never 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10, 169.254.0.0/16,
-0.0.0.0/8, 127.0.0.0/8, 224.0.0.0/3 or an IPv6 address, and it follows no redirects. When the node's
-public address reaches services on the node, add it to `controlPlane.notificationDeniedCidrs`. A
-delivery that fails or gets an answer other than 2xx is retried with a growing delay for an hour.
+address it resolved, never a private, CGNAT, link-local, loopback, multicast, reserved or
+documentation range nor an IPv6 address, and it follows no redirects. When the node's public address
+reaches services on the node, add it to `controlPlane.notificationDeniedCidrs`. A delivery that
+fails or gets an answer other than 2xx is retried with a growing delay for an hour.
 
 ## Values
 
@@ -387,7 +387,7 @@ delivery that fails or gets an answer other than 2xx is retried with a growing d
 | `controlPlane.upstreamOverwritesClientIpHeader` | `false` | Required with `clientIpHeader`: confirms that an upstream proxy overwrites that header on every request |
 | `controlPlane.trustedProxyCidrs` | `[]` | `LIFTGATE_TRUSTED_PROXY_CIDRS`: CIDRs of the proxy that connects to the control plane |
 | `controlPlane.databasePoolSize` | `0` | `LIFTGATE_DATABASE_POOL_SIZE`: the most Postgres connections one control-plane pod holds; `0` keeps the role default of 10 for `api` and `all` and 3 for the other roles, each keeping 2 idle. Size `postgres.maxConnections` for the sum over every pod |
-| `controlPlane.notificationDeniedCidrs` | `[]` | `LIFTGATE_NOTIFICATION_DENIED_CIDRS`: addresses notification channels may never reach, such as the node's public IP. Private, loopback, link-local and multicast IPv4 ranges and every IPv6 address are refused without it. See [Notifications](#notifications) |
+| `controlPlane.notificationDeniedCidrs` | `[]` | `LIFTGATE_NOTIFICATION_DENIED_CIDRS`: addresses notification channels may never reach, such as the node's public IP. Private, CGNAT, link-local, loopback, multicast, reserved and documentation IPv4 ranges and every IPv6 address are refused without it. See [Notifications](#notifications) |
 | `controlPlane.javaOpts` | `-XX:MaxRAMPercentage=75.0` | `JAVA_TOOL_OPTIONS` |
 | `controlPlane.resources` | 250m / 768Mi, limit 1536Mi | |
 | `dashboard.image` | `ghcr.io/liftgate/dashboard` | |

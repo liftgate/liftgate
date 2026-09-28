@@ -1,6 +1,6 @@
 import { connection } from "next/server";
 
-export const sessionCookie = "__Host-liftgate_session";
+export const sessionCookies = ["__Host-liftgate_session", "liftgate_session"];
 
 export async function landingEnabled() {
   await connection();

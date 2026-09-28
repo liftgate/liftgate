@@ -137,7 +137,7 @@ groups:
           description: "Runbook: https://github.com/liftgate/liftgate/blob/main/infra/RUNBOOK.md#buildqueuebacklog"
 
       - alert: CertificateExpiring
-        expr: certmanager_certificate_expiration_timestamp_seconds - time() < 14 * 86400
+        expr: (certmanager_certificate_expiration_timestamp_seconds{name!~".+[.].+"} > 0) - time() < 14 * 86400
         for: 1h
         labels:
           severity: critical

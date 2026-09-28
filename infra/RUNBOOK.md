@@ -206,8 +206,10 @@ Wait, unless no build has started in 30 minutes; then page yourself.
 
 ## CertificateExpiring
 
-A cert-manager Certificate expires in less than 14 days. cert-manager renews a 90-day
+A platform Certificate expires in less than 14 days. cert-manager renews a 90-day
 certificate 30 days before it expires, so renewal has been failing for over two weeks.
+Certificates never issued yet are skipped, and so are custom domain Certificates, which are
+named after their hostname and are the tenant's to fix.
 
 ```sh
 kubectl get certificates --all-namespaces

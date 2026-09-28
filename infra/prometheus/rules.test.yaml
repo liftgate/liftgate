@@ -104,3 +104,26 @@ tests:
             exp_annotations:
               summary: Org org-1 has used 95% of its CPU limits for 2 hours
               description: "Runbook: https://github.com/liftgate/liftgate/blob/main/infra/RUNBOOK.md#orgcpusaturated"
+
+  - interval: 1m
+    input_series:
+      - series: certmanager_certificate_expiration_timestamp_seconds{namespace="liftgate-system", name="liftgate-gateway-liftgate-dev"}
+        values: 864000x80
+      - series: certmanager_certificate_expiration_timestamp_seconds{namespace="liftgate-system", name="liftgate-wildcard"}
+        values: 0x80
+      - series: certmanager_certificate_expiration_timestamp_seconds{namespace="liftgate-system", name="shop.example.com"}
+        values: 864000x80
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: CertificateExpiring
+        exp_alerts: []
+      - eval_time: 1h10m
+        alertname: CertificateExpiring
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              namespace: liftgate-system
+              name: liftgate-gateway-liftgate-dev
+            exp_annotations:
+              summary: Certificate liftgate-system/liftgate-gateway-liftgate-dev expires in 9d 22h 50m 0s
+              description: "Runbook: https://github.com/liftgate/liftgate/blob/main/infra/RUNBOOK.md#certificateexpiring"

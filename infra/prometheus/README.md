@@ -78,8 +78,8 @@ kubectl -n liftgate-system exec statefulset/prometheus-alertmanager -- \
 ## Rules
 
 [`rules.yaml`](rules.yaml) is a plain Prometheus rule file. [`rules.test.yaml`](rules.test.yaml)
-holds promtool unit tests for OutboxStuck, PostgresDown, VolumeFilling and OrgCpuSaturated.
-`chart.yml` runs both in CI:
+holds promtool unit tests for OutboxStuck, PostgresDown, VolumeFilling, CertificateExpiring and
+OrgCpuSaturated. `chart.yml` runs both in CI:
 
 ```sh
 promtool check rules infra/prometheus/rules.yaml
@@ -111,7 +111,9 @@ those pods.
 ## Certificates
 
 CertificateExpiring reads cert-manager's `certmanager_certificate_expiration_timestamp_seconds`,
-so it covers only certificates cert-manager issues. The chart does not create
+so it covers only certificates cert-manager issues, and only those whose name has no dot: the
+chart's `<gateway.name>-<host>` Certificates and `liftgate-wildcard`, not the custom domain
+Certificates the control plane names after their hostname. The chart does not create
 `gateway.wildcardSecret`; if it was made by hand, nothing watches its expiry. This prints the
 owning Certificate, and nothing for a hand-made Secret:
 

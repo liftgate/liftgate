@@ -78,7 +78,7 @@ fail() {
 kubectl -n liftgate-system port-forward service/liftgate-control-plane 8080:8080 > /dev/null &
 forward=$!
 probe=$forward
-trap 'kill $forward $probe 2> /dev/null; rm -f "$codes"' EXIT
+trap 'kill $forward $probe 2> /dev/null || true; rm -f "$codes"' EXIT
 curl --fail --silent --show-error --retry 30 --retry-connrefused --retry-delay 1 --output /dev/null http://localhost:8080/readyz
 
 sql <<EOF

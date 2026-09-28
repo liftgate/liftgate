@@ -6,10 +6,12 @@ sql() {
   kubectl -n liftgate-system exec liftgate-postgres-1 -c postgres -- psql --username postgres --dbname liftgate --set ON_ERROR_STOP=1 --tuples-only --no-align --command "$1"
 }
 plan() {
+  generation="$(kubectl -n $ns get deployment/web -o jsonpath='{.metadata.generation}')"
   sql "update organizations set plan = '$1' where slug = 'e2e-b'"
   sql "insert into outbox (subject, payload) values ('liftgate.org.plan.changed', '{\"orgId\": \"00000000-0000-4000-8000-000000000010\"}')"
   for attempt in $(seq 60); do
-    test "$(kubectl -n $ns get resourcequota liftgate -o jsonpath='{.spec.hard.pods}')" = "$2" && break
+    test "$(kubectl -n $ns get resourcequota liftgate -o jsonpath='{.spec.hard.pods}')" = "$2" &&
+      test "$(kubectl -n $ns get deployment/web -o jsonpath='{.metadata.generation}')" -gt "$generation" && break
     sleep 2
   done
   expect "pods quota on the $1 plan" "$(kubectl -n $ns get resourcequota liftgate -o jsonpath='{.spec.hard.pods}')" "$2"

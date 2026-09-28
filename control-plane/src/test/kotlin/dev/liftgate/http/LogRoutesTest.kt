@@ -5,6 +5,7 @@ import dev.liftgate.TestNats
 import dev.liftgate.auth.Access
 import dev.liftgate.auth.Sessions
 import dev.liftgate.deploy.Builds
+import dev.liftgate.k8s.MAX_LOG_LINE_BYTES
 import dev.liftgate.k8s.PodLogs
 import dev.liftgate.k8s.testBuild
 import dev.liftgate.k8s.testEnvironment
@@ -87,6 +88,8 @@ class LogRoutesTest {
 
     private suspend fun DefaultClientWebSocketSession.lines() = withTimeout(10.seconds) { incoming.consumeAsFlow().map { (it as Frame.Text).readText() }.toList() }
 
+    private suspend fun DefaultClientWebSocketSession.lines(count: Int) = withTimeout(10.seconds) { List(count) { (incoming.receive() as Frame.Text).readText() } }
+
     @Test
     fun `a finished build replays from its first line and the socket closes after the end marker`() = testApplication {
         application { liftgate(app()) }
@@ -105,8 +108,17 @@ class LogRoutesTest {
         log("api-7d9f-aaaaa", "&tailLines=500&timestamps=true&follow=true", "2026-09-28T10:00:00Z hello-liftgate\n")
         log("api-7d9f-bbbbb", "&tailLines=500&timestamps=true&follow=true", "2026-09-28T10:00:05Z hello again\n")
         val socket = open("services/${testService.id}")
-        val lines = withTimeout(10.seconds) { List(2) { (socket.incoming.receive() as Frame.Text).readText() } }
-        assertEquals(setOf("aaaaa 2026-09-28T10:00:00Z hello-liftgate", "bbbbb 2026-09-28T10:00:05Z hello again"), lines.toSet())
+        assertEquals(setOf("aaaaa 2026-09-28T10:00:00Z hello-liftgate", "bbbbb 2026-09-28T10:00:05Z hello again"), socket.lines(2).toSet())
+        socket.close()
+    }
+
+    @Test
+    fun `output without a newline is relayed in chunks no longer than the line cap`() = testApplication {
+        application { liftgate(app()) }
+        listing(pod("api-7d9f-aaaaa")).always()
+        log("api-7d9f-aaaaa", "&tailLines=500&timestamps=true&follow=true", "x".repeat(2 * MAX_LOG_LINE_BYTES + 100))
+        val socket = open("services/${testService.id}")
+        assertEquals(List(2) { "aaaaa ${"x".repeat(MAX_LOG_LINE_BYTES)}" }, socket.lines(2))
         socket.close()
     }
 

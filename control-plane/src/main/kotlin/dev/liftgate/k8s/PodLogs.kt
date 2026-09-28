@@ -20,6 +20,7 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 private const val TAIL_LINES = 500
+const val MAX_LOG_LINE_BYTES = 16 * 1024
 
 /**
  * @author Dean
@@ -63,9 +64,12 @@ class PodLogs(private val kube: KubernetesClient, private val relist: Duration =
         private val line = ByteArrayOutputStream()
 
         override fun write(b: Int) {
-            if (b != '\n'.code) return line.write(b)
-            trySendBlocking("$tag ${line.toString(Charsets.UTF_8)}")
-            line.reset()
+            val newline = b == '\n'.code
+            if (newline || line.size() == MAX_LOG_LINE_BYTES) {
+                trySendBlocking("$tag ${line.toString(Charsets.UTF_8)}")
+                line.reset()
+            }
+            if (!newline) line.write(b)
         }
     }
 }

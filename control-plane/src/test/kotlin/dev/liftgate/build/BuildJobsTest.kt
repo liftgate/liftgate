@@ -42,17 +42,17 @@ class BuildJobsTest {
     private val owner = JobBuilder(job).editMetadata().withUid("job-uid").endMetadata().build()
 
     @Test
-    fun `image refs are registry, org, project-environment-service and a tag without slashes`() {
-        assertEquals("registry.test/acme/shop-production-api:abc123", image)
-        assertEquals("registry.test/acme/shop-production-api:cache", cache)
-        assertEquals("registry.test/acme/shop-production-api:feature-login", BuildJobs.imageRef("registry.test", scope, "feature/login"))
+    fun `image refs are registry, org, project, environment, service and a tag without slashes`() {
+        assertEquals("registry.test/acme/shop/production/api:abc123", image)
+        assertEquals("registry.test/acme/shop/production/api:cache", cache)
+        assertEquals("registry.test/acme/shop/production/api:feature-login", BuildJobs.imageRef("registry.test", scope, "feature/login"))
     }
 
     @Test
     fun `production and preview builds of one service and sha get different image refs and caches`() {
         val preview = scope.copy(environment = testEnvironment.copy(slug = "preview", kind = EnvironmentKind.PREVIEW))
-        assertEquals("registry.test/acme/shop-preview-api:abc123", BuildJobs.imageRef("registry.test", preview, testBuild.commitSha))
-        assertEquals("registry.test/acme/shop-preview-api:cache", BuildJobs.imageRef("registry.test", preview, "cache"))
+        assertEquals("registry.test/acme/shop/preview/api:abc123", BuildJobs.imageRef("registry.test", preview, testBuild.commitSha))
+        assertEquals("registry.test/acme/shop/preview/api:cache", BuildJobs.imageRef("registry.test", preview, "cache"))
     }
 
     @Test

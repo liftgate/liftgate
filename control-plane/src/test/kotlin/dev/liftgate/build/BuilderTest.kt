@@ -66,7 +66,7 @@ class BuilderTest {
     lateinit var server: KubernetesMockServer
 
     private val queued = testBuild.copy(status = BuildStatus.QUEUED, imageRef = null)
-    private val image = "registry.liftgate.internal/acme/shop-production-api:abc123"
+    private val image = "registry.liftgate.internal/acme/shop/production/api:abc123"
     private var permission = HttpStatusCode.OK to """{"permission":"write"}"""
     private val github = GitHubApp(
         GitHubConfig("1", TestKeys.privateKeyPem),
@@ -205,9 +205,9 @@ class BuilderTest {
         }
         build(JobStatusBuilder().withFailed(1).build())
         val env = job().get().spec.template.spec.containers.single().env.associate { it.name to it.value }
-        assertEquals("registry.liftgate.internal/acme/shop-preview-api:abc123", env["IMAGE"])
-        assertEquals("registry.liftgate.internal/acme/shop-preview-api:cache", env["CACHE"])
-        assertEquals("registry.liftgate.internal/acme/shop-production-api:cache", env["PRODUCTION_CACHE"])
+        assertEquals("registry.liftgate.internal/acme/shop/preview/api:abc123", env["IMAGE"])
+        assertEquals("registry.liftgate.internal/acme/shop/preview/api:cache", env["CACHE"])
+        assertEquals("registry.liftgate.internal/acme/shop/production/api:cache", env["PRODUCTION_CACHE"])
     }
 
     @Test

@@ -105,6 +105,13 @@ class WebhooksTest {
     }
 
     @Test
+    fun `a double star directory in a watch path also matches no directory at all`() {
+        val docs = testService.spec().copy(watchPaths = listOf("**/*.md", "apps/**/test/*.ts"))
+        listOf("README.md", "docs/guide/intro.md", "apps/test/unit.ts", "apps/web/test/unit.ts").forEach { assertTrue(docs.watches(listOf(it)), it) }
+        listOf("src/index.ts", "apps/web/unit.ts").forEach { assertFalse(docs.watches(listOf(it)), it) }
+    }
+
+    @Test
     fun `a push that does not match its signature is rejected`() = testApplication {
         application { liftgate(app) }
         val response = client.post("/api/v1/webhooks/github") {

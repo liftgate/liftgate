@@ -132,21 +132,21 @@ class RegistryJanitorTest {
         val environment = environment()
         val api = services.create(environment, ServiceSpec("api", "API", ServiceKind.WEB)).id
         val gone = services.create(environment, ServiceSpec("gone", "Gone", ServiceKind.WORKER)).id
-        release(api, "old.registry/acme/shop-production-api:${sha(0)}")
-        val released = (1..12).map { release(api, "registry.test/acme/shop-production-api:${sha(it)}") }
+        release(api, "old.registry/acme/shop/production/api:${sha(0)}")
+        val released = (1..12).map { release(api, "registry.test/acme/shop/production/api:${sha(it)}") }
         deployments.transition(deployments.rollback(released[1].id).id, DeploymentStatus.RUNNING)
         deployments.transition(deployments.rollback(released[11].id).id, DeploymentStatus.FAILED)
         builds.request(api, sha(13), null, "main")
-        release(gone, "registry.test/acme/shop-production-gone:${sha(31)}")
+        release(gone, "registry.test/acme/shop/production/gone:${sha(31)}")
         services.delete(gone)
         val blog = environment("blog")
-        release(services.create(blog, ServiceSpec("web", "Web", ServiceKind.WEB)).id, "registry.test/acme/blog-production-web:${sha(41)}")
+        release(services.create(blog, ServiceSpec("web", "Web", ServiceKind.WEB)).id, "registry.test/acme/blog/production/web:${sha(41)}")
         Projects(db).delete(requireNotNull(Projects(db).environment(blog)).projectId)
-        registry["acme/shop-production-api"] = (1..13).associate { sha(it) to "sha256:d%02d".format(it) }.toMutableMap()
+        registry["acme/shop/production/api"] = (1..13).associate { sha(it) to "sha256:d%02d".format(it) }.toMutableMap()
             .apply { putAll(mapOf("cache" to "sha256:dcache", sha(14) to "sha256:dstray", sha(15) to "sha256:d05", "latest" to "sha256:dlatest")) }
-        registry["acme/shop-production-gone"] = mutableMapOf(sha(31) to "sha256:dg1", "cache" to "sha256:dgcache")
-        registry["acme/blog-production-web"] = mutableMapOf(sha(41) to "sha256:dw1")
-        registry["liftgate/control-production-plane"] = mutableMapOf("0.1.0" to "sha256:platform")
+        registry["acme/shop/production/gone"] = mutableMapOf(sha(31) to "sha256:dg1", "cache" to "sha256:dgcache")
+        registry["acme/blog/production/web"] = mutableMapOf(sha(41) to "sha256:dw1")
+        registry["liftgate/control/production/plane"] = mutableMapOf("0.1.0" to "sha256:platform")
         val config = testConfig().copy(registry = "registry.test")
 
         assertEquals(5, janitor(config).runOnce())
@@ -154,16 +154,16 @@ class RegistryJanitorTest {
         val deletes = requests.filter { it.method == HttpMethod.Delete }
         assertEquals(
             setOf(
-                "acme/shop-production-api/manifests/sha256:d01",
-                "acme/shop-production-api/manifests/sha256:dstray",
-                "acme/shop-production-gone/manifests/sha256:dg1",
-                "acme/shop-production-gone/manifests/sha256:dgcache",
-                "acme/blog-production-web/manifests/sha256:dw1",
+                "acme/shop/production/api/manifests/sha256:d01",
+                "acme/shop/production/api/manifests/sha256:dstray",
+                "acme/shop/production/gone/manifests/sha256:dg1",
+                "acme/shop/production/gone/manifests/sha256:dgcache",
+                "acme/blog/production/web/manifests/sha256:dw1",
             ),
             deletes.map { it.url.encodedPath.removePrefix("/v2/") }.toSet(),
         )
         assertTrue(requests.none { "liftgate/" in it.url.encodedPath })
-        assertEquals(((2..15) - 14).map(::sha).toSet() + setOf("cache", "latest"), registry.getValue("acme/shop-production-api").keys)
+        assertEquals(((2..15) - 14).map(::sha).toSet() + setOf("cache", "latest"), registry.getValue("acme/shop/production/api").keys)
         assertEquals(setOf(sha(1)), pruned())
         assertPruned(released[0])
 
@@ -176,11 +176,11 @@ class RegistryJanitorTest {
     @Test
     fun `tags builds never push and their manifests survive in a repository that a service maps onto`() = runBlocking {
         services.create(environment("control", "liftgate"), ServiceSpec("plane", "Plane", ServiceKind.WEB))
-        registry["liftgate/control-production-plane"] = mutableMapOf("0.1.0" to "sha256:platform", "0.1" to "sha256:platform", sha(7) to "sha256:platform")
+        registry["liftgate/control/production/plane"] = mutableMapOf("0.1.0" to "sha256:platform", "0.1" to "sha256:platform", sha(7) to "sha256:platform")
 
         assertEquals(0, janitor(testConfig().copy(registry = "registry.test")).runOnce())
 
-        assertEquals(setOf("0.1.0", "0.1", sha(7)), registry.getValue("liftgate/control-production-plane").keys)
+        assertEquals(setOf("0.1.0", "0.1", sha(7)), registry.getValue("liftgate/control/production/plane").keys)
         assertTrue(requests.none { it.method == HttpMethod.Delete })
     }
 
@@ -188,34 +188,34 @@ class RegistryJanitorTest {
     fun `a service whose deploys all fail keeps its newest ten builds and the cache`() = runBlocking {
         val api = services.create(environment(), ServiceSpec("api", "API", ServiceKind.WEB)).id
         (1..30).forEach {
-            val deployment = assertNotNull(builds.markSucceeded(builds.request(api, sha(it), null, "main").id, "registry.test/acme/shop-production-api:${sha(it)}"))
+            val deployment = assertNotNull(builds.markSucceeded(builds.request(api, sha(it), null, "main").id, "registry.test/acme/shop/production/api:${sha(it)}"))
             deployments.transition(deployment.id, DeploymentStatus.FAILED)
         }
-        registry["acme/shop-production-api"] = ((1..30).associate { sha(it) to "sha256:d%02d".format(it) } + ("cache" to "sha256:dcache")).toMutableMap()
+        registry["acme/shop/production/api"] = ((1..30).associate { sha(it) to "sha256:d%02d".format(it) } + ("cache" to "sha256:dcache")).toMutableMap()
 
         assertEquals(20, janitor(testConfig().copy(registry = "registry.test")).runOnce())
 
-        assertEquals((21..30).map(::sha).toSet() + "cache", registry.getValue("acme/shop-production-api").keys)
+        assertEquals((21..30).map(::sha).toSet() + "cache", registry.getValue("acme/shop/production/api").keys)
         assertEquals((1..20).map(::sha).toSet(), pruned())
     }
 
     @Test
     fun `a pending rollback to a build older than the newest ten keeps that build's image`() = runBlocking {
         val api = services.create(environment(), ServiceSpec("api", "API", ServiceKind.WEB)).id
-        val released = (1..15).map { release(api, "registry.test/acme/shop-production-api:${sha(it)}") }
+        val released = (1..15).map { release(api, "registry.test/acme/shop/production/api:${sha(it)}") }
         assertEquals(DeploymentStatus.PENDING, deployments.rollback(released[1].id).status)
-        registry["acme/shop-production-api"] = ((1..15).associate { sha(it) to "sha256:d%02d".format(it) } + ("cache" to "sha256:dcache")).toMutableMap()
+        registry["acme/shop/production/api"] = ((1..15).associate { sha(it) to "sha256:d%02d".format(it) } + ("cache" to "sha256:dcache")).toMutableMap()
 
         assertEquals(4, janitor(testConfig().copy(registry = "registry.test")).runOnce())
 
-        assertEquals((6..15).map(::sha).toSet() + sha(2) + "cache", registry.getValue("acme/shop-production-api").keys)
+        assertEquals((6..15).map(::sha).toSet() + sha(2) + "cache", registry.getValue("acme/shop/production/api").keys)
         assertEquals(listOf(1, 3, 4, 5).map(::sha).toSet(), pruned())
     }
 
     @Test
     fun `shared registry auth logs in with the registry-credentials secret when there is one`() = runBlocking {
-        release(services.create(environment(), ServiceSpec("api", "API", ServiceKind.WEB)).id, "registry.test/acme/shop-production-api:${sha(1)}")
-        registry["acme/shop-production-api"] = mutableMapOf(sha(1) to "sha256:d01")
+        release(services.create(environment(), ServiceSpec("api", "API", ServiceKind.WEB)).id, "registry.test/acme/shop/production/api:${sha(1)}")
+        registry["acme/shop/production/api"] = mutableMapOf(sha(1) to "sha256:d01")
         val config = testConfig().copy(registry = "registry.test")
         janitor(config).runOnce()
         assertTrue(requests.isNotEmpty() && requests.all { it.headers[HttpHeaders.Authorization] == null })
@@ -243,10 +243,10 @@ class RegistryJanitorTest {
             manifest(repository, "cache", token, "application/vnd.oci.image.index.v1+json", """{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[${descriptor("application/vnd.oci.image.layer.v1.tar+gzip", LAYER)},${descriptor("application/vnd.buildkit.cacheconfig.v0", cache(n))}]}""")
             return succeed(build.id, "${TestRegistry.ADDRESS}/$repository:${sha(n)}")
         }
-        val released = (1..30).map { deploy(api, "acme/store-production-api", it) }
+        val released = (1..30).map { deploy(api, "acme/store/production/api", it) }
         deployments.transition(deployments.rollback(released[0].id).id, DeploymentStatus.RUNNING)
         deployments.transition(deployments.rollback(released[2].id).id, DeploymentStatus.RUNNING)
-        (31..32).forEach { deploy(old, "acme/store-production-old", it) }
+        (31..32).forEach { deploy(old, "acme/store/production/old", it) }
         services.delete(old)
         val server = embeddedServer(Netty, port = 0) {
             liftgate(mockk<App> {
@@ -275,21 +275,21 @@ class RegistryJanitorTest {
         }
 
         assertEquals(listOf(22, 0), deleted)
-        val pull = requireNotNull(tokens.token("pull", "pull-password", listOf("repository:acme/store-production-api:pull", "repository:acme/store-production-old:pull")))
-        assertEquals((21..30).map(::sha).toSet() + sha(3) + "cache", tags("acme/store-production-api", pull))
-        assertEquals(emptySet(), tags("acme/store-production-old", pull))
+        val pull = requireNotNull(tokens.token("pull", "pull-password", listOf("repository:acme/store/production/api:pull", "repository:acme/store/production/old:pull")))
+        assertEquals((21..30).map(::sha).toSet() + sha(3) + "cache", tags("acme/store/production/api", pull))
+        assertEquals(emptySet(), tags("acme/store/production/old", pull))
         assertEquals(((1..20) - 3).map(::sha).toSet(), pruned())
         assertPruned(released[0])
         assertEquals(0L, orphans())
 
         val platform = builds.request(services.create(environment("control", "liftgate"), ServiceSpec("plane", "Plane", ServiceKind.WEB)).id, sha(40), null, "main").also { builds.markRunning(it.id) }
-        val push = requireNotNull(tokens.token(BuildJobs.name(platform.id), tokens.issue(platform.id), listOf("repository:liftgate/control-production-plane:pull,push")))
+        val push = requireNotNull(tokens.token(BuildJobs.name(platform.id), tokens.issue(platform.id), listOf("repository:liftgate/control/production/plane:pull,push")))
         val (indexed, single) = listOf(40, 41).map { """{"schemaVersion":2,"mediaType":"$OCI_MANIFEST","config":${descriptor("application/vnd.oci.image.config.v1+json", image(it))},"layers":[${descriptor("application/vnd.oci.image.layer.v1.tar+gzip", LAYER)}]}""" }
-        listOf(LAYER, image(40), image(41)).forEach { upload("liftgate/control-production-plane", push, it) }
-        manifest("liftgate/control-production-plane", digest(indexed), push, OCI_MANIFEST, indexed)
-        manifest("liftgate/control-production-plane", "0.1.0", push, OCI_INDEX, """{"schemaVersion":2,"mediaType":"$OCI_INDEX","manifests":[${descriptor(OCI_MANIFEST, indexed)}]}""")
-        manifest("liftgate/control-production-plane", "0.1.1", push, OCI_MANIFEST, single)
-        fun fetch(content: String) = TestRegistry.send("GET", "/v2/liftgate/control-production-plane/manifests/${digest(content)}", push).statusCode()
+        listOf(LAYER, image(40), image(41)).forEach { upload("liftgate/control/production/plane", push, it) }
+        manifest("liftgate/control/production/plane", digest(indexed), push, OCI_MANIFEST, indexed)
+        manifest("liftgate/control/production/plane", "0.1.0", push, OCI_INDEX, """{"schemaVersion":2,"mediaType":"$OCI_INDEX","manifests":[${descriptor(OCI_MANIFEST, indexed)}]}""")
+        manifest("liftgate/control/production/plane", "0.1.1", push, OCI_MANIFEST, single)
+        fun fetch(content: String) = TestRegistry.send("GET", "/v2/liftgate/control/production/plane/manifests/${digest(content)}", push).statusCode()
         assertEquals(200, fetch(indexed))
 
         val gc = TestRegistry.container.execInContainer("env", "REGISTRY_STORAGE_MAINTENANCE_READONLY={\"enabled\":true}", "registry", "garbage-collect", "--delete-untagged", "/etc/docker/registry/config.yml")

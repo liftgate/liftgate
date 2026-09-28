@@ -90,7 +90,7 @@ data class ServiceSpec(
 
     fun watches(files: Collection<String>): Boolean {
         val globs = watchPaths.ifEmpty { listOfNotNull(rootDir.trim('/').takeIf { it.isNotEmpty() }?.let { "$it/**" }) }
-            .map { FileSystems.getDefault().getPathMatcher("glob:${it.trimStart('/')}") }
+            .map { FileSystems.getDefault().getPathMatcher("glob:${it.trimStart('/').replace("**/", "{**/,}")}") }
         return globs.isEmpty() || files.any { file -> globs.any { it.matches(Path.of(file)) } }
     }
 }

@@ -64,7 +64,7 @@ object BuildJobs {
 
     fun name(buildId: UUID) = "build-$buildId"
 
-    fun repository(scope: ServiceScope) = with(scope) { "${org.slug}/${project.slug}-${environment.slug}-${service.slug}" }
+    fun repository(scope: ServiceScope) = with(scope) { "${org.slug}/${project.slug}/${environment.slug}/${service.slug}" }
 
     fun imageRef(registry: String, scope: ServiceScope, sha: String) = "$registry/${repository(scope)}:${sha.replace('/', '-')}"
 

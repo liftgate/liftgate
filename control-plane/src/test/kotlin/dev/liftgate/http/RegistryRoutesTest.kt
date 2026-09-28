@@ -81,16 +81,16 @@ class RegistryRoutesTest {
         val rivalPassword = tokens.issue(rival)
         application { liftgate(app) }
 
-        val own = jwt(BuildJobs.name(acme), acmePassword, "repository:acme/shop-production-api:pull,push", "repository:rival/shop-production-api:pull,push")
-        assertEquals(listOf(mapOf("type" to "repository", "name" to "acme/shop-production-api", "actions" to listOf("pull", "push"))), access(own))
+        val own = jwt(BuildJobs.name(acme), acmePassword, "repository:acme/shop/production/api:pull,push", "repository:rival/shop/production/api:pull,push")
+        assertEquals(listOf(mapOf("type" to "repository", "name" to "acme/shop/production/api", "actions" to listOf("pull", "push"))), access(own))
         assertTrue(JWT.decode(own).expiresAtAsInstant <= Instant.now().plusSeconds(300))
-        assertEquals(202, registry("POST", "acme/shop-production-api/blobs/uploads/", own))
+        assertEquals(202, registry("POST", "acme/shop/production/api/blobs/uploads/", own))
 
-        val theirs = jwt(BuildJobs.name(rival), rivalPassword, "repository:rival/shop-production-api:pull,push")
-        assertEquals(202, registry("POST", "rival/shop-production-api/blobs/uploads/", theirs))
-        assertEquals(404, registry("GET", "rival/shop-production-api/tags/list", theirs))
-        assertEquals(401, registry("POST", "rival/shop-production-api/blobs/uploads/", own))
-        assertEquals(401, registry("GET", "rival/shop-production-api/tags/list", own))
+        val theirs = jwt(BuildJobs.name(rival), rivalPassword, "repository:rival/shop/production/api:pull,push")
+        assertEquals(202, registry("POST", "rival/shop/production/api/blobs/uploads/", theirs))
+        assertEquals(404, registry("GET", "rival/shop/production/api/tags/list", theirs))
+        assertEquals(401, registry("POST", "rival/shop/production/api/blobs/uploads/", own))
+        assertEquals(401, registry("GET", "rival/shop/production/api/tags/list", own))
     }
 
     @Test
@@ -105,17 +105,17 @@ class RegistryRoutesTest {
 
         val granted = jwt(
             BuildJobs.name(build), password,
-            "repository:acme/shop-preview-api:pull,push", "repository:acme/shop-production-api:pull,push", "repository:acme/shop-production-web:pull",
+            "repository:acme/shop/preview/api:pull,push", "repository:acme/shop/production/api:pull,push", "repository:acme/shop/production/web:pull",
         )
         assertEquals(
             listOf(
-                mapOf("type" to "repository", "name" to "acme/shop-preview-api", "actions" to listOf("pull", "push")),
-                mapOf("type" to "repository", "name" to "acme/shop-production-api", "actions" to listOf("pull")),
+                mapOf("type" to "repository", "name" to "acme/shop/preview/api", "actions" to listOf("pull", "push")),
+                mapOf("type" to "repository", "name" to "acme/shop/production/api", "actions" to listOf("pull")),
             ),
             access(granted),
         )
-        assertEquals(404, registry("GET", "acme/shop-production-api/tags/list", granted))
-        assertEquals(401, registry("POST", "acme/shop-production-api/blobs/uploads/", granted))
+        assertEquals(404, registry("GET", "acme/shop/production/api/tags/list", granted))
+        assertEquals(401, registry("POST", "acme/shop/production/api/blobs/uploads/", granted))
     }
 
     @Test
@@ -128,36 +128,36 @@ class RegistryRoutesTest {
         builds.markFailed(finished, "the build job failed")
         application { liftgate(app) }
         listOf(
-            token(BuildJobs.name(finished), finishedPassword, "repository:acme/shop-production-api:pull"),
-            token(BuildJobs.name(revoked), revokedPassword, "repository:rival/shop-production-api:pull"),
-            token(BuildJobs.name(revoked), finishedPassword, "repository:rival/shop-production-api:pull"),
-            token("pull", "wrong", "repository:acme/shop-production-api:pull"),
-            token("janitor", "pull-password", "repository:acme/shop-production-api:delete"),
-            client.get("/api/v1/registry/token?scope=repository:acme/shop-production-api:pull"),
+            token(BuildJobs.name(finished), finishedPassword, "repository:acme/shop/production/api:pull"),
+            token(BuildJobs.name(revoked), revokedPassword, "repository:rival/shop/production/api:pull"),
+            token(BuildJobs.name(revoked), finishedPassword, "repository:rival/shop/production/api:pull"),
+            token("pull", "wrong", "repository:acme/shop/production/api:pull"),
+            token("janitor", "pull-password", "repository:acme/shop/production/api:delete"),
+            client.get("/api/v1/registry/token?scope=repository:acme/shop/production/api:pull"),
         ).forEach { assertEquals(HttpStatusCode.Unauthorized, it.status) }
     }
 
     @Test
     fun `the node pull account reads any repository and writes none`() = testApplication {
         application { liftgate(app) }
-        val pull = jwt("pull", "pull-password", "repository:acme/shop-production-api:pull,push")
-        assertEquals(listOf(mapOf("type" to "repository", "name" to "acme/shop-production-api", "actions" to listOf("pull"))), access(pull))
-        assertEquals(404, registry("GET", "acme/shop-production-api/tags/list", pull))
-        assertEquals(401, registry("POST", "acme/shop-production-api/blobs/uploads/", pull))
+        val pull = jwt("pull", "pull-password", "repository:acme/shop/production/api:pull,push")
+        assertEquals(listOf(mapOf("type" to "repository", "name" to "acme/shop/production/api", "actions" to listOf("pull"))), access(pull))
+        assertEquals(404, registry("GET", "acme/shop/production/api/tags/list", pull))
+        assertEquals(401, registry("POST", "acme/shop/production/api/blobs/uploads/", pull))
     }
 
     @Test
     fun `the janitor account may pull and delete in any repository and push to none`() = testApplication {
         application { liftgate(app) }
-        val janitor = jwt("janitor", "janitor-password", "repository:acme/shop-production-api:pull,push,delete")
-        assertEquals(listOf(mapOf("type" to "repository", "name" to "acme/shop-production-api", "actions" to listOf("pull", "delete"))), access(janitor))
-        assertEquals(401, registry("POST", "acme/shop-production-api/blobs/uploads/", janitor))
+        val janitor = jwt("janitor", "janitor-password", "repository:acme/shop/production/api:pull,push,delete")
+        assertEquals(listOf(mapOf("type" to "repository", "name" to "acme/shop/production/api", "actions" to listOf("pull", "delete"))), access(janitor))
+        assertEquals(401, registry("POST", "acme/shop/production/api/blobs/uploads/", janitor))
     }
 
     @Test
     fun `shared registry auth serves no tokens`() = testApplication {
         every { app.config } returns testConfig()
         application { liftgate(app) }
-        assertEquals(HttpStatusCode.NotFound, token("pull", "pull-password", "repository:acme/shop-production-api:pull").status)
+        assertEquals(HttpStatusCode.NotFound, token("pull", "pull-password", "repository:acme/shop/production/api:pull").status)
     }
 }

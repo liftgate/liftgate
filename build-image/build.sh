@@ -41,7 +41,7 @@ if [ "$LIFTGATE_BUILD_STRATEGY" = dockerfile ] || [ -f "$dockerfile" ]; then
 else
   plan=$(mktemp -d)
   prepare --plan-out "$plan/railpack-plan.json" "$context"
-  hash=$(for name in ${LIFTGATE_BUILD_ENV_NAMES:-}; do printf '%s=%s\n' "$name" "$(value "$name")"; done | sha256sum | cut -d ' ' -f 1)
+  hash=$(for name in ${LIFTGATE_BUILD_ENV_NAMES:-}; do printf '%s\0' "$name"; value "$name"; printf '\0'; done | sha256sum | cut -d ' ' -f 1)
   set -- --frontend gateway.v0 --opt "source=ghcr.io/railwayapp/railpack-frontend:v$RAILPACK_VERSION" --local "dockerfile=$plan" --opt "build-arg:secrets-hash=$hash"
 fi
 

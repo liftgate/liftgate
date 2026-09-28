@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useRef, useState, useSyncExternalStore, type Dispatch, type SetStateAction } from "react";
-import { Button } from "@/components/ui/button";
+import { Button, Spinner } from "@/components/ui/button";
 
 type State = "idle" | "starting" | "playing" | "paused" | "ended" | "error";
 
@@ -78,7 +78,6 @@ export function Showreel({ transcript }: { transcript: string }) {
       {mounted && control && (
         <Button
           aria-label={control[1]}
-          pending={state === "starting"}
           onClick={() => {
             userPaused.current = state === "playing";
             if (state === "playing") video.current?.pause();
@@ -86,6 +85,7 @@ export function Showreel({ transcript }: { transcript: string }) {
           }}
           className="absolute right-4 bottom-4"
         >
+          {state === "starting" && <Spinner />}
           {control[0]}
         </Button>
       )}

@@ -20,7 +20,7 @@ const podSpec = `.withNewSpec()
 .endSpec()`;
 
 const line = (code: string) => (
-  <div className="mt-auto px-6 pb-6">
+  <div className="px-6 pb-6">
     <code className="block font-mono text-xs leading-5 text-graphite-200">{code}</code>
   </div>
 );
@@ -35,8 +35,8 @@ const rules: { title: string; body: string; path: string; lines: [number, number
     lines: [228, 263],
     className: "bg-graphite-900 md:col-span-2 lg:col-span-7 lg:row-span-2",
     visual: (
-      <div className="mt-auto -mb-4 pl-6">
-        <pre className="w-192 rounded-lg border border-graphite-700 bg-graphite-950 p-4 font-mono text-xs leading-5 text-graphite-200">{podSpec}</pre>
+      <div className="flex flex-1 pl-6 mask-r-from-[calc(100%-4rem)]">
+        <pre className="min-w-0 flex-1 overflow-hidden rounded-tl-lg border-t border-l border-graphite-700 bg-graphite-950 p-4 font-mono text-xs leading-5 text-graphite-200">{podSpec}</pre>
       </div>
     ),
   },
@@ -61,10 +61,10 @@ const rules: { title: string; body: string; path: string; lines: [number, number
     body: "Variables are encrypted with AES-256-GCM and injected at runtime, not at build time. The API never sends a secret value back.",
     path: "control-plane/src/main/kotlin/dev/liftgate/secret/SecretBox.kt",
     lines: [15, 33],
-    className: "bg-graphite-950 md:col-span-2 lg:col-span-12 lg:flex-row",
-    textClassName: "lg:w-96 lg:shrink-0",
+    className: "bg-graphite-950 md:col-span-2 lg:col-span-12 xl:flex-row",
+    textClassName: "xl:w-96 xl:shrink-0",
     visual: (
-      <div className="mt-auto pb-6 pl-6 md:pr-6 lg:-mb-4 lg:min-w-0 lg:flex-1 lg:pt-6 lg:pb-0 lg:pl-0">
+      <div className="pb-6 pl-6 max-md:mask-r-from-[calc(100%-4rem)] md:pr-6 xl:min-w-0 xl:flex-1 xl:pt-6 xl:pl-0">
         <div inert className="w-192 md:w-auto">
           <EnvEditor serviceId="demo" initial={envVars} />
         </div>
@@ -76,7 +76,7 @@ const rules: { title: string; body: string; path: string; lines: [number, number
 export function Security() {
   return (
     <Section id="security" title="Isolation you can check in the source" body="Liftgate treats every app as untrusted code. Each rule below links to the file that enforces it.">
-      <div className="mt-8 grid gap-4 md:mt-12 md:grid-cols-2 md:gap-6 lg:grid-cols-12 lg:grid-rows-[18rem_18rem_20rem]">
+      <div className="mt-8 grid gap-4 md:mt-12 md:grid-cols-2 md:gap-6 lg:grid-cols-12">
         {rules.map((rule) => {
           const file = rule.path.split("/").pop();
           return (

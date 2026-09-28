@@ -3,7 +3,7 @@ import { h2 } from "./styles";
 
 export function Section({ id, title, body, children }: { id: string; title: ReactNode; body?: ReactNode; children: ReactNode }) {
   return (
-    <section id={id} aria-labelledby={`${id}-title`} className="mt-24 scroll-mt-20 md:mt-40 xl:mt-52">
+    <section id={id} aria-labelledby={`${id}-title`} className="mt-24 md:mt-40 xl:mt-52">
       <div className="max-w-3xl">
         <h2 id={`${id}-title`} className={h2}>
           {title}

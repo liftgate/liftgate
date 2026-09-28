@@ -14,7 +14,7 @@ export const viewport: Viewport = { themeColor: "#0d0b12", colorScheme: "dark" }
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
+    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full scroll-pt-20 antialiased`}>
       <body className="flex min-h-full flex-col font-sans">{children}</body>
     </html>
   );

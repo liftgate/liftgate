@@ -12,7 +12,7 @@ export function Closing() {
         Start with one repository
       </h2>
       <p className={`mt-4 ${lead}`}>
-        Liftgate Cloud is free during the beta, with no uptime guarantee, and accounts are approved by hand. The source is on GitHub.
+        Liftgate Cloud is free while the project is pre-alpha, with no uptime guarantee, and accounts are approved by hand. The source is on GitHub.
       </p>
       <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
         <Link href="/login" className={buttonClasses("primary", "", "lg")}>

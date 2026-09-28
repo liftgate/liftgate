@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 const sections = [
   { path: "tokens", title: "API tokens", description: "Credentials for CI and scripts, with an expiry and revocation." },
   { path: "sso", title: "SAML single sign-on", description: "Members sign in through your identity provider." },
+  { path: "notifications", title: "Notifications", description: "Build failures and deployments posted to Slack, Discord or a signed webhook." },
 ];
 
 export async function generateMetadata({ params }: PageProps<"/[org]/settings">): Promise<Metadata> {
@@ -17,7 +18,7 @@ export default async function SettingsPage({ params }: PageProps<"/[org]/setting
   const { org } = await params;
   return (
     <div className="flex flex-col gap-8">
-      <PageHeader title="Settings" description="Access and sign-in for this organization." />
+      <PageHeader title="Settings" description="Access, sign-in and notifications for this organization." />
       <Card className="overflow-hidden">
         <ul className="divide-y divide-graphite-700">
           {sections.map((section) => (

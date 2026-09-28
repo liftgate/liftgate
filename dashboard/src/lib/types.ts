@@ -169,3 +169,17 @@ export type Usage = {
   cpuMillis: number;
   memoryMb: number;
 };
+
+export type NotificationKind = "slack" | "discord" | "webhook";
+
+export type NotificationEvent = "build_failed" | "deployment_running" | "deployment_failed";
+
+export type NotificationChannel = {
+  id: string;
+  name: string;
+  kind: NotificationKind;
+  host: string;
+  events: NotificationEvent[];
+  createdAt: string;
+  secret: string | null;
+};

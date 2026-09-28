@@ -297,4 +297,12 @@ class ConfigTest {
         val config = Config.fromEnv(builder + ("LIFTGATE_REGISTRY_JANITOR_PASSWORD" to "janitor"))
         assertEquals(null to "janitor", config.registryTokens to config.registryJanitorPassword)
     }
+
+    @Test
+    fun `the build log byte limit must be a positive number`() {
+        assertEquals(536_870_912L, Config.fromEnv(minimalEnv).buildLogsMaxBytes)
+        listOf("0", "-1", "lots").forEach {
+            assertTrue("LIFTGATE_BUILD_LOGS_MAX_BYTES" in assertFailsWith<IllegalStateException> { Config.fromEnv(minimalEnv + ("LIFTGATE_BUILD_LOGS_MAX_BYTES" to it)) }.message.orEmpty(), it)
+        }
+    }
 }

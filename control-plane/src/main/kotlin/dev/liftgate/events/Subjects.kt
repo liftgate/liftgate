@@ -21,5 +21,3 @@ enum class Subject(val value: String) {
 }
 
 fun buildLogSubject(buildId: UUID) = "liftgate.logs.build.$buildId"
-
-fun serviceLogSubject(serviceId: UUID) = "liftgate.logs.service.$serviceId"

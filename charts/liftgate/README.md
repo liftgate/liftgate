@@ -427,6 +427,7 @@ empty, neither appears.
 | `build.registryCredentials` | `""` | Docker `config.json` content; rendered as Secret `registry-credentials` in `build.namespace` and mounted by build jobs. `registryAuth: shared` only |
 | `build.nodeSelector` | `{}` | `LIFTGATE_BUILD_NODE_SELECTOR`; node labels for build jobs, `nodeSelector` when empty |
 | `build.tolerations` | `[]` | `LIFTGATE_BUILD_TOLERATIONS`; taints build jobs tolerate, in the same form as `workloads.tolerations` |
+| `build.logsMaxBytes` | `536870912` | `LIFTGATE_BUILD_LOGS_MAX_BYTES`; the most build log bytes the JetStream stream `LIFTGATE_LOGS` keeps, next to its limits of 7 days and 50,000 lines per build. NATS reserves this much on every server and refuses to create the stream when it does not fit in the JetStream file store (`nats.config.jetstream.fileStore.pvc.size`, 5Gi by default) |
 | `runtimeClass` | `gvisor` | `LIFTGATE_RUNTIME_CLASS`; the RuntimeClass of every tenant pod. The chart refuses to render when it is empty unless `allowUnsandboxedTenants=true` |
 | `allowUnsandboxedTenants` | `false` | With an empty `runtimeClass`, renders `LIFTGATE_ALLOW_RUNC=true` so tenant pods run under runc on the node kernel. Only for clusters where every tenant is trusted |
 | `workloads.nodeSelector` | `{}` | `LIFTGATE_WORKLOAD_NODE_SELECTOR`; node labels for tenant pods, `nodeSelector` when empty |
@@ -457,9 +458,10 @@ is the release name when it contains `liftgate`, otherwise `<release>-liftgate`)
 `LIFTGATE_NATS_URL` points at the subchart Service (or `nats.externalUrl`),
 `LIFTGATE_NATS_REPLICAS` is `3` when the managed NATS cluster is enabled and `1` otherwise,
 `LIFTGATE_HAZELCAST_KUBERNETES` is `true` in `ha`, `LIFTGATE_GATEWAY_NAMESPACE` is the release
-namespace, `LIFTGATE_LEADER_ELECTION` is `kubernetes`, `LIFTGATE_HTTP_PORT` is `8080` and, in
-`ha`, `LIFTGATE_INTERNAL_URL` is the control-plane Service, which the builder asks for registry
-tokens.
+namespace, `LIFTGATE_LEADER_ELECTION` is `kubernetes`, `LIFTGATE_HTTP_PORT` is `8080`,
+`LIFTGATE_LOG_READER_ROLE` is `<fullname>-log-reader`, `LIFTGATE_LOG_READER_ACCOUNT` is the
+ServiceAccount of `api` (of `all` in `single`) and, in `ha`, `LIFTGATE_INTERNAL_URL` is the
+control-plane Service, which the builder asks for registry tokens.
 Empty optional values are left out of the ConfigMap and Secret so the control plane reports
 missing configuration instead of running with blank secrets.
 
@@ -520,7 +522,7 @@ The `ha` profile gives each role its own ServiceAccount and Secret:
 
 | Role | Kubernetes access | Secret values |
 |---|---|---|
-| `api` | Role in the release namespace: leases, endpoints, endpoint slices | master key, GitHub App key and webhook secret, OAuth client secrets, SMTP URL, registry signing key and pull password |
+| `api` | Role in the release namespace: leases, endpoints, endpoint slices; in each managed namespace, a RoleBinding to ClusterRole `<fullname>-log-reader` (pods and their logs) that the reconciler creates | master key, GitHub App key and webhook secret, OAuth client secrets, SMTP URL, registry signing key and pull password |
 | `reconciler` | ClusterRole `<fullname>`, the release namespace Role, and `bind` on ClusterRole `<fullname>-log-reader` | master key |
 | `builder` | Role `<fullname>-builder` in `build.namespace` (jobs, secrets, pods and their logs), the release namespace Role | GitHub App key |
 | `meter` | ClusterRole `<fullname>-meter` (list pods), the release namespace Role | none |

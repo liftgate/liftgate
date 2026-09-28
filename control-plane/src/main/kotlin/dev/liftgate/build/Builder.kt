@@ -3,7 +3,6 @@ package dev.liftgate.build
 import dev.liftgate.App
 import dev.liftgate.deploy.BuildStatus
 import dev.liftgate.events.Subject
-import dev.liftgate.events.buildLogSubject
 import dev.liftgate.events.uuid
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.ScalableResource
@@ -37,8 +36,8 @@ class Builder(private val app: App, private val kube: KubernetesClient) {
     suspend fun build(buildId: UUID) {
         val build = app.builds.byId(buildId)?.takeIf { it.status == BuildStatus.QUEUED || it.status == BuildStatus.RUNNING } ?: return
         val scope = app.services.scope(build.serviceId) ?: return
-        app.buildAdmission.admit(build, scope.org.id)?.let { return app.builds.markFailed(buildId, it) }
-        val github = app.github ?: return app.builds.markFailed(buildId, "the GitHub App is not configured")
+        app.buildAdmission.admit(build, scope.org.id)?.let { return fail(buildId, it) }
+        val github = app.github ?: return fail(buildId, "the GitHub App is not configured")
         val config = app.config
         val project = scope.project
         val image = BuildJobs.imageRef(config.registry, scope.org, project, scope.service, build.commitSha)
@@ -67,9 +66,15 @@ class Builder(private val app: App, private val kube: KubernetesClient) {
             app.builds.markFailed(buildId, failure)
         }
         app.registryTokens.revoke(buildId)
+        app.nats.logs.end(buildId, failure)
     }
 
     fun start(): Job = app.nats.consume(Subject.BUILD_REQUESTED, "builder-build-requested", app.scope, Duration.ofSeconds(60), CONCURRENT_BUILDS) { build(it.uuid("buildId")) }
+
+    private suspend fun fail(buildId: UUID, reason: String) {
+        app.builds.markFailed(buildId, reason)
+        app.nats.logs.end(buildId, reason)
+    }
 
     private suspend fun run(job: ScalableResource<KubeJob>, spec: BuildJobSpec): Boolean = coroutineScope {
         val buildId = spec.build.id
@@ -94,7 +99,7 @@ class Builder(private val app: App, private val kube: KubernetesClient) {
             scheduled.cancel(true)
         }
         pods.resource(pod).withReadyWaitTimeout(TimeUnit.MINUTES.toMillis(POD_WAIT_MINUTES).toInt()).watchLog().use { watch ->
-            watch.output.bufferedReader().forEachLine { app.nats.publishLog(buildLogSubject(buildId), it) }
+            watch.output.bufferedReader().forEachLine { app.nats.logs.publish(buildId, it) }
         }
     }.onFailure { log.debug("log stream of build {} ended", buildId, it) }
 }

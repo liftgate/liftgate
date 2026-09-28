@@ -45,6 +45,16 @@ export function useAction<A extends unknown[]>(fn: (...args: A) => Promise<void>
   return { pending, error, run };
 }
 
+export function useCopy() {
+  const [copied, setCopied] = useState(false);
+  const copy = useAction(async (text: string) => {
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  });
+  return { ...copy, copied };
+}
+
 export function usePolling(active: boolean, fn: () => void, ms = 5000) {
   const tick = useEffectEvent(fn);
   useEffect(() => {

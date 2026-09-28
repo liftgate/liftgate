@@ -4,7 +4,7 @@ import { useState } from "react";
 import { api } from "@/lib/api";
 import { useAction, useApi, usePolling } from "@/lib/hooks";
 import type { Build, Service } from "@/lib/types";
-import { formValues, shortSha, timeAgo } from "@/lib/util";
+import { duration, formValues, shortSha, timeAgo } from "@/lib/util";
 import { Loaded } from "@/components/loaded";
 import { LogViewer } from "@/components/log-viewer";
 import { StatusBadge } from "@/components/ui/badge";
@@ -19,7 +19,7 @@ const inProgress = (status: string) => ["queued", "running"].includes(status.toL
 
 export function BuildsTab({ service }: { service: Service }) {
   const builds = useApi<Build[]>(`/services/${service.id}/builds`);
-  const [selected, setSelected] = useState<string>();
+  const [selected, setSelected] = useState<string | null>();
   const deploy = useAction(async (form: HTMLFormElement) => {
     const { ref } = formValues(form);
     const build = await api<Build | undefined>(`/services/${service.id}/deploy`, { method: "POST", body: ref ? { ref } : {} });
@@ -28,6 +28,8 @@ export function BuildsTab({ service }: { service: Service }) {
     builds.reload();
   });
   usePolling(!!builds.data?.some((b) => inProgress(b.status)), builds.reload);
+  const opening = builds.data?.find((b) => b.status === "running" || b.status === "failed");
+  if (selected === undefined && opening) setSelected(opening.id);
   const current = builds.data?.find((b) => b.id === selected);
   return (
     <div className="flex flex-col gap-6">
@@ -74,7 +76,7 @@ export function BuildsTab({ service }: { service: Service }) {
                         <span title={build.createdAt}>{timeAgo(build.createdAt)}</span>
                       </Cell>
                       <Cell className="text-right">
-                        <Button variant="ghost" onClick={() => setSelected(build.id === selected ? undefined : build.id)}>
+                        <Button variant="ghost" onClick={() => setSelected(build.id === selected ? null : build.id)}>
                           {build.id === selected ? "Hide logs" : "Logs"}
                         </Button>
                       </Cell>
@@ -88,11 +90,13 @@ export function BuildsTab({ service }: { service: Service }) {
       </Card>
       {current && (
         <div className="flex flex-col gap-2">
-          <LogViewer key={current.id} path={`/logs/builds/${current.id}`} title={`Build ${shortSha(current.commitSha)}`} />
+          <LogViewer
+            key={current.id}
+            path={`/logs/builds/${current.id}`}
+            title={`Build ${shortSha(current.commitSha)}`}
+            detail={duration(current.startedAt, current.finishedAt)}
+          />
           {current.error && <p className="text-sm text-danger">{current.error}</p>}
-          {!inProgress(current.status) && (
-            <p className="text-xs text-graphite-400">Output streams while a build runs; this build has already finished.</p>
-          )}
         </div>
       )}
     </div>

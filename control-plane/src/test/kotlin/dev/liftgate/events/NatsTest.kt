@@ -107,7 +107,7 @@ class NatsTest {
         val nats = TestNats.clean()
         val received = CompletableDeferred<JsonObject>()
         val consumer = nats.consume(Subject.BUILD_REQUESTED, "term-test", this) { received.complete(it) }
-        nats.publishLog(Subject.BUILD_REQUESTED.value, "not json")
+        TestNats.connection.jetStream().publish(Subject.BUILD_REQUESTED.value, "not json".toByteArray())
         nats.publish(Subject.BUILD_REQUESTED.value, 1, payload)
         assertEquals(payload, withTimeout(10.seconds) { received.await() })
         delay(1.seconds)

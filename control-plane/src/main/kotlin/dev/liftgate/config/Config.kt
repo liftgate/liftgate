@@ -97,6 +97,9 @@ data class Config(
     val databasePoolSize: Int,
     val internalUrl: String,
     val registryJanitorPassword: String?,
+    val buildLogsMaxBytes: Long,
+    val logReaderRole: String?,
+    val logReaderAccount: String,
 ) {
     companion object {
         private val taint = Regex("""([\w./-]+)(?:=([\w.-]*))?(?::(NoSchedule|PreferNoSchedule|NoExecute))?""")
@@ -221,6 +224,9 @@ data class Config(
                 databasePoolSize = text("DATABASE_POOL_SIZE", if (serving) "10" else "3").toInt(),
                 internalUrl = text("INTERNAL_URL", "http://localhost:$httpPort"),
                 registryJanitorPassword = if (registryTokenAuth && role in setOf(Role.API, Role.BUILDER, Role.ALL)) required("REGISTRY_JANITOR_PASSWORD") else null,
+                buildLogsMaxBytes = text("BUILD_LOGS_MAX_BYTES", "536870912").toLongOrNull()?.takeIf { it > 0 } ?: error("LIFTGATE_BUILD_LOGS_MAX_BYTES must be a positive number of bytes"),
+                logReaderRole = optional("LOG_READER_ROLE"),
+                logReaderAccount = text("LOG_READER_ACCOUNT", "liftgate"),
             )
         }
     }

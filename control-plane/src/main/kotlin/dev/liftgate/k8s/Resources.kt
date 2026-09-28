@@ -49,6 +49,8 @@ import io.fabric8.kubernetes.api.model.networking.v1.NetworkPolicyPeer
 import io.fabric8.kubernetes.api.model.networking.v1.NetworkPolicyPeerBuilder
 import io.fabric8.kubernetes.api.model.networking.v1.NetworkPolicyPort
 import io.fabric8.kubernetes.api.model.networking.v1.NetworkPolicyPortBuilder
+import io.fabric8.kubernetes.api.model.rbac.RoleBinding
+import io.fabric8.kubernetes.api.model.rbac.RoleBindingBuilder
 import io.fabric8.kubernetes.client.dsl.base.ResourceDefinitionContext
 import java.util.Base64
 import kotlin.math.roundToInt
@@ -186,6 +188,12 @@ object Resources {
                 .endSpec().build(),
         )
     }
+
+    fun logReaderBinding(r: Release, clusterRole: String, account: String, accountNamespace: String): RoleBinding = RoleBindingBuilder()
+        .withMetadata(meta(clusterRole, r.namespace, r.environmentLabels()))
+        .withNewRoleRef().withApiGroup("rbac.authorization.k8s.io").withKind("ClusterRole").withName(clusterRole).endRoleRef()
+        .addNewSubject().withKind("ServiceAccount").withName(account).withNamespace(accountNamespace).endSubject()
+        .build()
 
     fun gatewayListeners(domains: List<Domain>, gatewayNamespace: String, gatewayName: String): Gateway = GatewayBuilder()
         .withMetadata(meta(gatewayName, gatewayNamespace, emptyMap()))

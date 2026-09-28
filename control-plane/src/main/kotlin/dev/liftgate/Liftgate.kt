@@ -33,6 +33,7 @@ import dev.liftgate.events.uuid
 import dev.liftgate.http.httpServer
 import dev.liftgate.http.json
 import dev.liftgate.k8s.DeploymentWatcher
+import dev.liftgate.k8s.PodLogs
 import dev.liftgate.k8s.Reconciler
 import dev.liftgate.k8s.Suspension
 import dev.liftgate.k8s.Sweeper
@@ -104,6 +105,7 @@ class App(val config: Config) : AutoCloseable {
     val sso by lazy { Sso(config.publicUrl, db, cache, signIn) }
     val registryTokens = RegistryTokens(db, services, config)
     val buildAdmission = BuildAdmission(db, config.plans)
+    val podLogs = PodLogs(kube)
     private val stopped = CountDownLatch(1)
     private var server: EmbeddedServer<*, *>? = null
 

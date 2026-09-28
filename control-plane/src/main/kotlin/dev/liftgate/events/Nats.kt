@@ -13,13 +13,10 @@ import io.nats.client.api.StreamConfiguration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
@@ -46,6 +43,7 @@ class Nats(private val config: Config, private val retryDelay: Duration = Durati
     private val polls = ConcurrentHashMap<String, Instant>()
     val lastPolls: Map<String, Instant> get() = polls
     val connected get() = connection.status == Connection.Status.CONNECTED
+    val logs = LogStream(connection, config)
 
     fun ensureStream() {
         val management = connection.jetStreamManagement()
@@ -59,6 +57,7 @@ class Nats(private val config: Config, private val retryDelay: Duration = Durati
             .duplicateWindow(Duration.ofMinutes(2))
             .build()
         if (existing == null) management.addStream(stream) else management.updateStream(stream)
+        logs.ensureStream()
     }
 
     fun publish(subject: String, id: Long, payload: JsonObject) {
@@ -106,14 +105,6 @@ class Nats(private val config: Config, private val retryDelay: Duration = Durati
     fun backlog(subject: Subject): Long = connection.jetStreamManagement().getConsumers(STREAM)
         .filter { it.consumerConfiguration.filterSubject == subject.value }
         .sumOf { it.numPending + it.numAckPending }
-
-    fun publishLog(subject: String, line: String) = connection.publish(subject, line.toByteArray())
-
-    fun logs(subject: String): Flow<String> = callbackFlow {
-        val dispatcher = connection.createDispatcher { trySend(String(it.data)) }
-        dispatcher.subscribe(subject)
-        awaitClose { connection.closeDispatcher(dispatcher) }
-    }
 
     override fun close() = connection.close()
 

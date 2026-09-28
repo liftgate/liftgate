@@ -15,6 +15,7 @@ import dev.liftgate.testConfig
 import io.fabric8.kubernetes.api.model.GenericKubernetesResourceList
 import io.fabric8.kubernetes.api.model.HasMetadata
 import io.fabric8.kubernetes.api.model.StatusBuilder
+import io.fabric8.kubernetes.api.model.rbac.RoleBinding
 import io.fabric8.kubernetes.client.ConfigBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.KubernetesClientBuilder
@@ -121,6 +122,21 @@ class ReconcilerTest {
         listOf("\"runtimeClassName\":\"gvisor\"", "\"nodeSelector\":{\"liftgate.dev/pool\":\"workloads\"}", "\"key\":\"liftgate.dev/pool\"").forEach { assertTrue(it in pod, it) }
         coVerify(exactly = 1) { deployments.transition(testDeployment.id, DeploymentStatus.RELEASING) }
         coVerify(exactly = 0) { deployments.transition(testDeployment.id, DeploymentStatus.RUNNING, any(), any()) }
+        coVerify(exactly = 0) { deployments.transition(testDeployment.id, DeploymentStatus.FAILED, any(), any()) }
+    }
+
+    @Test
+    fun `release binds the log reader role to the api account inside the environment namespace`() = runBlocking {
+        every { app.config } returns testConfig(mapOf("LIFTGATE_LOG_READER_ROLE" to "liftgate-log-reader", "LIFTGATE_LOG_READER_ACCOUNT" to "liftgate-api"))
+        val bindingPath = "/apis/rbac.authorization.k8s.io/v1/$namespaced/rolebindings/liftgate-log-reader"
+        acceptAll()
+        accept(bindingPath, Resources.logReaderBinding(release, "liftgate-log-reader", "liftgate-api", client.namespace))
+        Reconciler(app, client).release(testDeployment.id)
+
+        val binding = client.kubernetesSerialization.unmarshal(sent().single { it.path == bindingPath + apply }.utf8Body, RoleBinding::class.java)
+        assertEquals(release.namespace, binding.metadata.namespace)
+        assertEquals("ClusterRole" to "liftgate-log-reader", binding.roleRef.kind to binding.roleRef.name)
+        assertEquals(listOf(Triple("ServiceAccount", client.namespace, "liftgate-api")), binding.subjects.map { Triple(it.kind, it.namespace, it.name) })
         coVerify(exactly = 0) { deployments.transition(testDeployment.id, DeploymentStatus.FAILED, any(), any()) }
     }
 

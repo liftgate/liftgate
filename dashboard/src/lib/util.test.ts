@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Environment, Project, Service } from "./types.ts";
-import { envPayload, findService, keepsStoredValue, safeNext, shortSha, slugify, storedRows, timeAgo } from "./util.ts";
+import { duration, envPayload, findService, keepsStoredValue, safeNext, shortSha, slugify, storedRows, stripAnsi, timeAgo } from "./util.ts";
 
 test("slugify lowercases and collapses separators", () => {
   assert.equal(slugify("  Acme Web App!  "), "acme-web-app");
@@ -20,6 +20,23 @@ test("timeAgo buckets by age", () => {
 
 test("shortSha keeps seven characters", () => {
   assert.equal(shortSha("0123456789abcdef"), "0123456");
+});
+
+test("duration counts from the start to the finish, or to now while running", () => {
+  const start = "2026-09-28T10:00:00Z";
+  assert.equal(duration(null, null), undefined);
+  assert.equal(duration(start, "2026-09-28T10:00:42Z"), "42s");
+  assert.equal(duration(start, "2026-09-28T10:02:05Z"), "2m 5s");
+  assert.equal(duration(start, "2026-09-28T11:03:00Z"), "1h 3m");
+  assert.equal(duration(new Date(Date.now() - 90_000).toISOString(), null), "1m 30s");
+});
+
+test("stripAnsi leaves no escape sequence in a log line", () => {
+  const esc = String.fromCharCode(27);
+  const line = `${esc}[1;32m✔ built${esc}[0m ${esc}]8;;https://liftgate.dev${esc}\\docs${esc}]8;;${esc}\\ ${esc}[2K${esc}(Bdone${esc}7`;
+  assert.equal(stripAnsi(line), "✔ built docs done");
+  assert.equal(stripAnsi("plain [1m text"), "plain [1m text");
+  assert.ok(!stripAnsi(`${esc}[38;5;196mred${esc}[m`).includes(esc));
 });
 
 test("safeNext keeps only same-origin relative paths", () => {

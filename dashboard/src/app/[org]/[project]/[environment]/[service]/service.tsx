@@ -14,10 +14,12 @@ import { BuildsTab } from "./builds-tab";
 import { DeploymentsTab } from "./deployments-tab";
 import { DomainsTab } from "./domains-tab";
 import { EnvTab } from "./env-tab";
+import { LogsTab } from "./logs-tab";
 import { SettingsTab } from "./settings-tab";
 
 const tabs = [
   { id: "deployments", label: "Deployments" },
+  { id: "logs", label: "Logs" },
   { id: "builds", label: "Builds" },
   { id: "env", label: "Environment variables" },
   { id: "domains", label: "Domains" },
@@ -52,6 +54,7 @@ export function ServiceView({ org, projectSlug, environmentSlug, serviceSlug }: 
       />
       <Tabs items={tabs} value={tab} onChange={setTab} />
       {tab === "deployments" && <DeploymentsTab service={service} />}
+      {tab === "logs" && <LogsTab service={service} />}
       {tab === "builds" && <BuildsTab service={service} />}
       {tab === "env" && <EnvTab service={service} />}
       {tab === "domains" && <DomainsTab service={service} />}

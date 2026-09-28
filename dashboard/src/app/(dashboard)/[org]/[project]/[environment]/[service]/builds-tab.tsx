@@ -4,16 +4,14 @@ import { useState } from "react";
 import { api } from "@/lib/api";
 import { useAction, useApi, usePolling } from "@/lib/hooks";
 import type { Build, Service } from "@/lib/types";
-import { duration, formValues, shortSha, timeAgo } from "@/lib/util";
+import { duration, formValues, shortSha } from "@/lib/util";
+import { BuildsCard, BuildTable } from "@/components/build-table";
 import { Loaded } from "@/components/loaded";
 import { LogViewer } from "@/components/log-viewer";
-import { StatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FormError, Input } from "@/components/ui/input";
 import { TableSkeleton } from "@/components/ui/skeleton";
-import { Cell, Row, Table } from "@/components/ui/table";
 
 const inProgress = (status: string) => ["queued", "running"].includes(status.toLowerCase());
 
@@ -33,61 +31,33 @@ export function BuildsTab({ service }: { service: Service }) {
   const current = builds.data?.find((b) => b.id === selected);
   return (
     <div className="flex flex-col gap-6">
-      <Card>
-        <CardHeader
-          title="Builds"
-          description="Every push to the tracked branch queues a build. Start one by hand from a branch or commit."
-          actions={
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                deploy.run(e.currentTarget);
-              }}
-              className="flex gap-2"
-            >
-              <Input name="ref" placeholder="Branch or commit (optional)" className="w-64 font-mono" />
-              <Button type="submit" variant="primary" pending={deploy.pending}>
-                Deploy
-              </Button>
-            </form>
+      <BuildsCard
+        actions={
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              deploy.run(e.currentTarget);
+            }}
+            className="flex gap-2"
+          >
+            <Input name="ref" placeholder="Branch or commit (optional)" className="w-64 font-mono" />
+            <Button type="submit" variant="primary" pending={deploy.pending}>
+              Deploy
+            </Button>
+          </form>
+        }
+      >
+        <FormError message={deploy.error} />
+        <Loaded query={builds} skeleton={<TableSkeleton />}>
+          {(list) =>
+            list.length === 0 ? (
+              <EmptyState title="No builds yet" description="Push to the tracked branch or deploy a ref above." />
+            ) : (
+              <BuildTable builds={list} selected={selected} onToggle={(id) => setSelected(id === selected ? null : id)} />
+            )
           }
-        />
-        <div className="flex flex-col gap-4 p-6">
-          <FormError message={deploy.error} />
-          <Loaded query={builds} skeleton={<TableSkeleton />}>
-            {(list) =>
-              list.length === 0 ? (
-                <EmptyState title="No builds yet" description="Push to the tracked branch or deploy a ref above." />
-              ) : (
-                <Table columns={["Status", "Commit", "Branch", "Created", ""]}>
-                  {list.map((build) => (
-                    <Row key={build.id} selected={build.id === selected}>
-                      <Cell>
-                        <StatusBadge status={build.status} />
-                      </Cell>
-                      <Cell mono>
-                        {shortSha(build.commitSha)}
-                        {build.commitMessage && (
-                          <span className="ml-2 font-sans text-sm text-graphite-400">{build.commitMessage.split("\n")[0]}</span>
-                        )}
-                      </Cell>
-                      <Cell mono>{build.branch}</Cell>
-                      <Cell className="text-graphite-400">
-                        <span title={build.createdAt}>{timeAgo(build.createdAt)}</span>
-                      </Cell>
-                      <Cell className="text-right">
-                        <Button variant="ghost" onClick={() => setSelected(build.id === selected ? null : build.id)}>
-                          {build.id === selected ? "Hide logs" : "Logs"}
-                        </Button>
-                      </Cell>
-                    </Row>
-                  ))}
-                </Table>
-              )
-            }
-          </Loaded>
-        </div>
-      </Card>
+        </Loaded>
+      </BuildsCard>
       {current && (
         <div className="flex flex-col gap-2">
           <LogViewer

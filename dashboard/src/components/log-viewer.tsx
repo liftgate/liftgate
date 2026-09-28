@@ -17,6 +17,10 @@ const labels: Record<SocketStatus, string> = {
 
 export function LogViewer({ path, title, detail }: { path: string; title: string; detail?: string }) {
   const { lines, status } = useLogSocket(path);
+  return <LogPanel title={title} detail={detail} lines={lines} status={status} />;
+}
+
+export function LogPanel({ title, detail, lines, status, className = "h-96" }: { title: string; detail?: string; lines: string[]; status: SocketStatus; className?: string }) {
   const copy = useCopy();
   const ref = useRef<HTMLPreElement>(null);
   const following = useRef(true);
@@ -43,7 +47,8 @@ export function LogViewer({ path, title, detail }: { path: string; title: string
             {status === "open" && <span className="size-2 rounded-full bg-accent" />}
             {labels[status]}
           </span>
-          <Button variant="ghost" disabled={!lines.length} pending={copy.pending} onClick={() => copy.run(text)} aria-live="polite">
+          <Button variant="ghost" disabled={!lines.length} onClick={() => copy.run(text)} aria-live="polite">
+            {copy.pending && <Spinner />}
             {copy.copied ? "Copied" : "Copy"}
           </Button>
           <Button variant="ghost" disabled={!lines.length} onClick={download}>
@@ -60,7 +65,7 @@ export function LogViewer({ path, title, detail }: { path: string; title: string
           const element = e.currentTarget;
           following.current = element.scrollHeight - element.scrollTop - element.clientHeight <= FOLLOW_SLACK_PX;
         }}
-        className="h-96 overflow-auto p-4 font-mono text-xs leading-5 text-graphite-200 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
+        className={`${className} overflow-auto p-4 font-mono text-xs leading-5 text-graphite-200 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent`}
       >
         {lines.length ? text : status === "closed" ? "No output was recorded." : "Waiting for output…"}
       </pre>

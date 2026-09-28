@@ -23,7 +23,7 @@ export function OneProject() {
         </div>
         <div inert className="lg:col-span-7 lg:col-start-6 lg:row-start-2 lg:-mt-12">
           <Card className="lg:shadow-2xl">
-            <CardHeader title="Service settings" description="Changes apply on the next release." />
+            <CardHeader title="Service settings" description="Save keeps changes for the next deploy. Save and redeploy applies them now without a rebuild." />
             <div className="grid grid-cols-2 gap-4 p-6">
               <Field label="Kind">
                 <Select defaultValue="cron">

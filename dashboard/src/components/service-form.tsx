@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import type { BuildStrategy, Service, ServiceKind, ServiceSpec } from "@/lib/types";
 import { formValues } from "@/lib/util";
 import { NameSlugFields } from "./name-slug-fields";
+import { redeployRequested } from "./save-actions";
 import { Button } from "./ui/button";
 import { Field, FormError, Input } from "./ui/input";
 import { Select } from "./ui/select";
@@ -32,6 +33,7 @@ export function ServiceForm({
   pending,
   error,
   submitLabel,
+  actions,
   onSubmit,
   onCancel,
 }: {
@@ -39,8 +41,9 @@ export function ServiceForm({
   before?: ReactNode;
   pending: boolean;
   error?: string;
-  submitLabel: string;
-  onSubmit: (spec: ServiceSpec, values: Record<string, string>) => void;
+  submitLabel?: string;
+  actions?: ReactNode;
+  onSubmit: (spec: ServiceSpec, values: Record<string, string>, redeploy: boolean) => void;
   onCancel?: () => void;
 }) {
   return (
@@ -48,7 +51,7 @@ export function ServiceForm({
       onSubmit={(e) => {
         e.preventDefault();
         const values = formValues(e.currentTarget);
-        onSubmit(toSpec(values), values);
+        onSubmit(toSpec(values), values, redeployRequested(e));
       }}
       className="flex flex-col gap-4"
     >
@@ -101,9 +104,11 @@ export function ServiceForm({
       <FormError message={error} />
       <div className="flex justify-end gap-2">
         {onCancel && <Button onClick={onCancel}>Cancel</Button>}
-        <Button type="submit" variant="primary" pending={pending}>
-          {submitLabel}
-        </Button>
+        {actions ?? (
+          <Button type="submit" variant="primary" pending={pending}>
+            {submitLabel}
+          </Button>
+        )}
       </div>
     </form>
   );

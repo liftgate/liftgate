@@ -9,8 +9,6 @@ import dev.liftgate.project.Project
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
-import java.nio.file.FileSystems
-import java.nio.file.Path
 import java.util.UUID
 
 /**
@@ -89,9 +87,29 @@ data class ServiceSpec(
         Service(id, environmentId, slug, name, kind, rootDir, buildStrategy, dockerfilePath, port, replicas, cpuMillis, memoryMb, cronSchedule, startCommand, healthCheckPath, watchPaths)
 
     fun watches(files: Collection<String>): Boolean {
-        val globs = watchPaths.ifEmpty { listOfNotNull(rootDir.trim('/').takeIf { it.isNotEmpty() }?.let { "$it/**" }) }
-            .map { FileSystems.getDefault().getPathMatcher("glob:${it.trimStart('/').replace("**/", "{**/,}")}") }
-        return globs.isEmpty() || files.any { file -> globs.any { it.matches(Path.of(file)) } }
+        val root = rootDir.split('/').filterNot { it.isEmpty() || it == "." }.joinToString("/")
+        if (watchPaths.isEmpty()) return root.isEmpty() || files.any { it.startsWith("$root/") }
+        return files.any { file -> watchPaths.any { glob(it.trimStart('/'), file) } }
+    }
+
+    private fun glob(pattern: String, path: String): Boolean {
+        fun BooleanArray.closed() = apply {
+            for (i in pattern.indices) if (this[i] && pattern[i] == '*') {
+                this[if (pattern.startsWith("**", i)) i + 2 else i + 1] = true
+                if (pattern.startsWith("**/", i)) this[i + 3] = true
+            }
+        }
+        val start = BooleanArray(pattern.length + 1).apply { this[0] = true }.closed()
+        return path.fold(start) { from, c ->
+            BooleanArray(pattern.length + 1).apply {
+                for (i in pattern.indices) if (from[i]) when {
+                    pattern.startsWith("**", i) -> this[i] = true
+                    pattern[i] == '*' -> if (c != '/') this[i] = true
+                    pattern[i] == '?' -> if (c != '/') this[i + 1] = true
+                    pattern[i] == c -> this[i + 1] = true
+                }
+            }.closed()
+        }[pattern.length]
     }
 }
 

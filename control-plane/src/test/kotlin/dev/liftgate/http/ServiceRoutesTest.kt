@@ -123,7 +123,7 @@ class ServiceRoutesTest {
             """{"slug":"Bad Slug"}""", """{"slug":"renamed"}""", """{"rootDir":"../.docker"}""", """{"rootDir":"a/../../b"}""", """{"rootDir":"$(id)"}""",
             """{"dockerfilePath":"../src/Dockerfile"}""", """{"dockerfilePath":"/etc/passwd"}""", """{"dockerfilePath":""}""",
             """{"port":8080,"healthCheckPath":"healthz"}""", """{"port":8080,"healthCheckPath":""}""", """{"port":8080,"healthCheckPath":"/${"a".repeat(256)}"}""", """{"healthCheckPath":"/healthz"}""",
-            """{"watchPaths":["apps/[web"]}""", """{"watchPaths":[" "]}""",
+            """{"watchPaths":[" "]}""", """{"watchPaths":["${"a".repeat(101)}"]}""", """{"watchPaths":${(0..20).map { "\"p$it/**\"" }}}""",
         ).forEach {
             assertEquals(HttpStatusCode.UnprocessableEntity, client.patch("/api/v1/services/${service.id}") { jsonBody(it) }.status, it)
         }

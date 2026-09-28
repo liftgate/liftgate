@@ -14,6 +14,7 @@ import javax.crypto.spec.SecretKeySpec
 private const val HMAC = "HmacSHA256"
 private const val BRANCH_PREFIX = "refs/heads/"
 private const val MAX_COMMITS = 2048
+private const val MAX_PATH_CHARS = 65_536
 
 /**
  * @author Dean
@@ -41,8 +42,8 @@ class WebhookHandler(private val app: App) {
         val installation = (payload["installation"] as? JsonObject)?.get("id")?.jsonPrimitive?.longOrNull ?: return
         val message = (payload["head_commit"] as? JsonObject)?.text("message")
         val commits = (payload["commits"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
-        val files = commits.flatMap { commit -> listOf("added", "modified", "removed").flatMap { (commit[it] as? JsonArray).orEmpty() } }.map { it.jsonPrimitive.content }
-        val buildAll = payload.flag("created") || payload.flag("forced") || commits.isEmpty() || commits.size >= MAX_COMMITS
+        val files = commits.flatMap { commit -> listOf("added", "modified", "removed").flatMap { (commit[it] as? JsonArray).orEmpty() } }.map { it.jsonPrimitive.content }.toSet()
+        val buildAll = payload.flag("created") || payload.flag("forced") || commits.isEmpty() || commits.size >= MAX_COMMITS || files.sumOf { it.length } > MAX_PATH_CHARS
         val services = app.projects.environmentsForRepo(installation, repo, branch)
             .flatMap { app.services.forEnvironment(it.id) }
             .filter { buildAll || it.spec().watches(files) }

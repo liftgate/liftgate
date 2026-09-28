@@ -23,6 +23,8 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import org.junit.jupiter.api.assertTimeoutPreemptively
+import java.time.Duration
 import java.util.UUID
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
@@ -86,13 +88,14 @@ class WebhooksTest {
     }
 
     @Test
-    fun `a push builds only the services whose watch paths or root directory match a changed file, and a forced push builds them all`() = testApplication {
+    fun `a push builds only the services whose watch paths or root directory match a changed file, and a forced push or a flood of paths builds them all`() = testApplication {
         val web = testService.copy(id = UUID.randomUUID(), slug = "web", rootDir = "/apps/web")
         val api = testService.copy(id = UUID.randomUUID(), slug = "api", rootDir = "/apps/api", watchPaths = listOf("apps/api/**", "packages/**"))
         every { app.services } returns mockk<Services> { coEvery { forEnvironment(testEnvironment.id) } returns listOf(web, api) }
         application { liftgate(app) }
         val commits = """[{"added":["apps/web/app/page.tsx"],"modified":["apps/web/package.json"],"removed":[]},{"added":[],"modified":[],"removed":["apps/web/old.css"]}]"""
-        listOf(push(commits = commits), push(commits = commits, forced = true)).forEach { body ->
+        val flood = """[{"added":["docs/${"x".repeat(65_536)}"],"modified":[],"removed":[]}]"""
+        listOf(push(commits = commits), push(commits = commits, forced = true), push(commits = flood)).forEach { body ->
             val response = client.post("/api/v1/webhooks/github") {
                 header("X-GitHub-Event", "push")
                 header("X-Hub-Signature-256", sign(body))
@@ -100,8 +103,8 @@ class WebhooksTest {
             }
             assertEquals(HttpStatusCode.NoContent, response.status)
         }
-        coVerify(exactly = 2) { builds.request(web.id, "abc123", "ship it", "main") }
-        coVerify(exactly = 1) { builds.request(api.id, "abc123", "ship it", "main") }
+        coVerify(exactly = 3) { builds.request(web.id, "abc123", "ship it", "main") }
+        coVerify(exactly = 2) { builds.request(api.id, "abc123", "ship it", "main") }
     }
 
     @Test
@@ -109,6 +112,22 @@ class WebhooksTest {
         val docs = testService.spec().copy(watchPaths = listOf("**/*.md", "apps/**/test/*.ts"))
         listOf("README.md", "docs/guide/intro.md", "apps/test/unit.ts", "apps/web/test/unit.ts").forEach { assertTrue(docs.watches(listOf(it)), it) }
         listOf("src/index.ts", "apps/web/unit.ts").forEach { assertFalse(docs.watches(listOf(it)), it) }
+    }
+
+    @Test
+    fun `watch paths take brackets literally, and without watch paths the normalized root directory is watched`() {
+        val page = testService.spec().copy(watchPaths = listOf("apps/web/app/[slug]/page.?sx"))
+        assertTrue(page.watches(listOf("apps/web/app/[slug]/page.tsx")))
+        listOf("apps/web/app/s/page.tsx", "apps/web/app/[slug]/page./sx").forEach { assertFalse(page.watches(listOf(it)), it) }
+        val root = testService.spec().copy(rootDir = "./apps//web/")
+        assertTrue(root.watches(listOf("apps/web/package.json")))
+        assertFalse(root.watches(listOf("apps/webhooks/package.json")))
+    }
+
+    @Test
+    fun `a watch path full of wildcards is matched without backtracking`() {
+        val spec = testService.spec().copy(watchPaths = listOf("*a".repeat(49) + "b"))
+        assertTimeoutPreemptively(Duration.ofSeconds(5)) { assertFalse(spec.watches(listOf("a".repeat(4096)))) }
     }
 
     @Test

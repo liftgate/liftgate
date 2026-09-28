@@ -98,7 +98,7 @@ export function demo(now = Date.now()) {
     builds: [
       build("b1", "running", "4f2c9e1b7d03a58c6e21f94b0d7a3c85e1f6b209", "Show order history on the account page", "main", 40),
       build("b2", "succeeded", "b81d3a07e4c95f2d18a6b3e70c4d59f2a8e1b637", "Cache product images", "main", 3 * 3600),
-      build("b3", "failed", "5d1b8f36a2e07c94b5d3f18e6a0c72b49d5e3f81", "Try Node 24", "node-24", 26 * 3600),
+      build("b3", "failed", "5d1b8f36a2e07c94b5d3f18e6a0c72b49d5e3f81", "Try Node 24", "main", 26 * 3600),
       build("b4", "succeeded", "9e07c55ad3b18f62e4a90c7d5b3e1f84a6c2d970", "Fix rounding in the cart total", "main", 50 * 3600),
     ],
     deployments: [

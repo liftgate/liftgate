@@ -41,8 +41,8 @@ const rules: { title: string; body: string; path: string; lines: [number, number
     ),
   },
   {
-    title: "Read-only access to your repositories",
-    body: "The GitHub App asks only for read permissions. Each build clones with a token limited to that one repository.",
+    title: "Read-only clones of your repositories",
+    body: "Each build clones with a read-only token limited to that one repository.",
     path: "control-plane/src/main/kotlin/dev/liftgate/build/GitHubApp.kt",
     lines: [37, 42],
     className: "bg-graphite-950 lg:col-span-5",
@@ -59,8 +59,8 @@ const rules: { title: string; body: string; path: string; lines: [number, number
   {
     title: "Secrets you can set but not read back",
     body: "Variables are encrypted with AES-256-GCM and injected at runtime, not at build time. The API never sends a secret value back.",
-    path: "control-plane/src/main/kotlin/dev/liftgate/secret/SecretBox.kt",
-    lines: [15, 33],
+    path: "control-plane/src/main/kotlin/dev/liftgate/service/EnvVars.kt",
+    lines: [20, 34],
     className: "bg-graphite-950 md:col-span-2 lg:col-span-12 xl:flex-row",
     textClassName: "xl:w-96 xl:shrink-0",
     visual: (

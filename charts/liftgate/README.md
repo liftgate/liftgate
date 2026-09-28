@@ -381,7 +381,7 @@ empty, neither appears.
 | `postgres.externalPassword` | `""` | |
 | `postgres.storage` | `10Gi` | Volume per instance |
 | `postgres.maxConnections` | `100` | PostgreSQL `max_connections` |
-| `postgres.resources` | 250m / 512Mi, no limit | Resources of each CloudNativePG instance |
+| `postgres.resources` | `{}` | Resources of each CloudNativePG instance, such as `{requests: {cpu: 250m, memory: 512Mi}}`. Without requests the scheduler does not reserve room for the database, and it is among the first pods evicted under memory pressure. CloudNativePG deletes and recreates every instance when this changes, so set it in a maintenance window |
 | `postgres.backup.enabled` | `false` | WAL archiving and scheduled base backups, see [Backups](#backups); required for `ha` with a managed database |
 | `postgres.backup.endpointUrl` | `""` | S3 endpoint; empty means AWS S3 |
 | `postgres.backup.destinationPath` | `""` | `s3://<bucket>/<optional prefix>`; required when `enabled` with a managed database |

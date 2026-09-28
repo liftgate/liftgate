@@ -121,7 +121,8 @@ class App(val config: Config) : AutoCloseable {
         server = httpServer(this).start(wait = false)
         if (runs(Role.API)) {
             val relay = OutboxRelay(db, nats)
-            LeaderElection(config, kube, "liftgate-outbox-relay").start(scope) { coroutineScope { relay.start(this); Housekeeping(db).start(this); Backlog(db, metrics).start(this) } }
+            val backlog = Backlog(db, metrics)
+            LeaderElection(config, kube, "liftgate-outbox-relay").start(scope) { coroutineScope { relay.start(this); Housekeeping(db).start(this); backlog.start(this) } }
             nats.consume(Subject.USER_UPDATED, "api-user-updated", scope) { sessions.evict(it.uuid("userId")) }
         }
         if (runs(Role.RECONCILER)) {

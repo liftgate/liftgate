@@ -47,12 +47,13 @@ export function Stacks() {
         </a>{" "}
         detects these stacks and more. If your repository has one, Liftgate builds the Dockerfile instead.
       </p>
-      <ul className="mt-8 grid grid-cols-[repeat(4,auto)] justify-between gap-y-8 md:grid-cols-[repeat(8,auto)]">
+      <ul className="mt-8 grid grid-cols-4 gap-y-8 md:grid-cols-8">
         {stacks.map(({ name, icon }) => (
-          <li key={name} className="flex">
-            <svg viewBox="0 0 24 24" role="img" aria-label={name} className="size-8 fill-current text-graphite-400">
+          <li key={name} className="flex flex-col items-center gap-2 text-center text-xs text-graphite-400">
+            <svg viewBox="0 0 24 24" aria-hidden className="size-8 fill-current">
               <path d={icon.path} />
             </svg>
+            {name}
           </li>
         ))}
       </ul>

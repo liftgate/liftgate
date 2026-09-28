@@ -20,6 +20,7 @@ import dev.liftgate.build.RegistryTokens
 import dev.liftgate.cache.Cache
 import dev.liftgate.config.Config
 import dev.liftgate.config.Role
+import dev.liftgate.db.Backlog
 import dev.liftgate.db.Db
 import dev.liftgate.db.Housekeeping
 import dev.liftgate.deploy.Builds
@@ -77,13 +78,13 @@ class App(val config: Config) : AutoCloseable {
     val db = Db(config)
     private val hazelcast = lazy { Cache(config).also { metrics.gauge("liftgate.hazelcast.members", it) { cache -> cache.members.toDouble() } } }
     val cache by hazelcast
-    val nats = Nats(config)
+    val metrics = PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
+    val nats = Nats(config, metrics)
     val secrets by lazy { SecretBox(checkNotNull(config.secretsMasterKey)) }
     val http = HttpClient(CIO) {
         install(ContentNegotiation) { json(json) }
         install(UserAgent) { agent = "liftgate" }
     }
-    val metrics = PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
     val kube = KubernetesClientBuilder().build()
     private val limits = Limits(config.plans, config.customDomainsMax)
     val orgs = Orgs(db, limits)
@@ -94,7 +95,7 @@ class App(val config: Config) : AutoCloseable {
     val services = Services(db, limits)
     val envVars by lazy { EnvVars(db, secrets) }
     val builds = Builds(db)
-    val deployments = Deployments(db)
+    val deployments = Deployments(db, metrics)
     val domains = Domains(db, config.deployDomain, limits)
     val github by lazy { config.github?.let { GitHubApp(it, http) } }
     val oauth by lazy { OAuth(http, config.publicUrl, OAuthProviders.enabled(config)) }
@@ -120,7 +121,8 @@ class App(val config: Config) : AutoCloseable {
         server = httpServer(this).start(wait = false)
         if (runs(Role.API)) {
             val relay = OutboxRelay(db, nats)
-            LeaderElection(config, kube, "liftgate-outbox-relay").start(scope) { coroutineScope { relay.start(this); Housekeeping(db).start(this) } }
+            val backlog = Backlog(db, metrics)
+            LeaderElection(config, kube, "liftgate-outbox-relay").start(scope) { coroutineScope { relay.start(this); Housekeeping(db).start(this); backlog.start(this) } }
             nats.consume(Subject.USER_UPDATED, "api-user-updated", scope) { sessions.evict(it.uuid("userId")) }
         }
         if (runs(Role.RECONCILER)) {

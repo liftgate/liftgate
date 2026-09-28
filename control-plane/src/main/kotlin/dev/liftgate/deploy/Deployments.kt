@@ -13,6 +13,8 @@ import dev.liftgate.http.LiftgateException
 import dev.liftgate.http.conflict
 import dev.liftgate.http.notFound
 import io.ktor.http.HttpStatusCode
+import io.micrometer.core.instrument.MeterRegistry
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.jetbrains.exposed.v1.core.ResultRow
@@ -28,6 +30,8 @@ import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.update
 import org.jetbrains.exposed.v1.jdbc.updateReturning
+import java.time.Duration
+import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.util.UUID
@@ -36,6 +40,7 @@ private const val REQUEUE_MINUTES = 5L
 private const val TIMEOUT_MINUTES = 45L
 private val unreleased = listOf(DeploymentStatus.PENDING, DeploymentStatus.RELEASING).map { it.sql }
 val live = unreleased + DeploymentStatus.RUNNING.sql
+private val outcomes = setOf(DeploymentStatus.RUNNING, DeploymentStatus.FAILED)
 
 fun ResultRow.toDeployment() = Deployment(
     this[DeploymentsTable.id],
@@ -67,7 +72,7 @@ private fun JdbcTransaction.updated(id: UUID, status: DeploymentStatus) =
  * @author Dean
  * @date 9/17/2026
  */
-class Deployments(private val db: Db) {
+class Deployments(private val db: Db, private val metrics: MeterRegistry = SimpleMeterRegistry()) {
     suspend fun byId(id: UUID): Deployment? = db.tx { find(id) }
 
     suspend fun forService(serviceId: UUID, limit: Int = 50): List<Deployment> = db.tx {
@@ -92,10 +97,10 @@ class Deployments(private val db: Db) {
     }
 
     suspend fun transition(id: UUID, to: DeploymentStatus, replicasReady: Int = 0, error: String? = null) {
-        db.tx {
-            val current = find(id) ?: notFound("deployment")
+        val createdAt = db.tx {
+            val current = find(id, lock = true) ?: notFound("deployment")
             if (!current.status.allows(to)) conflict("deployment cannot move from ${current.status.sql} to ${to.sql}")
-            if (current.status == to && current.replicasReady == replicasReady && current.error == error) return@tx
+            if (current.status == to && current.replicasReady == replicasReady && current.error == error) return@tx null
             DeploymentsTable.update({ DeploymentsTable.id eq id }) {
                 it[status] = to.sql
                 it[DeploymentsTable.replicasReady] = replicasReady
@@ -104,25 +109,32 @@ class Deployments(private val db: Db) {
             }
             if (to == DeploymentStatus.RUNNING) supersedeOlder(current)
             updated(id, to)
-        }
+            current.createdAt.takeIf { current.status.sql in unreleased && to in outcomes }
+        } ?: return
+        released(to, createdAt)
     }
 
     suspend fun redrive() {
         db.tx {
             val now = now()
-            DeploymentsTable.updateReturning(listOf(DeploymentsTable.id), { unreleasedBefore(now.minusMinutes(TIMEOUT_MINUTES)) }) {
+            val timedOut = DeploymentsTable.updateReturning(listOf(DeploymentsTable.id, DeploymentsTable.createdAt), { unreleasedBefore(now.minusMinutes(TIMEOUT_MINUTES)) }) {
                 it[status] = DeploymentStatus.FAILED.sql
                 it[error] = "timed out"
-            }.toList().forEach { updated(it[DeploymentsTable.id], DeploymentStatus.FAILED) }
+            }.toList().onEach { updated(it[DeploymentsTable.id], DeploymentStatus.FAILED) }
             val requested = requestedSince(Subject.RELEASE_REQUESTED, "deploymentId", now.minusMinutes(REQUEUE_MINUTES))
             DeploymentsTable.select(DeploymentsTable.id).where { unreleasedBefore(now.minusMinutes(REQUEUE_MINUTES)) }
                 .map { it[DeploymentsTable.id] }
                 .filter { it.toString() !in requested }
                 .forEach { requestRelease(it) }
-        }
+            timedOut.map { it[DeploymentsTable.createdAt].toInstant() }
+        }.forEach { released(DeploymentStatus.FAILED, it) }
     }
 
-    private fun find(id: UUID) = DeploymentsTable.selectAll().where { DeploymentsTable.id eq id }.singleOrNull()?.toDeployment()
+    private fun released(status: DeploymentStatus, createdAt: Instant) =
+        metrics.timer("liftgate.release.duration", "status", status.sql).record(Duration.between(createdAt, Instant.now()))
+
+    private fun find(id: UUID, lock: Boolean = false) =
+        DeploymentsTable.selectAll().where { DeploymentsTable.id eq id }.apply { if (lock) forUpdate() }.singleOrNull()?.toDeployment()
 
     private fun unreleasedBefore(cutoff: OffsetDateTime) = (DeploymentsTable.status inList unreleased) and (DeploymentsTable.createdAt less cutoff)
 

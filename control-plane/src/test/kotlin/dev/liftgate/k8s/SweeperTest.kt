@@ -39,6 +39,7 @@ import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPRoute
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
@@ -80,7 +81,8 @@ class SweeperTest {
     private val nats = TestNats.clean()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val builds = Builds(db)
-    private val deployments = Deployments(db)
+    private val metrics = SimpleMeterRegistry()
+    private val deployments = Deployments(db, metrics)
     private val app = mockk<App>().also {
         every { it.config } returns testConfig(mapOf("LIFTGATE_LEADER_ELECTION" to "off"))
         every { it.db } returns db
@@ -193,6 +195,7 @@ class SweeperTest {
         assertEquals(mapOf(pending.toString() to 2, releasing.toString() to 1), requests(Subject.RELEASE_REQUESTED, "deploymentId"))
         assertEquals(BuildStatus.FAILED to "timed out", builds.byId(expired)?.let { it.status to it.error })
         assertEquals(DeploymentStatus.FAILED to "timed out", deployments.byId(releasing)?.let { it.status to it.error })
+        assertEquals(1L, metrics.timer("liftgate.release.duration", "status", "failed").count())
         assertEquals(BuildStatus.QUEUED, builds.byId(stale)?.status)
     }
 

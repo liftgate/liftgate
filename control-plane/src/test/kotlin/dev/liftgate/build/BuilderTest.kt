@@ -33,6 +33,8 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
+import io.micrometer.prometheusmetrics.PrometheusConfig
+import io.micrometer.prometheusmetrics.PrometheusMeterRegistry
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -80,6 +82,7 @@ class BuilderTest {
     private val registryTokens = mockk<RegistryTokens>(relaxUnitFun = true) { coEvery { issue(queued.id) } returns "registry-password" }
     private val admission = mockk<BuildAdmission> { coEvery { admit(any(), any()) } returns null }
     private val logs = mockk<LogStream>(relaxed = true)
+    private val metrics = PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
     private val app = mockk<App> {
         every { config } returns testConfig()
         every { this@mockk.builds } returns this@BuilderTest.builds
@@ -90,6 +93,7 @@ class BuilderTest {
         every { registryTokens } returns this@BuilderTest.registryTokens
         every { buildAdmission } returns admission
         every { nats } returns mockk<Nats> { every { logs } returns this@BuilderTest.logs }
+        every { metrics } returns this@BuilderTest.metrics
     }
 
     private fun job() = client.batch().v1().jobs().inNamespace("liftgate-build").withName(BuildJobs.name(queued.id))
@@ -121,6 +125,7 @@ class BuilderTest {
         coVerify(exactly = 1) { registryTokens.revoke(queued.id) }
         verify(exactly = 1) { logs.end(queued.id, null) }
         assertNull(job().get())
+        assertEquals(1L, metrics.timer("liftgate.build.duration", "status", "succeeded").count())
     }
 
     @Test
@@ -132,6 +137,7 @@ class BuilderTest {
         coVerify(exactly = 0) { registryTokens.issue(any()) }
         assertNotNull(job().get())
         assertEquals(mapOf("token" to "ghs_token"), secret().stringData)
+        assertEquals(1L, metrics.timer("liftgate.build.duration", "status", "failed").count())
     }
 
     @Test
@@ -164,6 +170,7 @@ class BuilderTest {
         coVerify(exactly = 1) { registryTokens.issue(queued.id) }
         assertEquals(1, jobCreations())
         assertNull(job().get())
+        assertEquals(1L, metrics.timer("liftgate.build.duration", "status", "succeeded").count())
     }
 
     @Test

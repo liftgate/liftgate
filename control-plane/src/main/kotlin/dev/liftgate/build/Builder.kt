@@ -1,11 +1,13 @@
 package dev.liftgate.build
 
 import dev.liftgate.App
+import dev.liftgate.db.sql
 import dev.liftgate.deploy.BuildStatus
 import dev.liftgate.events.Subject
 import dev.liftgate.events.uuid
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.ScalableResource
+import io.micrometer.core.instrument.Timer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
@@ -43,6 +45,7 @@ class Builder(private val app: App, private val kube: KubernetesClient) {
         val image = BuildJobs.imageRef(config.registry, scope.org, project, scope.service, build.commitSha)
         val cache = BuildJobs.imageRef(config.registry, scope.org, project, scope.service, "cache")
         val jobs = kube.batch().v1().jobs().inNamespace(config.buildNamespace)
+        val sample = Timer.start()
         val failure = try {
             val token = github.installationToken(project.installationId, project.repoFullName.substringAfter('/'))
             if (project.importedByLogin?.let { github.canPush(token, project.repoFullName, it) } == false) {
@@ -65,6 +68,7 @@ class Builder(private val app: App, private val kube: KubernetesClient) {
         } else {
             app.builds.markFailed(buildId, failure)
         }
+        sample.stop(app.metrics.timer("liftgate.build.duration", "status", (if (failure == null) BuildStatus.SUCCEEDED else BuildStatus.FAILED).sql))
         app.registryTokens.revoke(buildId)
         app.nats.logs.end(buildId, failure)
     }

@@ -32,6 +32,8 @@ import kotlin.time.measureTime
 class NatsTest {
     private val payload = buildJsonObject { put("buildId", "b1") }
 
+    private fun outcomes(consumer: String, outcome: String) = TestNats.metrics.counter("liftgate.messages", "consumer", consumer, "outcome", outcome).count()
+
     @Test
     fun `a handler that fails seven times is retried with growing delays and handled once`() = runBlocking {
         val nats = TestNats.clean()
@@ -49,6 +51,7 @@ class NatsTest {
         val elapsed = measureTime { withTimeout(30.seconds) { handled.await() } }
         delay(3.seconds)
         assertEquals(8, attempts.get())
+        assertEquals(listOf(7.0, 1.0), listOf("failed", "acked").map { outcomes("retry-test", it) })
         assertTrue(elapsed >= 1.seconds, "seven retries took only $elapsed")
         consumer.cancel()
     }
@@ -112,6 +115,7 @@ class NatsTest {
         assertEquals(payload, withTimeout(10.seconds) { received.await() })
         delay(1.seconds)
         assertEquals(0L, TestNats.streams.getConsumerInfo("LIFTGATE", "term-test").numAckPending)
+        assertEquals(listOf(1.0, 1.0), listOf("terminated", "acked").map { outcomes("term-test", it) })
         consumer.cancel()
     }
 

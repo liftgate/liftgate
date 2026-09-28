@@ -47,6 +47,36 @@ spec:
     - Ingress
   ingress:
     - {}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "liftgate.fullname" . }}-prometheus
+  labels:
+    {{- include "liftgate.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+              app.kubernetes.io/component: server
+      ports:
+        - protocol: TCP
+          port: 7777
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 8081
+        - protocol: TCP
+          port: 9093
+        - protocol: TCP
+          port: 9100
+        - protocol: TCP
+          port: 9187
 {{- if .Values.postgres.managed }}
 ---
 apiVersion: networking.k8s.io/v1

@@ -1,0 +1,69 @@
+{{- if .Values.nats.managed }}
+{{- $nats := include "liftgate.natsService" . }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "liftgate.fullname" . }}-nats-exporter
+  labels:
+    {{- include "liftgate.labels" . | nindent 4 }}
+    app.kubernetes.io/component: nats-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "liftgate.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: nats-exporter
+  template:
+    metadata:
+      labels:
+        {{- include "liftgate.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: nats-exporter
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "7777"
+    spec:
+      automountServiceAccountToken: false
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: exporter
+          image: natsio/prometheus-nats-exporter:0.20.1
+          args:
+            - -port=7777
+            - -varz
+            - -jsz=all
+            - -prefix=nats
+            {{- range until (.Values.nats.config.cluster.enabled | ternary (int .Values.nats.config.cluster.replicas) 1) }}
+            - http://{{ $nats }}-{{ . }}.{{ $nats }}-headless:8222/
+            {{- end }}
+          ports:
+            - name: metrics
+              containerPort: 7777
+          readinessProbe:
+            tcpSocket:
+              port: metrics
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: metrics
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+{{- end }}

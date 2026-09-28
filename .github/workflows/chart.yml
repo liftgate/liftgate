@@ -74,6 +74,15 @@ jobs:
             | index("LIFTGATE_SECRETS_MASTER_KEY") == null and index("LIFTGATE_GITHUB_APP_PRIVATE_KEY") == null' rendered.json
           jq -e '.[] | select(.kind == "HTTPRoute" and .metadata.name == "liftgate-control-plane") | .spec.rules[0].matches == [{path: {type: "PathPrefix", value: "/api"}}]' rendered.json
 
+  rules:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: promtool check rules and unit tests
+        run: |
+          docker run --rm -v "$PWD/infra/prometheus:/rules:ro" -w /rules --entrypoint sh quay.io/prometheus/prometheus:v3.14.0 \
+            -c 'promtool check rules rules.yaml && promtool test rules rules.test.yaml'
+
   install-kindnet:
     runs-on: ubuntu-24.04
     env:

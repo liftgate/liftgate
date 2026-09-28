@@ -1,6 +1,7 @@
 package dev.liftgate.events
 
 import dev.liftgate.config.Config
+import io.micrometer.core.instrument.MeterRegistry
 import io.nats.client.Connection
 import io.nats.client.ConsumerContext
 import io.nats.client.Message
@@ -36,7 +37,7 @@ private const val POLL_MILLIS = 5000L
  * @author Dean
  * @date 9/17/2026
  */
-class Nats(private val config: Config, private val retryDelay: Duration = Duration.ofSeconds(10)) : AutoCloseable {
+class Nats(private val config: Config, private val metrics: MeterRegistry, private val retryDelay: Duration = Duration.ofSeconds(10)) : AutoCloseable {
     private val log = LoggerFactory.getLogger(Nats::class.java)
     private val connection = io.nats.client.Nats.connectReconnectOnConnect(Options.builder().server(config.natsUrl).maxReconnects(-1).build())
     private val jetStream = connection.jetStream()
@@ -95,7 +96,13 @@ class Nats(private val config: Config, private val retryDelay: Duration = Durati
                     .getOrNull()
                 when {
                     message == null -> permits.release()
-                    isActive -> launch { try { deliver(message, ackWait, handler) } finally { permits.release() } }
+                    isActive -> launch {
+                        try {
+                            metrics.counter("liftgate.messages", "consumer", durable, "outcome", deliver(message, ackWait, handler)).increment()
+                        } finally {
+                            permits.release()
+                        }
+                    }
                     else -> message.nak()
                 }
             }
@@ -108,10 +115,11 @@ class Nats(private val config: Config, private val retryDelay: Duration = Durati
 
     override fun close() = connection.close()
 
-    private suspend fun deliver(message: Message, ackWait: Duration, handler: suspend (JsonObject) -> Unit) {
+    private suspend fun deliver(message: Message, ackWait: Duration, handler: suspend (JsonObject) -> Unit): String {
         val payload = runCatching { Json.parseToJsonElement(String(message.data)).jsonObject }.getOrElse {
             log.warn("terminating unparseable message on {}", message.subject, it)
-            return message.term()
+            message.term()
+            return "terminated"
         }
         try {
             coroutineScope {
@@ -125,15 +133,20 @@ class Nats(private val config: Config, private val retryDelay: Duration = Durati
                 heartbeat.cancel()
             }
             message.ack()
+            return "acked"
         } catch (e: Exception) {
             if (!currentCoroutineContext().isActive) {
                 message.nak()
                 throw e
             }
-            if (e is Redeliver) return message.nakWithDelay(e.delay)
+            if (e is Redeliver) {
+                message.nakWithDelay(e.delay)
+                return "deferred"
+            }
             log.warn("handler failed for {}", message.subject, e)
             val deliveries = message.metaData().deliveredCount()
             message.nakWithDelay(retryDelay.multipliedBy(1L shl (deliveries - 1).coerceAtMost(6).toInt()).coerceAtMost(Duration.ofMinutes(10)))
+            return "failed"
         }
     }
 }

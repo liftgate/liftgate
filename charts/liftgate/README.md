@@ -389,7 +389,7 @@ empty, neither appears.
 | `postgres.backup.serverName` | `""` | Folder under `destinationPath` the cluster archives to; empty means the Cluster name. Give each restored cluster a new one |
 | `postgres.backup.recoverFrom` | `""` | Folder to restore from when the Cluster is created; empty creates an empty database |
 | `postgres.backup.recoverTo` | `""` | RFC 3339 time to stop the restore at; empty replays all archived WAL |
-| `nats.managed` | `true` | Install the `nats` subchart |
+| `nats.managed` | `true` | Install the `nats` subchart and a Prometheus exporter for it |
 | `nats.externalUrl` | `""` | NATS URL when not managed |
 | `nats.config.*` | JetStream on, 5Gi | Passed through to the nats chart |
 | `nats.natsBox.enabled` | `false` | Set `true` for a `nats` CLI pod to inspect streams |
@@ -548,9 +548,10 @@ ServiceAccounts. It rejects:
 The release namespace denies ingress by default. The control plane can reach every pod in it.
 The control plane's HTTP port, the dashboard and cert-manager's HTTP-01 solver pods accept
 traffic from anywhere; Hazelcast only from the control plane; NATS only from this release's
-pods; and PostgreSQL only from its own instances and the CloudNativePG operator. Anything else
-installed in the release namespace, such as the Prometheus from [`infra/`](../../infra), is
-reachable only from the control plane unless it brings its own NetworkPolicy.
+pods; and PostgreSQL only from its own instances and the CloudNativePG operator. The Prometheus
+server from [`infra/`](../../infra), when it runs in the release namespace, reaches every pod
+there on the metrics ports 7777, 8080, 8081, 9093, 9100 and 9187. Anything else installed in the
+release namespace is reachable only from the control plane unless it brings its own NetworkPolicy.
 
 ## Registry authentication
 

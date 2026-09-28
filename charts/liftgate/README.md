@@ -360,8 +360,10 @@ With the GitHub App configured, the `api` role posts a `liftgate/<service>` comm
 commit it builds: pending while the build is queued, running and deploying, success once the
 deployment runs, failure when the build or the deployment fails, and error when a newer push cancels
 the queued build. It uses an installation token scoped to that one repository with only
-`statuses: write`, so the App needs the repository permission Commit statuses: Read and write, and
-each installation has to accept it. Until it does, the status is not posted and the build is unaffected.
+`statuses: write` and `metadata: read`, so the App needs the repository permission Commit statuses:
+Read and write, and each installation has to accept it. Until it does, the status is not posted and
+the build is unaffected. Like a build, a status is not posted once the GitHub account that imported
+the project has lost write access to the repository.
 
 Organization admins add Slack, Discord or webhook channels under Settings, Notifications. A webhook
 request carries `X-Liftgate-Signature: sha256=<hex HMAC-SHA256 of the body>`, keyed with the secret

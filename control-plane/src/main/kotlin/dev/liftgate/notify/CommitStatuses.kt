@@ -43,7 +43,10 @@ class CommitStatuses(private val app: App) {
             val status = GitHubApp.CommitStatus(state, scope.buildUrl(app.config.dashboardUrl, buildId), description.take(MAX_DESCRIPTION), "liftgate/${scope.service.slug}")
             if (status == posted) return
             try {
-                github.postStatus(scope.project.installationId, scope.project.repoFullName, build.commitSha, status)
+                val project = scope.project
+                val token = github.installationToken(project.installationId, project.repoFullName.substringAfter('/'), mapOf("statuses" to "write", "metadata" to "read"))
+                if (project.importedByLogin?.let { github.canPush(token, project.repoFullName, it) } == false) return
+                github.postStatus(token, project.repoFullName, build.commitSha, status)
             } catch (e: ClientRequestException) {
                 val headers = e.response.headers
                 if (e.response.status == HttpStatusCode.TooManyRequests || headers["x-ratelimit-remaining"] == "0" || headers[HttpHeaders.RetryAfter] != null) throw e

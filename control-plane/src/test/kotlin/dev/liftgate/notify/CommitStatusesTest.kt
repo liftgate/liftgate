@@ -53,6 +53,8 @@ class CommitStatusesTest {
     private var answer = HttpStatusCode.Created
     private var rateLimited = false
     private var onStatus = {}
+    private var permission = "write"
+    private var project = testProject
     private val github = GitHubApp(
         GitHubConfig("1", TestKeys.privateKeyPem),
         HttpClient(MockEngine { request ->
@@ -60,6 +62,7 @@ class CommitStatusesTest {
             val headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
             when (request.url.encodedPath) {
                 "/app/installations/42/access_tokens" -> respond("""{"token":"ghs_status"}""", HttpStatusCode.Created, headers)
+                "/repos/acme/shop/collaborators/dean/permission" -> respond("""{"permission":"$permission"}""", HttpStatusCode.OK, headers)
                 "/repos/acme/shop/statuses/abc123" -> {
                     onStatus()
                     respond("{}", answer, if (rateLimited) headersOf("x-ratelimit-remaining", "0") else headers)
@@ -75,7 +78,7 @@ class CommitStatusesTest {
         every { github } returns this@CommitStatusesTest.github
         every { builds } returns mockk<Builds> { coEvery { byId(testBuild.id) } answers { this@CommitStatusesTest.build } }
         every { this@mockk.deployments } returns mockk<Deployments> { coEvery { forService(testService.id) } answers { this@CommitStatusesTest.deployments } }
-        every { services } returns mockk<Services> { coEvery { scope(testService.id) } returns ServiceScope(testService, testEnvironment, testProject, testOrg) }
+        every { services } returns mockk<Services> { coEvery { scope(testService.id) } answers { ServiceScope(testService, testEnvironment, this@CommitStatusesTest.project, testOrg) } }
     }
 
     private fun sent(index: Int) = json.parseToJsonElement((requests[index].body as TextContent).text)
@@ -90,7 +93,7 @@ class CommitStatusesTest {
     @Test
     fun `a failed build posts state failure with a token that can only write statuses`() = runBlocking {
         CommitStatuses(app).post(testBuild.id)
-        assertEquals(json.parseToJsonElement("""{"repositories":["shop"],"permissions":{"statuses":"write"}}"""), sent(0))
+        assertEquals(json.parseToJsonElement("""{"repositories":["shop"],"permissions":{"statuses":"write","metadata":"read"}}"""), sent(0))
         assertEquals("Bearer ghs_status", requests[1].headers[HttpHeaders.Authorization])
         assertEquals(
             json.parseToJsonElement(
@@ -99,6 +102,18 @@ class CommitStatusesTest {
             ),
             sent(1),
         )
+    }
+
+    @Test
+    fun `a status is posted only while the account that imported the project can push to the repository`() = runBlocking {
+        project = testProject.copy(importedByLogin = "dean")
+        CommitStatuses(app).post(testBuild.id)
+        permission = "read"
+        CommitStatuses(app).post(testBuild.id)
+        val token = "/app/installations/42/access_tokens"
+        val check = "/repos/acme/shop/collaborators/dean/permission"
+        assertEquals(listOf(token, check, "/repos/acme/shop/statuses/abc123", token, check), requests.map { it.url.encodedPath })
+        assertEquals("Bearer ghs_status", requests[1].headers[HttpHeaders.Authorization])
     }
 
     @Test

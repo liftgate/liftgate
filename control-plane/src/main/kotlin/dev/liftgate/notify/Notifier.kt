@@ -128,7 +128,7 @@ class Notifier(
             }.execute { it.status }.takeUnless { it.isSuccess() }?.let { "the endpoint answered $it" }
         } catch (e: Exception) {
             currentCoroutineContext().ensureActive()
-            "the endpoint could not be reached: ${e.message ?: e.javaClass.simpleName}"
+            "the endpoint could not be reached: ${(e as? UnknownHostException)?.message ?: e.javaClass.simpleName}"
         }
     }
 

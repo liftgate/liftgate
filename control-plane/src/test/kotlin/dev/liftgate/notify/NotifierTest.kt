@@ -12,6 +12,7 @@ import dev.liftgate.notify.NotificationChannels.Endpoint
 import dev.liftgate.testConfig
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
+import io.ktor.client.plugins.ConnectTimeoutException
 import io.ktor.client.request.HttpRequestData
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.TextContent
@@ -117,6 +118,12 @@ class NotifierTest {
         val failure = assertNotNull(notifier.send(Endpoint(Kind.SLACK, hook, null), notification))
         assertTrue("hooks.example.com has no public IPv4 address" in failure, failure)
         assertEquals(listOf("hooks.example.com", "hooks.example.com"), lookups)
+    }
+
+    @Test
+    fun `a failure never carries the channel url, whose path is the credential`() = runBlocking {
+        val failure = Notifier(app, engine = MockEngine { throw ConnectTimeoutException(it) }).send(Endpoint(Kind.SLACK, hook, null), notification)
+        assertEquals("the endpoint could not be reached: ConnectTimeoutException", failure)
     }
 
     @Test

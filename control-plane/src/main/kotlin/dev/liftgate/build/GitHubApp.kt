@@ -59,9 +59,9 @@ class GitHubApp(private val config: GitHubConfig, private val client: HttpClient
         null
     }
 
-    suspend fun postStatus(installationId: Long, repoFullName: String, sha: String, status: CommitStatus) {
+    suspend fun postStatus(installationToken: String, repoFullName: String, sha: String, status: CommitStatus) {
         client.post("$API/repos/$repoFullName/statuses/$sha") {
-            github(installationToken(installationId, repoFullName.substringAfter('/'), mapOf("statuses" to "write")))
+            github(installationToken)
             contentType(ContentType.Application.Json)
             setBody(status)
         }

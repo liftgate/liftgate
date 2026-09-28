@@ -141,10 +141,10 @@ class Deployments(private val db: Db, private val metrics: MeterRegistry = Simpl
     private fun running(serviceId: UUID) =
         DeploymentsTable.selectAll().where { (DeploymentsTable.serviceId eq serviceId) and (DeploymentsTable.status eq DeploymentStatus.RUNNING.sql) }
 
-    private fun supersedeOlder(deployment: Deployment) = DeploymentsTable.update({
+    private fun JdbcTransaction.supersedeOlder(deployment: Deployment) = DeploymentsTable.updateReturning(listOf(DeploymentsTable.id), {
         (DeploymentsTable.serviceId eq deployment.serviceId) and
             (DeploymentsTable.id neq deployment.id) and
             (DeploymentsTable.createdAt less deployment.createdAt.atOffset(ZoneOffset.UTC)) and
             (DeploymentsTable.status inList live)
-    }) { it[status] = DeploymentStatus.SUPERSEDED.sql }
+    }) { it[status] = DeploymentStatus.SUPERSEDED.sql }.map { it[DeploymentsTable.id] }.forEach { updated(it, DeploymentStatus.SUPERSEDED) }
 }

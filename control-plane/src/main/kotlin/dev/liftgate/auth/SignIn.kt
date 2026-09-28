@@ -60,15 +60,16 @@ fun removeSignInMethod(userId: UUID, delete: () -> Int) {
     if (signInMethods(userId) == 0L) throw LiftgateException(HttpStatusCode.Conflict, "last_method", "add another sign-in method before removing this one")
 }
 
-fun audit(userId: UUID, action: String, provider: String) = audit(userId, action, "user", userId, "provider" to provider)
+fun audit(userId: UUID, action: String, provider: String, orgId: UUID? = null) = audit(userId, action, "user", userId.toString(), mapOf("provider" to provider), orgId)
 
-fun audit(actor: UUID, action: String, targetType: String, targetId: UUID, detail: Pair<String, String>, orgId: UUID? = null) = AuditLog.insert {
+fun audit(actor: UUID, action: String, targetType: String, targetId: String, details: Map<String, String>, orgId: UUID? = null, viaToken: Boolean = false) = AuditLog.insert {
     it[AuditLog.orgId] = orgId
     it[actorUserId] = actor
     it[AuditLog.action] = action
     it[AuditLog.targetType] = targetType
-    it[AuditLog.targetId] = targetId.toString()
-    it[details] = JsonObject(mapOf(detail.first to JsonPrimitive(detail.second)))
+    it[AuditLog.targetId] = targetId
+    it[AuditLog.details] = JsonObject(details.mapValues { (_, value) -> JsonPrimitive(value) })
+    it[AuditLog.viaToken] = viaToken
 }
 
 /**
@@ -132,7 +133,7 @@ class SignIn(
 
     private fun createUser(identity: VerifiedIdentity): UUID {
         if (signup == Signup.CLOSED) throw LiftgateException(HttpStatusCode.Forbidden, "signup_closed", "sign-up is closed on this Liftgate instance")
-        val active = signup == Signup.OPEN || allowed(identity) || identity.vouchedBy?.let(::vouches) == true
+        val active = signup == Signup.OPEN || allowed(identity) || identity.org?.takeIf { identity.emailVerified }?.let(::vouches) == true
         return insertUser(
             identity.login ?: identity.email?.substringBefore('@') ?: identity.provider,
             identity.name,
@@ -172,6 +173,6 @@ class SignIn(
             it[emailVerified] = identity.emailVerified
             it[lastUsedAt] = now()
         }
-        audit(userId, action, identity.provider)
+        audit(userId, action, identity.provider, identity.org)
     }
 }

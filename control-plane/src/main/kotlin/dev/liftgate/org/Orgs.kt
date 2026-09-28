@@ -3,6 +3,7 @@ package dev.liftgate.org
 import dev.liftgate.auth.OrgRole
 import dev.liftgate.build.orphanRepositories
 import dev.liftgate.db.ApiTokens
+import dev.liftgate.db.AuditLog
 import dev.liftgate.db.Db
 import dev.liftgate.db.Memberships
 import dev.liftgate.db.Organizations
@@ -10,21 +11,29 @@ import dev.liftgate.db.Projects
 import dev.liftgate.db.Users
 import dev.liftgate.db.sql
 import dev.liftgate.db.toEnum
+import dev.liftgate.http.LiftgateException
 import dev.liftgate.http.conflict
+import dev.liftgate.http.notFound
 import dev.liftgate.http.orgSuspended
 import dev.liftgate.project.enqueueTeardown
+import io.ktor.http.HttpStatusCode
 import org.jetbrains.exposed.v1.core.ResultRow
+import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.innerJoin
+import org.jetbrains.exposed.v1.core.leftJoin
+import org.jetbrains.exposed.v1.core.less
 import org.jetbrains.exposed.v1.core.neq
+import org.jetbrains.exposed.v1.core.vendors.ForUpdateOption
 import org.jetbrains.exposed.v1.jdbc.JdbcTransaction
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.insertReturning
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.update
 import java.time.OffsetDateTime
 import java.util.UUID
 
@@ -40,6 +49,9 @@ fun ResultRow.toOrganization() = Organization(
 )
 
 fun ResultRow.toRole(): OrgRole = this[Memberships.role].toEnum()
+
+fun memberRole(orgId: UUID, userId: UUID): OrgRole? =
+    Memberships.select(Memberships.role).where { (Memberships.orgId eq orgId) and (Memberships.userId eq userId) }.singleOrNull()?.toRole()
 
 fun insertUser(
     login: String,
@@ -86,15 +98,39 @@ class Orgs(private val db: Db, private val limits: Limits = Limits()) {
     }
 
     suspend fun forUser(userId: UUID): List<Organization> = db.tx {
-        (Organizations innerJoin Memberships).selectAll().where { Memberships.userId eq userId }.orderBy(Organizations.slug).map { it.toOrganization() }
+        (Organizations innerJoin Memberships).selectAll().where { Memberships.userId eq userId }.orderBy(Organizations.slug).map { it.toOrganization().copy(role = it.toRole()) }
     }
 
     suspend fun members(orgId: UUID): List<Pair<User, OrgRole>> = db.tx {
         (Memberships innerJoin Users).selectAll().where { Memberships.orgId eq orgId }.orderBy(Users.login).map { it.toUser() to it.toRole() }
     }
 
-    suspend fun role(orgId: UUID, userId: UUID): OrgRole? = db.tx {
-        Memberships.select(Memberships.role).where { (Memberships.orgId eq orgId) and (Memberships.userId eq userId) }.singleOrNull()?.toRole()
+    suspend fun role(orgId: UUID, userId: UUID): OrgRole? = db.tx { memberRole(orgId, userId) }
+
+    suspend fun setRole(orgId: UUID, userId: UUID, role: OrgRole) = db.tx {
+        changeMembers(orgId) { Memberships.update({ (Memberships.orgId eq orgId) and (Memberships.userId eq userId) }) { it[Memberships.role] = role.sql } }
+    }
+
+    suspend fun removeMember(orgId: UUID, userId: UUID) = db.tx {
+        changeMembers(orgId) { Memberships.deleteWhere { (Memberships.orgId eq orgId) and (Memberships.userId eq userId) } }
+        ApiTokens.deleteWhere { (ApiTokens.orgId eq orgId) and (createdBy eq userId) }
+    }
+
+    suspend fun audit(orgId: UUID, before: Long?, limit: Int): List<AuditEntry> = db.tx {
+        (AuditLog leftJoin Users).selectAll().where { (AuditLog.orgId eq orgId) and (AuditLog.id less (before ?: Long.MAX_VALUE)) }
+            .orderBy(AuditLog.id, SortOrder.DESC).limit(limit)
+            .map {
+                AuditEntry(
+                    it[AuditLog.id],
+                    it[AuditLog.actorUserId]?.let { _ -> it.toUser() },
+                    it[AuditLog.viaToken],
+                    it[AuditLog.action],
+                    it[AuditLog.targetType],
+                    it[AuditLog.targetId],
+                    it[AuditLog.details],
+                    it[AuditLog.createdAt].toInstant(),
+                )
+            }
     }
 
     suspend fun usage(orgId: UUID): Usage = db.tx { limits.usage(orgId) }
@@ -118,6 +154,14 @@ class Orgs(private val db: Db, private val limits: Limits = Limits()) {
         deleteOrgs(ids)
         ApiTokens.deleteWhere { ApiTokens.createdBy eq userId }
         Users.deleteWhere { Users.id eq userId }
+    }
+
+    private fun changeMembers(orgId: UUID, change: () -> Int) {
+        Organizations.select(Organizations.id).where { Organizations.id eq orgId }.forUpdate(ForUpdateOption.ForUpdate).single()
+        if (change() == 0) notFound("member")
+        if (Memberships.selectAll().where { (Memberships.orgId eq orgId) and (Memberships.role eq OrgRole.OWNER.sql) }.empty()) {
+            throw LiftgateException(HttpStatusCode.Conflict, "last_owner", "an organization needs an owner, make someone else an owner first")
+        }
     }
 
     private fun JdbcTransaction.deleteOrgs(ids: List<UUID>) {

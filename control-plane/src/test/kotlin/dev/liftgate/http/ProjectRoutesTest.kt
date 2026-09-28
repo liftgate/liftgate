@@ -14,6 +14,7 @@ import dev.liftgate.org.Plans
 import dev.liftgate.org.insertUser
 import dev.liftgate.project.Project
 import dev.liftgate.project.Projects
+import dev.liftgate.discardingDb
 import dev.liftgate.testConfig
 import dev.liftgate.unlimitedCache
 import io.ktor.client.request.post
@@ -44,6 +45,7 @@ class ProjectRoutesTest {
     private val app = mockk<App> {
         every { config } returns testConfig()
         every { cache } returns unlimitedCache
+        every { db } returns discardingDb
         every { metrics } returns PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
         every { sessions } returns mockk<Sessions> { coEvery { resolve("s") } returns user }
         every { access } returns mockk<Access>(relaxUnitFun = true)

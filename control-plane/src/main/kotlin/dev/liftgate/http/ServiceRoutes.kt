@@ -68,6 +68,7 @@ fun Route.serviceRoutes(app: App) {
                 val vars = call.receive<List<EnvVar>>()
                 if (vars.any { !envVarName.matches(it.name) }) invalid("env var names must match [A-Za-z_][A-Za-z0-9_]*")
                 if (vars.distinctBy { it.name }.size != vars.size) invalid("env var names must be unique")
+                call.auditDetails("names" to vars.joinToString(",") { it.name })
                 app.envVars.replace(service.id, vars)
                 call.respond(app.envVars.list(service.id, reveal = false))
             }
@@ -77,7 +78,7 @@ fun Route.serviceRoutes(app: App) {
 
 suspend fun ApplicationCall.service(app: App, min: OrgRole = OrgRole.MEMBER, id: UUID = uuid("id")): ServiceScope {
     val scope = app.services.scope(id) ?: notFound("service")
-    app.access.require(scope.org.id, principal, min)
+    authorize(app, scope.org.id, min)
     return scope
 }
 

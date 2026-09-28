@@ -69,7 +69,8 @@ class EmailCodes(private val db: Db, private val cache: Cache, masterKey: ByteAr
                 it[expiresAt] = now().plusMinutes(CODE_MINUTES)
             }
         }
-        withContext(Dispatchers.IO) { mailer.sendCode(address, code, CODE_MINUTES) }
+        val text = "Your Liftgate sign-in code is $code.\n\nIt expires in $CODE_MINUTES minutes.\n\nIf you did not request this code, you can ignore this email.\n"
+        withContext(Dispatchers.IO) { mailer.send(address, "Your Liftgate sign-in code", text) }
     }
 
     suspend fun verify(email: String, code: String): SignedIn {

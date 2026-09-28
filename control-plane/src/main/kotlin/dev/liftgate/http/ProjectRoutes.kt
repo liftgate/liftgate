@@ -50,7 +50,7 @@ fun Route.projectRoutes(app: App) {
         }
         get("/{project}/tree") {
             val tree = app.services.tree(call.parameters["slug"]!!, call.parameters["project"]!!, call.principal.user.id) ?: notFound("project")
-            app.access.require(tree.project.orgId, call.principal)
+            call.authorize(app, tree.project.orgId)
             call.respond(tree)
         }
     }
@@ -75,13 +75,13 @@ fun Route.projectRoutes(app: App) {
 
 suspend fun ApplicationCall.project(app: App, min: OrgRole = OrgRole.MEMBER): Project {
     val project = app.projects.byId(uuid("id")) ?: notFound("project")
-    app.access.require(project.orgId, principal, min)
+    authorize(app, project.orgId, min)
     return project
 }
 
 suspend fun ApplicationCall.environment(app: App, min: OrgRole = OrgRole.MEMBER): Environment {
     val environment = app.projects.environment(uuid("id")) ?: notFound("environment")
     val project = app.projects.byId(environment.projectId) ?: notFound("project")
-    app.access.require(project.orgId, principal, min)
+    authorize(app, project.orgId, min)
     return environment
 }

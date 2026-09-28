@@ -10,7 +10,6 @@ import io.mockk.coEvery
 import io.mockk.mockk
 import jakarta.mail.Message
 import jakarta.mail.internet.MimeMessage
-import jakarta.mail.internet.MimeMultipart
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterAll
 import java.time.Instant
@@ -45,7 +44,7 @@ class EmailCodesTest {
 
     private fun ip() = "10.0.${Random.nextInt(256)}.${Random.nextInt(256)}-${UUID.randomUUID()}"
 
-    private fun MimeMessage.code() = Regex("\\d{6}").find((content as MimeMultipart).getBodyPart(0).content as String)!!.value
+    private fun MimeMessage.code() = Regex("\\d{6}").find(content as String)!!.value
 
     @Test
     fun `codes are stored as a keyed hash bound to the email`() {

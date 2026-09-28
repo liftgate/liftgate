@@ -17,6 +17,7 @@ import dev.liftgate.service.ServiceKind
 import dev.liftgate.service.ServiceScope
 import dev.liftgate.service.ServiceSpec
 import dev.liftgate.service.Services
+import dev.liftgate.discardingDb
 import dev.liftgate.testConfig
 import dev.liftgate.unlimitedCache
 import io.ktor.client.request.HttpRequestBuilder
@@ -69,6 +70,7 @@ class ServiceRoutesTest {
         every { it.metrics } returns PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
         every { it.config } returns testConfig()
         every { it.cache } returns unlimitedCache
+        every { it.db } returns discardingDb
     }
 
     init {

@@ -23,8 +23,6 @@ import java.security.MessageDigest
 import java.util.Base64
 import java.util.UUID
 
-private const val TOKEN = "api_token"
-
 /**
  * @author Dean
  * @date 9/17/2026
@@ -32,17 +30,15 @@ private const val TOKEN = "api_token"
 class ApiTokens(private val db: Db, private val cache: Cache) {
     suspend fun create(orgId: UUID, name: String, createdBy: UUID, expiresInDays: Int?): String {
         val token = "lg_" + randomToken()
-        val id = UUID.randomUUID()
         db.tx {
             ApiTokensTable.insert {
-                it[ApiTokensTable.id] = id
+                it[id] = UUID.randomUUID()
                 it[ApiTokensTable.orgId] = orgId
                 it[ApiTokensTable.name] = name
                 it[tokenHash] = hash(token)
                 it[ApiTokensTable.createdBy] = createdBy
                 it[expiresAt] = expiresInDays?.let { days -> now().plusDays(days.toLong()) }
             }
-            audit(createdBy, "token.create", TOKEN, id, "name" to name, orgId)
         }
         return token
     }
@@ -60,10 +56,9 @@ class ApiTokens(private val db: Db, private val cache: Cache) {
         }
     }
 
-    suspend fun delete(orgId: UUID, id: UUID, actor: UUID) = db.tx {
-        val name = ApiTokensTable.deleteReturning(listOf(ApiTokensTable.name)) { (ApiTokensTable.id eq id) and (ApiTokensTable.orgId eq orgId) }
+    suspend fun delete(orgId: UUID, id: UUID): String = db.tx {
+        ApiTokensTable.deleteReturning(listOf(ApiTokensTable.name)) { (ApiTokensTable.id eq id) and (ApiTokensTable.orgId eq orgId) }
             .singleOrNull()?.get(ApiTokensTable.name) ?: notFound("token")
-        audit(actor, "token.revoke", TOKEN, id, "name" to name, orgId)
     }
 
     suspend fun resolve(token: String): Pair<UUID, UUID>? = db.tx {

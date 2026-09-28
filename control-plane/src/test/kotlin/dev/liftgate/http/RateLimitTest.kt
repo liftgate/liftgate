@@ -16,6 +16,7 @@ import dev.liftgate.k8s.testService
 import dev.liftgate.org.User
 import dev.liftgate.service.ServiceScope
 import dev.liftgate.service.Services
+import dev.liftgate.discardingDb
 import dev.liftgate.testConfig
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.client.plugins.websocket.webSocketSession
@@ -68,6 +69,7 @@ class RateLimitTest {
         every { config } returns testConfig(mapOf(*env))
         every { metrics } returns PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
         every { cache } returns RateLimitTest.cache
+        every { db } returns discardingDb
         every { passkeys } returns Passkeys(testConfig(), mockk(), RateLimitTest.cache, mockk())
         every { sessions } returns mockk<Sessions> { coEvery { resolve("s") } returns user }
         every { services } returns mockk<Services> { coEvery { scope(testService.id) } returns ServiceScope(testService, testEnvironment, testProject, testOrg) }

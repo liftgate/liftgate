@@ -7,9 +7,7 @@ import jakarta.mail.PasswordAuthentication
 import jakarta.mail.Session
 import jakarta.mail.Transport
 import jakarta.mail.internet.InternetAddress
-import jakarta.mail.internet.MimeBodyPart
 import jakarta.mail.internet.MimeMessage
-import jakarta.mail.internet.MimeMultipart
 
 private const val TIMEOUT_MILLIS = "10000"
 
@@ -40,26 +38,12 @@ class Mailer(config: EmailConfig, private val deliver: (MimeMessage) -> Unit = T
     )
     private val fromAddress = InternetAddress(config.from, true)
 
-    fun sendCode(to: String, code: String, minutes: Long) = deliver(
+    fun send(to: String, subject: String, text: String) = deliver(
         MimeMessage(session).apply {
             setFrom(fromAddress)
             setRecipient(Message.RecipientType.TO, InternetAddress(to, true))
-            setSubject("Your Liftgate sign-in code", "UTF-8")
-            setContent(
-                MimeMultipart(
-                    "alternative",
-                    MimeBodyPart().apply {
-                        setText("Your Liftgate sign-in code is $code.\n\nIt expires in $minutes minutes.\n\nIf you did not request this code, you can ignore this email.\n", "UTF-8")
-                    },
-                    MimeBodyPart().apply {
-                        setText(
-                            """<p>Your Liftgate sign-in code is</p><p style="font-size:24px;font-weight:600;letter-spacing:4px">$code</p><p>It expires in $minutes minutes.</p><p>If you did not request this code, you can ignore this email.</p>""",
-                            "UTF-8",
-                            "html",
-                        )
-                    },
-                ),
-            )
+            setSubject(subject, "UTF-8")
+            setText(text, "UTF-8")
         },
     )
 }

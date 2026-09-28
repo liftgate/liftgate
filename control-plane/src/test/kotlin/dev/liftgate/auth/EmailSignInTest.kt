@@ -12,7 +12,6 @@ import dev.liftgate.testConfig
 import io.mockk.coEvery
 import io.mockk.mockk
 import jakarta.mail.internet.MimeMessage
-import jakarta.mail.internet.MimeMultipart
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.selectAll
@@ -51,7 +50,7 @@ class EmailSignInTest {
     private val address = "${UUID.randomUUID()}@example.com"
 
     private suspend fun start() = codes.start(address, UUID.randomUUID().toString()).let {
-        Regex("\\d{6}").find((sent.last().content as MimeMultipart).getBodyPart(0).content as String)!!.value
+        Regex("\\d{6}").find(sent.last().content as String)!!.value
     }
 
     private fun wrong(code: String) = ((code.toInt() + 1) % 1_000_000).toString().padStart(6, '0')

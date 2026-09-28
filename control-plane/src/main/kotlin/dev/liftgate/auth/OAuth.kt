@@ -34,7 +34,7 @@ data class VerifiedIdentity(
     val login: String? = null,
     val name: String? = null,
     val avatarUrl: String? = null,
-    val vouchedBy: UUID? = null,
+    val org: UUID? = null,
 )
 
 /**

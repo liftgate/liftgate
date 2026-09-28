@@ -2,6 +2,8 @@ package dev.liftgate.admin
 
 import dev.liftgate.TestDatabase
 import dev.liftgate.auth.ApiTokens
+import dev.liftgate.auth.Mailer
+import dev.liftgate.config.EmailConfig
 import dev.liftgate.db.AuditLog
 import dev.liftgate.db.Outbox
 import dev.liftgate.db.Sessions
@@ -21,6 +23,9 @@ import dev.liftgate.service.ServiceKind
 import dev.liftgate.service.ServiceSpec
 import dev.liftgate.service.Services
 import io.mockk.mockk
+import jakarta.mail.Message
+import jakarta.mail.MessagingException
+import jakarta.mail.internet.MimeMessage
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -95,6 +100,24 @@ class AdminTest {
         assertEquals(listOf(json("orgId" to org.id.toString())), outbox(Subject.ORG_UNSUSPENDED))
         assertEquals(1, audit("org.unsuspend").size)
         assertEquals("acme is not suspended", assertFailsWith<IllegalStateException> { exec("unsuspend", "acme") }.message)
+    }
+
+    @Test
+    fun `approval and suspension notices go out by email, and a failed email does not undo the command`() = runBlocking {
+        val sent = mutableListOf<MimeMessage>()
+        fun admin(deliver: (MimeMessage) -> Unit) = Admin(db, mailer = Mailer(EmailConfig("mail.example.com", 587, false, null, null, "login@liftgate.dev"), deliver))
+        val newbie = db.tx { insertUser("newbie", null, "newbie@example.dev", null, UserStatus.PENDING) }
+        assertEquals("newbie is active", admin { sent += it }.run(listOf("approve", "newbie")))
+        orgs.create("acme", "Acme", newbie.id)
+        admin { sent += it }.run(listOf("suspend", "acme", "crypto", "mining"))
+        assertEquals(listOf("Your Liftgate account is approved", "acme is suspended on Liftgate"), sent.map { it.subject })
+        assertTrue(sent.all { it.getRecipients(Message.RecipientType.TO).single().toString() == "newbie@example.dev" })
+        assertTrue("crypto mining" in sent.last().content as String)
+        assertEquals(
+            "newbie is suspended, but the notice email failed: refused",
+            admin { throw MessagingException("refused") }.run(listOf("suspend-user", "newbie", "spam")),
+        )
+        assertEquals(UserStatus.SUSPENDED, orgs.user(newbie.id)?.status)
     }
 
     @Test

@@ -44,6 +44,7 @@ import dev.liftgate.metering.Prometheus
 import dev.liftgate.notify.CommitStatuses
 import dev.liftgate.notify.NotificationChannels
 import dev.liftgate.notify.Notifier
+import dev.liftgate.org.Invitations
 import dev.liftgate.org.Limits
 import dev.liftgate.org.Orgs
 import dev.liftgate.project.Projects
@@ -106,13 +107,15 @@ class App(val config: Config) : AutoCloseable {
     val signIn by lazy { SignIn(db, sessions, config.signup, config.signupAllow, consent = config.termsUrl != null) }
     val gitConnections by lazy { GitConnections(db, secrets, oauth) }
     val passkeys by lazy { Passkeys(config, db, cache, signIn) }
-    val emailCodes by lazy { config.email?.let { EmailCodes(db, cache, checkNotNull(config.secretsMasterKey), Mailer(it), signIn) } }
+    val mailer by lazy { config.email?.let(::Mailer) }
+    val emailCodes by lazy { mailer?.let { EmailCodes(db, cache, checkNotNull(config.secretsMasterKey), it, signIn) } }
     val sso by lazy { Sso(config.publicUrl, db, cache, signIn) }
     val registryTokens = RegistryTokens(db, services, config)
     val buildAdmission = BuildAdmission(db, config.plans)
     val podLogs = PodLogs(kube)
     val notificationChannels by lazy { NotificationChannels(db, secrets) }
     val notifier by lazy { Notifier(this) }
+    val invitations by lazy { Invitations(db, mailer, config.dashboardUrl) }
     private val stopped = CountDownLatch(1)
     private var server: EmbeddedServer<*, *>? = null
 
@@ -169,7 +172,7 @@ class App(val config: Config) : AutoCloseable {
 fun main(args: Array<String>) {
     val config = Config.fromEnv()
     if (args.firstOrNull() == "admin") {
-        val result = runCatching { Db(config).use { runBlocking { Admin(it, config.plans).run(args.drop(1)) } } }
+        val result = runCatching { Db(config).use { runBlocking { Admin(it, config.plans, config.email?.let(::Mailer)).run(args.drop(1)) } } }
         result.onSuccess(::println).onFailure { System.err.println(it.message ?: it) }
         exitProcess(if (result.isSuccess) 0 else 1)
     }

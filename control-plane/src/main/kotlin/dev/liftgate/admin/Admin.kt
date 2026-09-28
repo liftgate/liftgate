@@ -1,9 +1,12 @@
 package dev.liftgate.admin
 
+import dev.liftgate.auth.Mailer
+import dev.liftgate.auth.OrgRole
 import dev.liftgate.db.ApiTokens
 import dev.liftgate.db.AuditLog
 import dev.liftgate.db.Builds
 import dev.liftgate.db.Db
+import dev.liftgate.db.Memberships
 import dev.liftgate.db.Organizations
 import dev.liftgate.db.Sessions
 import dev.liftgate.db.Users
@@ -25,11 +28,13 @@ import kotlinx.serialization.json.JsonPrimitive
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inSubQuery
+import org.jetbrains.exposed.v1.core.innerJoin
 import org.jetbrains.exposed.v1.core.lowerCase
 import org.jetbrains.exposed.v1.core.or
 import org.jetbrains.exposed.v1.jdbc.JdbcTransaction
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.update
 import java.util.UUID
@@ -50,11 +55,11 @@ private val usage = """
  * @author Dean
  * @date 9/27/2026
  */
-class Admin(private val db: Db, private val plans: Plans = Plans()) {
+class Admin(private val db: Db, private val plans: Plans = Plans(), private val mailer: Mailer? = null) {
     suspend fun run(args: List<String>): String {
         val target by lazy { args.getOrNull(1) ?: error(usage) }
         val reason by lazy { args.drop(2).joinToString(" ").ifEmpty { error(usage) } }
-        return db.tx {
+        val result = db.tx {
             when (args.firstOrNull()) {
                 "list-pending" -> pending()
                 "approve" -> setStatus(target, setOf(UserStatus.PENDING), UserStatus.ACTIVE, "user.approve")
@@ -66,6 +71,16 @@ class Admin(private val db: Db, private val plans: Plans = Plans()) {
                 else -> error(usage)
             }
         }
+        val mailer = mailer ?: return result
+        val (to, subject, text) = db.tx {
+            when (args.first()) {
+                "approve" -> Triple(listOfNotNull(user(target).email), "Your Liftgate account is approved", "Your Liftgate account is approved. Sign in to create your first organization.")
+                "suspend-user" -> Triple(listOfNotNull(user(target).email), "Your Liftgate account is suspended", "Your Liftgate account is suspended: $reason")
+                "suspend" -> Triple(owners(target), "$target is suspended on Liftgate", "Your organization $target is suspended and its apps are stopped: $reason")
+                else -> null
+            }
+        } ?: return result
+        return runCatching { to.forEach { mailer.send(it, subject, text) } }.fold({ result }, { "$result, but the notice email failed: ${it.message}" })
     }
 
     private fun pending() = Users.selectAll().where { Users.status eq UserStatus.PENDING.sql }.orderBy(Users.createdAt)
@@ -120,6 +135,10 @@ class Admin(private val db: Db, private val plans: Plans = Plans()) {
 
     private fun org(slug: String): Organization =
         Organizations.selectAll().where { Organizations.slug eq slug }.singleOrNull()?.toOrganization() ?: error("no organization $slug")
+
+    private fun owners(slug: String) = (Memberships innerJoin Users).select(Users.email)
+        .where { (Memberships.orgId eq org(slug).id) and (Memberships.role eq OrgRole.OWNER.sql) }
+        .mapNotNull { it[Users.email] }
 
     private fun user(ref: String): User {
         val id = runCatching { UUID.fromString(ref) }.getOrNull()

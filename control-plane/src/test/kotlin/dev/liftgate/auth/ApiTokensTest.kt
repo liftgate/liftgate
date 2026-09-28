@@ -74,6 +74,7 @@ class ApiTokensTest {
     private fun replica() = TestApplication {
         val app = mockk<App>().also {
             every { it.config } returns testConfig()
+            every { it.db } returns db
             every { it.cache } returns unlimitedCache
             every { it.metrics } returns PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
             every { it.orgs } returns orgs
@@ -160,8 +161,8 @@ class ApiTokensTest {
         assertEquals(HttpStatusCode.NoContent, b.delete("/api/v1/orgs/acme/tokens/$id") { session(admin) }.status)
         assertEquals(HttpStatusCode.Unauthorized to HttpStatusCode.Unauthorized, a.me(token) to b.me(token))
         assertEquals(HttpStatusCode.NotFound, a.delete("/api/v1/orgs/acme/tokens/$id") { session(admin) }.status)
-        val audit = db.tx { AuditLog.selectAll().where { AuditLog.targetId eq id }.orderBy(AuditLog.id).map { it[AuditLog.action] to it[AuditLog.orgId] } }
-        assertEquals(listOf("token.create" to acme.id, "token.revoke" to acme.id), audit)
+        val audit = db.tx { AuditLog.selectAll().where { AuditLog.orgId eq acme.id }.orderBy(AuditLog.id).map { it[AuditLog.action] to it[AuditLog.details].getValue("name").jsonPrimitive.content } }
+        assertEquals(listOf("POST /orgs/{slug}/tokens" to "ci", "DELETE /orgs/{slug}/tokens/{id}" to "ci"), audit)
     }
 
     @Test

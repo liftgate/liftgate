@@ -67,6 +67,7 @@ class AccountRoutesTest {
     private val app = mockk<App>().also {
         every { it.config } returns testConfig()
         every { it.cache } returns unlimitedCache
+        every { it.db } returns db
         every { it.metrics } returns PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
         every { it.orgs } returns orgs
         every { it.access } returns Access(orgs)

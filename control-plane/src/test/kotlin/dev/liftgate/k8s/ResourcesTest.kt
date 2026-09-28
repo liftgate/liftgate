@@ -195,9 +195,9 @@ class ResourcesTest {
 
     @Test
     fun `denied cidrs are cut out of the internet egress after the private ranges`() {
-        val internet = Resources.networkPolicies(release, "liftgate-system", listOf("172.93.106.84/32")).single { it.metadata.name == "allow-egress" }.spec.egress[1]
+        val internet = Resources.networkPolicies(release, "liftgate-system", listOf("203.0.113.7/32")).single { it.metadata.name == "allow-egress" }.spec.egress[1]
         assertEquals(
-            listOf("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "169.254.0.0/16", "172.93.106.84/32"),
+            listOf("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "169.254.0.0/16", "203.0.113.7/32"),
             internet.to.single().ipBlock.except,
         )
     }

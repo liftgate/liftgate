@@ -48,10 +48,10 @@ jobs:
       - name: build egress ports, denied cidrs and platform resources
         run: |
           set -o pipefail
-          helm template liftgate charts/liftgate ${{ matrix.args }} --set-json 'deniedEgressCidrs=["172.93.106.84/32"]' --set postgres.resources.requests.memory=512Mi | yq ea -o json '[.]' > rendered.json
+          helm template liftgate charts/liftgate ${{ matrix.args }} --set-json 'deniedEgressCidrs=["203.0.113.7/32"]' --set postgres.resources.requests.memory=512Mi | yq ea -o json '[.]' > rendered.json
           jq -e '.[] | select(.metadata.name == "build-isolation") | .spec.egress[1]
-            | .to[0].ipBlock.except[-1] == "172.93.106.84/32" and .ports == ([[1, 24], [26, 464], [466, 586], [588, 2524], [2526, 65535]] | map({protocol: "TCP", port: .[0], endPort: .[1]}))' rendered.json
-          jq -e '.[] | select(.kind == "ConfigMap" and .metadata.name == "liftgate") | .data.LIFTGATE_DENIED_EGRESS_CIDRS == "172.93.106.84/32"' rendered.json
+            | .to[0].ipBlock.except[-1] == "203.0.113.7/32" and .ports == ([[1, 24], [26, 464], [466, 586], [588, 2524], [2526, 65535]] | map({protocol: "TCP", port: .[0], endPort: .[1]}))' rendered.json
+          jq -e '.[] | select(.kind == "ConfigMap" and .metadata.name == "liftgate") | .data.LIFTGATE_DENIED_EGRESS_CIDRS == "203.0.113.7/32"' rendered.json
           jq -e '[.[] | select(.kind == "StatefulSet" and .metadata.name == "liftgate-nats") | .spec.template.spec.containers[] | select(.name == "nats") | .resources.requests.memory] == ["128Mi"]' rendered.json
           jq -e '[.[] | select(.kind == "Cluster") | .spec.resources.requests.memory] == ["512Mi"]' rendered.json
           for cidr in fd00::/8 999.0.0.1/32; do

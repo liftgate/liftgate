@@ -79,7 +79,7 @@ class CommitStatusesTest {
         every { github } returns this@CommitStatusesTest.github
         every { builds } returns mockk<Builds> {
             coEvery { byId(testBuild.id) } answers { this@CommitStatusesTest.build }
-            coEvery { forService(testService.id) } answers { newer + this@CommitStatusesTest.build }
+            coEvery { forService(testService.id) } answers { newer }
         }
         every { this@mockk.deployments } returns mockk<Deployments> { coEvery { forService(testService.id) } answers { this@CommitStatusesTest.deployments } }
         every { services } returns mockk<Services> { coEvery { scope(testService.id) } answers { ServiceScope(testService, testEnvironment, this@CommitStatusesTest.project, testOrg) } }

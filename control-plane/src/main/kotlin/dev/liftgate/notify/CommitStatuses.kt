@@ -38,7 +38,7 @@ class CommitStatuses(private val app: App) {
         var posted: GitHubApp.CommitStatus? = null
         while (true) {
             val requested = app.builds.byId(buildId) ?: return
-            val builds = app.builds.forService(requested.serviceId).filter { it.commitSha == requested.commitSha }.ifEmpty { listOf(requested) }
+            val builds = app.builds.forService(requested.serviceId).filter { it.commitSha == requested.commitSha } + requested
             val deployment = app.deployments.forService(requested.serviceId).firstOrNull { d -> d.createdAt >= builds.first().createdAt && builds.any { it.id == d.buildId } }
             val build = builds.firstOrNull { it.id == deployment?.buildId } ?: builds.first()
             val scope = app.services.scope(build.serviceId) ?: return

@@ -4,8 +4,10 @@ package dev.liftgate.deploy
 
 import dev.liftgate.http.InstantSerializer
 import dev.liftgate.http.UuidSerializer
+import dev.liftgate.service.ServiceSpec
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 import kotlinx.serialization.UseSerializers
 import java.time.Instant
 import java.util.UUID
@@ -59,7 +61,7 @@ enum class DeploymentStatus {
     fun allows(to: DeploymentStatus) = to == this || to in when (this) {
         PENDING -> setOf(RELEASING, RUNNING, FAILED, SUPERSEDED)
         RELEASING -> setOf(RUNNING, FAILED, SUPERSEDED)
-        RUNNING -> setOf(FAILED, SUPERSEDED, ROLLED_BACK)
+        RUNNING -> setOf(FAILED, SUPERSEDED)
         FAILED -> setOf(RUNNING)
         SUPERSEDED, ROLLED_BACK -> emptySet()
     }
@@ -78,4 +80,6 @@ data class Deployment(
     val replicasReady: Int,
     val error: String?,
     val createdAt: Instant,
+    @Transient val config: ServiceSpec? = null,
+    @Transient val env: Map<String, String>? = null,
 )

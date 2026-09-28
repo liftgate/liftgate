@@ -91,8 +91,8 @@ class Reconciler(private val app: App, private val kube: KubernetesClient) {
         val scope = app.services.scope(deployment.serviceId) ?: return null
         val build = app.builds.byId(deployment.buildId) ?: return null
         return Release(
-            deployment, build, scope.service, scope.environment, scope.project, scope.org,
-            app.envVars.list(scope.service.id, reveal = true),
+            deployment, build, deployment.config?.service(scope.service.id, scope.service.environmentId) ?: scope.service, scope.environment, scope.project, scope.org,
+            deployment.env?.let(app.envVars::open) ?: app.envVars.list(scope.service.id, reveal = true),
             app.domains.forService(scope.service.id).filter { it.verifiedAt != null },
             app.config.plans.of(scope.org.plan),
         )

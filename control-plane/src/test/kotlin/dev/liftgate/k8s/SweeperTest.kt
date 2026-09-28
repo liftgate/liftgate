@@ -56,6 +56,7 @@ import org.jetbrains.exposed.v1.jdbc.insertReturning
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.update
 import org.testcontainers.DockerClientFactory
+import java.net.URLDecoder
 import java.time.Duration
 import java.util.UUID
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -236,7 +237,8 @@ class SweeperTest {
         val applied = ConcurrentLinkedQueue<Pair<String, String>>()
         val environment = listOf("/api/v1/$namespaced", "/api/v1/$namespaced/resourcequotas/liftgate") +
             listOf("default-deny", "allow-internal", "allow-egress").map { "/apis/networking.k8s.io/v1/$namespaced/networkpolicies/$it" }
-        val paths = environment + listOf("/api/v1/$namespaced/secrets/api-env", "/apis/apps/v1/$namespaced/deployments/api") +
+        val secret = "/api/v1/$namespaced/secrets/api-env-${deployment.id.toString().take(8)}"
+        val paths = environment + listOf(secret, "/apis/apps/v1/$namespaced/deployments/api") +
             listOf("/api/v1/$namespaced/services/api", "/apis/gateway.networking.k8s.io/v1/$namespaced/httproutes/api")
         paths.forEach { path ->
             server.expect().patch().withPath("$path?fieldManager=liftgate&force=true").andReply(200) { request -> request.utf8Body.also { applied += path to it } }.always()
@@ -258,7 +260,7 @@ class SweeperTest {
         sweeper.resync()
         val stopped = workload()
         assertEquals(0, stopped.spec.replicas)
-        assertTrue(listOf("/api/v1/$namespaced", "/api/v1/$namespaced/secrets/api-env").all { path -> applied.any { it.first == path } })
+        assertTrue(listOf("/api/v1/$namespaced", secret).all { path -> applied.any { it.first == path } })
         assertTrue(applied.none { "/httproutes/" in it.first || "/services/" in it.first })
 
         applied.clear()
@@ -267,6 +269,25 @@ class SweeperTest {
         sweeper.resync()
         assertEquals(environment.toSet(), applied.map { it.first }.toSet())
         assertEquals(0, client.apps().deployments().inNamespace(service.environment.namespace).withName("api").get().spec.replicas)
+    }
+
+    @Test
+    fun `env secret pruning keeps the secrets of live deployments and the newest five of a service`() = runBlocking {
+        val scope = seed()
+        suspend fun release(serviceId: UUID, sha: String) = assertNotNull(builds.markSucceeded(builds.request(serviceId, sha, null, "main").id, "registry/acme/shop:$sha"))
+        release(Services(db).create(scope.environment.id, ServiceSpec("small", "Small", ServiceKind.WORKER)).id, "abc123")
+        val released = (1..8).map { release(scope.service.id, "sha$it") }
+        deployments.transition(released[1].id, DeploymentStatus.RUNNING)
+        released.drop(2).forEach { deployments.transition(it.id, DeploymentStatus.FAILED) }
+
+        sweeper.pruneSecrets()
+
+        val deletes = List(server.requestCount) { server.takeRequest() }.filter { it.method == "DELETE" }
+        val selector = URLDecoder.decode(deletes.single().path.substringAfter("/api/v1/namespaces/${scope.environment.namespace}/secrets?labelSelector="), Charsets.UTF_8)
+        val requirements = selector.split(Regex(",(?![^(]*\\))")).toSet()
+        val kept = requirements.single { " notin " in it }.substringAfter("(").removeSuffix(")").split(",").toSet()
+        assertEquals(setOf("$SERVICE_ID_LABEL=${scope.service.id}", DEPLOYMENT_LABEL), requirements.filterNot { " notin " in it }.toSet())
+        assertEquals((listOf(released[1]) + released.takeLast(5)).map { it.id.toString() }.toSet(), kept)
     }
 
     @Test

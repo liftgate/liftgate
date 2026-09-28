@@ -45,7 +45,7 @@ data class Rollout(val deploymentId: UUID, val status: DeploymentStatus, val rep
  * @author Dean
  * @date 9/17/2026
  */
-class DeploymentWatcher(private val app: App, private val kube: KubernetesClient) {
+class DeploymentWatcher(private val app: App, private val kube: KubernetesClient, private val reconciler: Reconciler = Reconciler(app, kube)) {
     private val log = LoggerFactory.getLogger(DeploymentWatcher::class.java)
     private val rollouts = Channel<Rollout>(Channel.UNLIMITED)
 
@@ -70,7 +70,11 @@ class DeploymentWatcher(private val app: App, private val kube: KubernetesClient
     private suspend fun record(rollout: Rollout) {
         while (true) {
             try {
-                return app.deployments.transition(rollout.deploymentId, rollout.status, rollout.replicasReady, rollout.error)
+                val fallback = if (rollout.status == DeploymentStatus.FAILED) app.deployments.fallback(rollout.deploymentId) else null
+                val error = listOfNotNull(rollout.error, fallback?.let { "reverted to ${it.id}" }).joinToString("; ").ifEmpty { null }
+                app.deployments.transition(rollout.deploymentId, rollout.status, rollout.replicasReady, error)
+                fallback?.let { reconciler.reapply(it.serviceId) }
+                return
             } catch (e: LiftgateException) {
                 return log.debug("ignored rollout of deployment {}: {}", rollout.deploymentId, e.message)
             } catch (e: SQLException) {

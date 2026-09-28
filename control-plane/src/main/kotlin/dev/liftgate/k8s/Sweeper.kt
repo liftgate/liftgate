@@ -9,6 +9,7 @@ import dev.liftgate.db.Services
 import dev.liftgate.db.sql
 import dev.liftgate.deploy.BuildStatus
 import dev.liftgate.deploy.DeploymentStatus
+import dev.liftgate.deploy.live
 import dev.liftgate.events.LeaderElection
 import io.fabric8.kubernetes.api.model.HasMetadata
 import io.fabric8.kubernetes.client.KubernetesClient
@@ -21,12 +22,21 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.jetbrains.exposed.v1.core.JoinType
+import org.jetbrains.exposed.v1.core.RowNumber
+import org.jetbrains.exposed.v1.core.SortOrder
+import org.jetbrains.exposed.v1.core.alias
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.core.lessEq
+import org.jetbrains.exposed.v1.core.or
 import org.jetbrains.exposed.v1.jdbc.select
 import org.slf4j.LoggerFactory
 import java.util.UUID
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
+
+private const val KEPT_SECRETS = 5
 
 /**
  * @author Dean
@@ -41,6 +51,7 @@ class Sweeper(private val app: App, private val kube: KubernetesClient) {
             every(1.minutes, "redrive", ::redrive)
             every(1.minutes, "orphan removal", ::removeOrphans)
             every(5.minutes, "resync", ::resync)
+            every(5.minutes, "env secret pruning", ::pruneSecrets)
         }
     }
 
@@ -73,6 +84,24 @@ class Sweeper(private val app: App, private val kube: KubernetesClient) {
         }
         running.each("resync of service") { reconciler.reapply(it, live[it.toString()]) }
         reconciler.syncCustomDomains()
+    }
+
+    suspend fun pruneSecrets() {
+        val recency = RowNumber().over().partitionBy(Deployments.serviceId).orderBy(Deployments.createdAt, SortOrder.DESC).alias("recency")
+        val ranked = Deployments.select(Deployments.id, Deployments.serviceId, Deployments.status, recency).alias("ranked")
+        val (id, status, rank) = Triple(ranked[Deployments.id], ranked[Deployments.status], ranked[recency])
+        val services = app.db.tx {
+            ranked.join(Services, JoinType.INNER, ranked[Deployments.serviceId], Services.id).innerJoin(Environments)
+                .select(Environments.namespace, Services.id, id, status, rank)
+                .where { (rank lessEq KEPT_SECRETS + 1L) or (status inList live) }
+                .groupBy({ it[Environments.namespace] to it[Services.id].toString() }, { it[id].toString().takeIf { _ -> it[rank] <= KEPT_SECRETS || it[status] in live } })
+        }
+        services.filterValues { it.size > KEPT_SECRETS }.entries.toList().each("pruning of the env secrets of") { (service, kept) ->
+            withContext(Dispatchers.IO) {
+                kube.secrets().inNamespace(service.first).withLabel(SERVICE_ID_LABEL, service.second).withLabel(DEPLOYMENT_LABEL)
+                    .withLabelNotIn(DEPLOYMENT_LABEL, *kept.filterNotNull().toTypedArray()).delete()
+            }
+        }
     }
 
     private fun workloads(): List<HasMetadata> = kube.apps().deployments().inAnyNamespace().withLabel(MANAGED_LABEL, "true").list().items +

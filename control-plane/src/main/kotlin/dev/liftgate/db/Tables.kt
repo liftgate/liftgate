@@ -1,6 +1,10 @@
 package dev.liftgate.db
 
+import dev.liftgate.http.json
 import dev.liftgate.org.DEFAULT_PLAN
+import dev.liftgate.service.ServiceSpec
+import kotlinx.serialization.builtins.MapSerializer
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import org.jetbrains.exposed.v1.core.Column
@@ -322,6 +326,8 @@ object Deployments : Table("deployments") {
     val finishedAt = timestampWithTimeZone("finished_at").nullable()
     val reachedRunning = bool("reached_running").default(false)
     val createdAt = createdAtColumn()
+    val config = jsonb("config", json, ServiceSpec.serializer()).nullable()
+    val env = jsonb("env", json, MapSerializer(String.serializer(), String.serializer())).nullable()
     override val primaryKey = PrimaryKey(id)
 
     init {

@@ -42,8 +42,18 @@ class ResourcesTest {
         val secret = Resources.secret(release)
         assertEquals("api-env", secret.metadata.name)
         assertEquals(release.namespace, secret.metadata.namespace)
-        assertEquals(serviceLabels, secret.metadata.labels)
+        assertEquals(deploymentLabels, secret.metadata.labels)
+        assertEquals(false, secret.immutable)
         assertEquals(mapOf("DATABASE_URL" to "postgres://db", "MODE" to "production"), secret.data.mapValues { String(Base64.getDecoder().decode(it.value)) })
+    }
+
+    @Test
+    fun `a snapshotted release gets an immutable secret of its own that its pods reference`() {
+        val snapshotted = release.copy(deployment = testDeployment.copy(config = testService.spec(), env = emptyMap()))
+        val secret = Resources.secret(snapshotted)
+        assertEquals("api-env-" + testDeployment.id.toString().take(8), secret.metadata.name)
+        assertEquals(true, secret.immutable)
+        assertEquals(secret.metadata.name, Resources.deployment(snapshotted, null).spec.template.spec.containers.single().envFrom.single().secretRef.name)
     }
 
     @Test

@@ -35,6 +35,11 @@ fun Route.deployRoutes(app: App) {
             val (sha, message) = if (shaPattern.matches(ref)) ref to null else app.branchHead(scope, ref)
             call.respond(HttpStatusCode.Created, app.builds.request(scope.service.id, sha, message, scope.environment.branch))
         }
+        post("/redeploy") {
+            val scope = call.service(app, OrgRole.ADMIN)
+            call.limit(app, "deploy", DEPLOYS_PER_MINUTE, scope.service.id.toString())
+            call.respond(HttpStatusCode.Created, app.deployments.redeploy(scope.service.id))
+        }
         get("/builds") { call.respond(app.builds.forService(call.service(app).service.id)) }
         get("/deployments") { call.respond(app.deployments.forService(call.service(app).service.id)) }
     }

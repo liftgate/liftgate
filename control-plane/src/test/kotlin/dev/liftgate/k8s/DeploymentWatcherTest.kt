@@ -45,6 +45,10 @@ class DeploymentWatcherTest {
             )
             .build()
 
+    private fun stalled(): Deployment = DeploymentBuilder(rollout(available = 0, ready = 0)).editStatus()
+        .addNewCondition().withType("Progressing").withStatus("False").withReason("ProgressDeadlineExceeded").withMessage("api has timed out progressing").endCondition()
+        .endStatus().build()
+
     @AfterTest
     fun stop() = scope.cancel()
 
@@ -68,12 +72,8 @@ class DeploymentWatcherTest {
         assertNull(Rollout.of(DeploymentBuilder(rollout()).editMetadata().removeFromLabels(DEPLOYMENT_LABEL).endMetadata().build()))
 
     @Test
-    fun `an exceeded progress deadline fails the deployment with the cluster message`() {
-        val stalled = DeploymentBuilder(rollout(available = 0, ready = 0)).editStatus()
-            .addNewCondition().withType("Progressing").withStatus("False").withReason("ProgressDeadlineExceeded").withMessage("api has timed out progressing").endCondition()
-            .endStatus().build()
-        assertEquals(Rollout(testDeployment.id, DeploymentStatus.FAILED, 0, "api has timed out progressing"), Rollout.of(stalled))
-    }
+    fun `an exceeded progress deadline fails the deployment with the cluster message`() =
+        assertEquals(Rollout(testDeployment.id, DeploymentStatus.FAILED, 0, "api has timed out progressing"), Rollout.of(stalled()))
 
     private fun app(deployments: Deployments) = mockk<App> {
         every { this@mockk.scope } returns this@DeploymentWatcherTest.scope
@@ -86,6 +86,18 @@ class DeploymentWatcherTest {
         DeploymentWatcher(app(deployments), client).start().use {
             client.resource(rollout()).create()
             coVerify(timeout = 10_000) { deployments.transition(testDeployment.id, DeploymentStatus.RUNNING, 2, null) }
+        }
+    }
+
+    @Test
+    fun `a failed rollout reverts to the deployment still running and says so in its error`() {
+        val previous = testDeployment.copy(id = UUID.randomUUID(), status = DeploymentStatus.RUNNING)
+        val deployments = mockk<Deployments>(relaxUnitFun = true) { coEvery { fallback(testDeployment.id) } returns previous }
+        val reconciler = mockk<Reconciler>(relaxUnitFun = true)
+        client.resource(stalled()).create()
+        DeploymentWatcher(app(deployments), client, reconciler).start().use {
+            coVerify(timeout = 10_000) { deployments.transition(testDeployment.id, DeploymentStatus.FAILED, 0, "api has timed out progressing; reverted to ${previous.id}") }
+            coVerify(timeout = 10_000) { reconciler.reapply(testService.id) }
         }
     }
 

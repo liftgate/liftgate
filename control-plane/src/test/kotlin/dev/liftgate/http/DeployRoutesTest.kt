@@ -2,10 +2,13 @@ package dev.liftgate.http
 
 import dev.liftgate.App
 import dev.liftgate.auth.Access
+import dev.liftgate.auth.OrgRole
 import dev.liftgate.auth.Sessions
 import dev.liftgate.build.GitHubApp
 import dev.liftgate.deploy.Builds
+import dev.liftgate.deploy.Deployments
 import dev.liftgate.k8s.testBuild
+import dev.liftgate.k8s.testDeployment
 import dev.liftgate.k8s.testEnvironment
 import dev.liftgate.k8s.testOrg
 import dev.liftgate.k8s.testProject
@@ -49,6 +52,7 @@ class DeployRoutesTest {
         every { cache } returns unlimitedCache
         every { github } returns null
         every { this@mockk.builds } returns this@DeployRoutesTest.builds
+        every { deployments } returns mockk<Deployments> { coEvery { redeploy(testService.id) } returns testDeployment }
     }
 
     private suspend fun ApplicationTestBuilder.deploy(body: String) = client.post("/api/v1/services/${testService.id}/deploy") {
@@ -87,6 +91,17 @@ class DeployRoutesTest {
         assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
         assertTrue("ref_required" in response.bodyAsText())
         assertEquals(HttpStatusCode.UnprocessableEntity, deploy("""{"ref":"bad ref"}""").status)
+        coVerify(exactly = 0) { builds.request(any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `redeploy needs an admin and releases the running build again`() = testApplication {
+        application { liftgate(app) }
+        val access = app.access
+        val response = client.post("/api/v1/services/${testService.id}/redeploy") { session() }
+        assertEquals(HttpStatusCode.Created, response.status)
+        assertTrue(testDeployment.id.toString() in response.bodyAsText())
+        coVerify { access.require(testOrg.id, any(), OrgRole.ADMIN) }
         coVerify(exactly = 0) { builds.request(any(), any(), any(), any()) }
     }
 }

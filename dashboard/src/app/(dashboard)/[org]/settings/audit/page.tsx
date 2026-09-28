@@ -8,5 +8,5 @@ export async function generateMetadata({ params }: PageProps<"/[org]/settings/au
 
 export default async function AuditPage({ params }: PageProps<"/[org]/settings/audit">) {
   const { org } = await params;
-  return <AuditLog org={org} />;
+  return <AuditLog key={org} org={org} />;
 }

@@ -80,7 +80,8 @@ class Admin(private val db: Db, private val plans: Plans = Plans(), private val 
                 else -> null
             }
         } ?: return result
-        return runCatching { to.forEach { mailer.send(it, subject, text) } }.fold({ result }, { "$result, but the notice email failed: ${it.message}" })
+        val failed = to.mapNotNull { address -> runCatching { mailer.send(address, subject, text) }.exceptionOrNull()?.let { "$address (${it.message})" } }
+        return if (failed.isEmpty()) result else "$result, but the notice email failed for ${failed.joinToString()}"
     }
 
     private fun pending() = Users.selectAll().where { Users.status eq UserStatus.PENDING.sql }.orderBy(Users.createdAt)

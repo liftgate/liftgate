@@ -2,6 +2,7 @@ package dev.liftgate.deploy
 
 import dev.liftgate.App
 import dev.liftgate.TestDatabase
+import dev.liftgate.db.Deployments as DeploymentsTable
 import dev.liftgate.db.Outbox
 import dev.liftgate.domain.Domains
 import dev.liftgate.events.Subject
@@ -37,6 +38,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.jsonPrimitive
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.update
 import java.util.Base64
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.test.Test
@@ -278,5 +280,13 @@ class DeploymentsTest {
         conflict { deployments.transition(first.id, DeploymentStatus.FAILED, error = "stale progress deadline") }
         release(service, "ccc")
         assertNull(deployments.fallback(second.id))
+    }
+
+    @Test
+    fun `a running deployment without a snapshot is never a fallback`() = runBlocking {
+        val service = seed()
+        val legacy = running(service, "aaa")
+        db.tx { DeploymentsTable.update({ DeploymentsTable.id eq legacy.id }) { it[config] = null; it[env] = null } }
+        assertNull(deployments.fallback(release(service, "bbb").id))
     }
 }

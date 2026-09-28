@@ -58,6 +58,13 @@ replaced() {
   test -n "$pod" && kubectl -n $ns wait "pod/$pod" --for=condition=Ready --timeout=5s > /dev/null 2>&1
 }
 
+restarted() {
+  old="$(kubectl -n $ns get pods -l "liftgate.dev/deployment=$1" -o jsonpath='{.items[0].metadata.name}')"
+  kubectl -n $ns delete pod "$old"
+  eventually 120 replaced "$1" "$old" || fail "the pod of $1 that replaced $old never became ready"
+  ! kubectl -n $ns exec "$pod" -- printenv CRASH || fail "$pod picked up the crashing env change"
+}
+
 eventually() {
   deadline=$(($(date +%s) + $1))
   shift
@@ -104,6 +111,16 @@ kubectl -n $ns wait deployment/app --for=create --timeout=5m
 kubectl -n $ns rollout status deployment/app --timeout=5m
 eventually 120 is $legacy running || fail "the legacy deployment never ran"
 
+variables '[{"name": "CRASH", "value": "1"}]'
+broken="$(redeploy)"
+eventually 120 released "$broken" busybox:1.36 || fail "the crashing env change over the legacy deployment was never applied"
+stall
+eventually 180 is "$broken" failed || fail "the crashing env change over the legacy deployment never failed"
+sleep 10
+released "$broken" busybox:1.36 || fail "the failure reverted to the legacy deployment, which has no snapshot"
+restarted $legacy
+echo "$pod replaced $old with the env of the legacy deployment"
+
 variables '[{"name": "GREETING", "value": "v1"}]'
 first="$(redeploy)"
 eventually 180 is "$first" running || fail "the redeploy $first never ran"
@@ -140,11 +157,8 @@ test -s "$codes" && ! grep -qvx 200 "$codes" || fail "the app did not answer 200
 variables '[{"name": "GREETING", "value": "v1"}, {"name": "CRASH", "value": "1"}]'
 crash="$(redeploy)"
 eventually 120 released "$crash" busybox:1.36 || fail "the crashing env change was never applied"
-old="$(kubectl -n $ns get pods -l "liftgate.dev/deployment=$first" -o jsonpath='{.items[0].metadata.name}')"
-kubectl -n $ns delete pod "$old"
-eventually 120 replaced "$first" "$old" || fail "the pod of v1 that replaced $old never became ready"
+restarted "$first"
 test "$(kubectl -n $ns exec "$pod" -- printenv GREETING)" = v1 || fail "$pod lost GREETING"
-! kubectl -n $ns exec "$pod" -- printenv CRASH || fail "$pod picked up the crashing env change"
 eventually 60 serves v1 || fail "v1 does not serve after its pod was replaced"
 echo "$pod replaced $old with the env of $first"
 

@@ -116,7 +116,7 @@ class Deployments(private val db: Db, private val metrics: MeterRegistry = Simpl
 
     suspend fun fallback(failedId: UUID): Deployment? = db.tx {
         val failed = find(failedId)?.takeUnless { replaced(it) } ?: return@tx null
-        running(failed.serviceId).andWhere { DeploymentsTable.id neq failedId }.orderBy(DeploymentsTable.createdAt, SortOrder.DESC).limit(1).singleOrNull()?.toDeployment()
+        running(failed.serviceId).andWhere { DeploymentsTable.id neq failedId }.orderBy(DeploymentsTable.createdAt, SortOrder.DESC).limit(1).singleOrNull()?.toDeployment()?.takeIf { it.env != null }
     }
 
     suspend fun transition(id: UUID, to: DeploymentStatus, replicasReady: Int = 0, error: String? = null) {

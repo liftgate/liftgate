@@ -373,6 +373,7 @@ empty, neither appears.
 | `controlPlane.resources` | 250m / 768Mi, limit 1536Mi | |
 | `dashboard.image` | `ghcr.io/liftgate/dashboard` | |
 | `dashboard.tag` | `""` | Empty means the chart's `appVersion` |
+| `dashboard.landing` | `false` | `LIFTGATE_LANDING` on the dashboard: serve the Liftgate Cloud landing page at `/` to visitors without a session cookie. Needs the dashboard and the API on one host (`dashboardUrl` empty or equal to `publicUrl`), because the session cookie is host-only |
 | `dashboard.resources` | 100m / 128Mi, limit 256Mi | |
 | `postgres.managed` | `true` | Render a CloudNativePG `Cluster` |
 | `postgres.externalUrl` | `""` | JDBC URL when not managed |

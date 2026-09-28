@@ -27,6 +27,7 @@ controlPlane:
 dashboard:
   image: ghcr.io/liftgate/dashboard
   tag: ""
+  landing: false
   resources:
     requests:
       cpu: 100m

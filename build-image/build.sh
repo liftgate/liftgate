@@ -34,6 +34,7 @@ elif [ "$LIFTGATE_BUILD_STRATEGY" = dockerfile ]; then
 fi
 
 if [ "$LIFTGATE_BUILD_STRATEGY" = dockerfile ] || [ -f "$dockerfile" ]; then
+  PRODUCTION_CACHE=
   set -- --frontend dockerfile.v0 --local "dockerfile=$(dirname "$dockerfile")" --opt "filename=$(basename "$dockerfile")"
   for name in ${LIFTGATE_BUILD_ARG_NAMES:-}; do
     set -- "$@" --opt "build-arg:$name=$(value "$name")"

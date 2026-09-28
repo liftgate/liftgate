@@ -12,11 +12,13 @@ inside() {
 
 value() {
   printenv "LIFTGATE_ENV_$1"
+  echo .
 }
 
 prepare() {
   for name in ${LIFTGATE_BUILD_ENV_NAMES:-}; do
-    set -- "$@" --env "$name=$(value "$name")"
+    env=$(value "$name")
+    set -- "$@" --env "$name=${env%??}"
   done
   railpack prepare "$@"
 }
@@ -37,7 +39,8 @@ if [ "$LIFTGATE_BUILD_STRATEGY" = dockerfile ] || [ -f "$dockerfile" ]; then
   PRODUCTION_CACHE=
   set -- --frontend dockerfile.v0 --local "dockerfile=$(dirname "$dockerfile")" --opt "filename=$(basename "$dockerfile")"
   for name in ${LIFTGATE_BUILD_ARG_NAMES:-}; do
-    set -- "$@" --opt "build-arg:$name=$(value "$name")"
+    arg=$(value "$name")
+    set -- "$@" --opt "build-arg:$name=${arg%??}"
   done
 else
   plan=$(mktemp -d)

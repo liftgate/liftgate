@@ -5,7 +5,8 @@ image=$1
 fixtures=$(cd "$(dirname "$0")" && pwd)
 run=liftgate-build-test-$$
 work=$(mktemp -d)
-foo="plain value $$"
+foo="plain value $$
+"
 token="secret-$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
 greeting="Hello from build time $$"
 
@@ -54,7 +55,7 @@ build dockerfile dockerfile --env LIFTGATE_BUILD_STRATEGY=dockerfile \
   --env "LIFTGATE_BUILD_ENV_NAMES=FOO API_TOKEN" --env LIFTGATE_BUILD_ARG_NAMES=FOO \
   --env "LIFTGATE_ENV_FOO=$foo" --env "LIFTGATE_ENV_API_TOKEN=$token"
 built=$registry/test/dockerfile:latest
-expect "ARG FOO" "$(docker run --rm "$built" cat /foo)" "$foo"
+expect "ARG FOO" "$(docker run --rm "$built" sha256sum /foo | cut -d ' ' -f 1)" "$(sha "$foo")"
 expect "ARG of a secret variable" "$(docker run --rm "$built" cat /api-token-arg)" ""
 expect "secret mount" "$(docker run --rm "$built" cat /api-token.sha256)" "$(sha "$token")"
 

@@ -55,7 +55,7 @@ fun Route.orgRoutes(app: App) {
     get("/me") { call.respond(call.principal.user) }
     delete("/me") {
         app.orgs.deleteUser(call.sessionUser.id)
-        call.response.cookies.append(expired(SESSION_COOKIE).copy(secure = true))
+        call.endSession(app)
         call.respond(HttpStatusCode.NoContent)
     }
     route("/orgs") {

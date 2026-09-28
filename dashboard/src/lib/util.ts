@@ -38,12 +38,16 @@ const authErrors: Record<string, string> = {
 
 export const authError = (code: unknown) => (typeof code === "string" && code ? (authErrors[code] ?? "Sign-in failed. Try again.") : undefined);
 
-export const keepsStoredValue = (r: EnvVar) => r.secret && !r.value;
+type EnvRow = EnvVar & { stored?: boolean };
 
-export const envPayload = (rows: EnvVar[]) =>
+export const storedRows = (vars: EnvVar[]): EnvRow[] => vars.map((r) => (r.secret ? { ...r, value: null, stored: true } : r));
+
+export const keepsStoredValue = (r: EnvRow) => !!r.stored && r.secret && !r.value;
+
+export const envPayload = (rows: EnvRow[]) =>
   rows.map((r) => {
     if (!r.secret && r.value === null) throw new Error(`Retype the value of ${r.name} before saving it as a plain variable.`);
-    return { ...r, value: keepsStoredValue(r) ? null : r.value };
+    return { name: r.name, value: keepsStoredValue(r) ? null : r.value, secret: r.secret };
   });
 
 export const findService = (tree: ProjectTree, environmentSlug: string, serviceSlug: string) => {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Environment, Project, Service } from "./types.ts";
-import { envPayload, findService, keepsStoredValue, safeNext, shortSha, slugify, timeAgo } from "./util.ts";
+import { envPayload, findService, keepsStoredValue, safeNext, shortSha, slugify, storedRows, timeAgo } from "./util.ts";
 
 test("slugify lowercases and collapses separators", () => {
   assert.equal(slugify("  Acme Web App!  "), "acme-web-app");
@@ -28,18 +28,29 @@ test("safeNext keeps only same-origin relative paths", () => {
 });
 
 test("envPayload never sends an empty value for an untouched stored secret", () => {
-  const stored = { name: "TOKEN", value: null, secret: true };
+  const token = { name: "TOKEN", value: null, secret: true };
+  const [stored] = storedRows([token]);
   const typed = { name: "KEY", value: "s3cret", secret: true };
   const plain = { name: "MODE", value: "", secret: false };
-  assert.deepEqual(envPayload([stored, typed, plain, { name: "EMPTY", value: "", secret: true }]), [stored, typed, plain, { name: "EMPTY", value: null, secret: true }]);
+  assert.deepEqual(envPayload([stored, typed, plain, { ...stored, name: "EMPTY", value: "" }]), [token, typed, plain, { name: "EMPTY", value: null, secret: true }]);
   assert.throws(() => envPayload([{ ...stored, secret: false }]), /Retype the value of TOKEN/);
 });
 
 test("a stored secret stays locked until a new value is typed, even after typing and clearing", () => {
-  const cleared = { name: "TOKEN", value: "", secret: true };
-  for (const row of [{ ...cleared, value: null }, cleared]) assert.equal(keepsStoredValue(row), true);
+  const [stored] = storedRows([{ name: "TOKEN", value: null, secret: true }]);
+  const cleared = { ...stored, value: "" };
+  for (const row of [stored, cleared]) assert.equal(keepsStoredValue(row), true);
   assert.equal(keepsStoredValue({ ...cleared, value: "a" }), false);
-  assert.deepEqual(envPayload([cleared]), [{ ...cleared, value: null }]);
+  assert.deepEqual(envPayload([cleared]), [{ name: "TOKEN", value: null, secret: true }]);
+});
+
+test("a new secret row stays editable until it is saved", () => {
+  const added = { name: "KEY", value: "", secret: true };
+  const [plain] = storedRows([{ name: "MODE", value: "on", secret: false }]);
+  for (const row of [added, { ...plain, value: "", secret: true }]) assert.equal(keepsStoredValue(row), false);
+  assert.deepEqual(envPayload([added]), [added]);
+  const [saved] = storedRows(envPayload([{ ...added, value: "s3cret" }]));
+  assert.equal(keepsStoredValue(saved), true);
 });
 
 test("findService resolves the service in the environment named by the url", () => {

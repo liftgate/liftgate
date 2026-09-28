@@ -15,9 +15,9 @@ import { Cell, Row, Table } from "@/components/ui/table";
 
 const isCustom = (domain: Domain) => domain.kind.toLowerCase() === "custom";
 
-export function DomainsTab({ service }: { service: Service }) {
+export function DomainsTab({ service, admin }: { service: Service; admin: boolean }) {
   const domains = useApi<Domain[]>(`/services/${service.id}/domains`);
-  const providers = useApi<AuthProviders>("/auth/providers");
+  const providers = useApi<AuthProviders>(admin && "/auth/providers");
   const add = useAction(async (form: HTMLFormElement) => {
     const { hostname } = formValues(form);
     await api(`/services/${service.id}/domains`, { method: "POST", body: { hostname } });
@@ -45,7 +45,7 @@ export function DomainsTab({ service }: { service: Service }) {
           <Loaded query={domains} skeleton={<TableSkeleton rows={2} />}>
             {(list) =>
               list.length === 0 ? (
-                <EmptyState title="No domains yet" description="Add a custom domain below." />
+                <EmptyState title="No domains yet" description={admin ? "Add a custom domain below." : "An admin of this organization adds custom domains."} />
               ) : (
                 <Table columns={["Hostname", "Kind", "Verification", "Certificate", ""]}>
                   {list.map((domain) => (
@@ -71,7 +71,7 @@ export function DomainsTab({ service }: { service: Service }) {
                         <StatusBadge status={domain.certificateStatus} />
                       </Cell>
                       <Cell className="text-right">
-                        {isCustom(domain) && (
+                        {admin && isCustom(domain) && (
                           <div className="flex justify-end gap-2">
                             {!domain.verifiedAt && (
                               <Button pending={verify.pending} onClick={() => verify.run(domain.id)}>
@@ -92,35 +92,37 @@ export function DomainsTab({ service }: { service: Service }) {
           </Loaded>
         </div>
       </Card>
-      <Loaded query={providers} skeleton={<Skeleton className="h-40" />}>
-        {({ customDomains }) =>
-          customDomains ? (
-            <Card>
-              <CardHeader title="Add a custom domain" description="Ownership is checked with a TXT record; point the hostname at your Liftgate gateway to receive traffic." />
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  add.run(e.currentTarget);
-                }}
-                className="flex flex-col gap-4 p-6"
-              >
-                <div className="flex gap-2">
-                  <Input name="hostname" required placeholder="app.example.com" pattern="[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}" className="max-w-sm flex-1 font-mono" />
-                  <Button type="submit" variant="primary" pending={add.pending}>
-                    Add domain
-                  </Button>
-                </div>
-                <FormError message={add.error} />
-              </form>
-            </Card>
-          ) : (
-            <EmptyState
-              title="Custom domains are not enabled"
-              description="This installation serves web and static services on their platform hostname only. You can add your own domain here once custom domains are enabled."
-            />
-          )
-        }
-      </Loaded>
+      {admin && (
+        <Loaded query={providers} skeleton={<Skeleton className="h-40" />}>
+          {({ customDomains }) =>
+            customDomains ? (
+              <Card>
+                <CardHeader title="Add a custom domain" description="Ownership is checked with a TXT record; point the hostname at your Liftgate gateway to receive traffic." />
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    add.run(e.currentTarget);
+                  }}
+                  className="flex flex-col gap-4 p-6"
+                >
+                  <div className="flex gap-2">
+                    <Input name="hostname" required placeholder="app.example.com" pattern="[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}" className="max-w-sm flex-1 font-mono" />
+                    <Button type="submit" variant="primary" pending={add.pending}>
+                      Add domain
+                    </Button>
+                  </div>
+                  <FormError message={add.error} />
+                </form>
+              </Card>
+            ) : (
+              <EmptyState
+                title="Custom domains are not enabled"
+                description="This installation serves web and static services on their platform hostname only. You can add your own domain here once custom domains are enabled."
+              />
+            )
+          }
+        </Loaded>
+      )}
     </div>
   );
 }

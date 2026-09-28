@@ -43,8 +43,8 @@ export function DeploymentTable({
                 <span title={deployment.createdAt}>{timeAgo(deployment.createdAt)}</span>
               </Cell>
               <Cell className="text-right">
-                {i > 0 && !build?.imagePruned && (
-                  <Button disabled={!!rolling} pending={rolling === deployment.id} onClick={onRollback && (() => onRollback(deployment.id))}>
+                {onRollback && i > 0 && !build?.imagePruned && (
+                  <Button disabled={!!rolling} pending={rolling === deployment.id} onClick={() => onRollback(deployment.id)}>
                     Roll back to this
                   </Button>
                 )}

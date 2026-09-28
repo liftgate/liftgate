@@ -12,7 +12,7 @@ import { TableSkeleton } from "@/components/ui/skeleton";
 
 const inProgress = (status: string) => ["pending", "releasing"].includes(status.toLowerCase());
 
-export function DeploymentsTab({ service }: { service: Service }) {
+export function DeploymentsTab({ service, admin }: { service: Service; admin: boolean }) {
   const deployments = useApi<Deployment[]>(`/services/${service.id}/deployments`);
   const builds = useApi<Build[]>(`/services/${service.id}/builds`);
   const [target, setTarget] = useState<string>();
@@ -27,7 +27,7 @@ export function DeploymentsTab({ service }: { service: Service }) {
         list.length === 0 ? (
           <EmptyState
             title="No deployments yet"
-            description="Start a build from the Builds tab. A successful build is released automatically."
+            description={admin ? "Start a build from the Builds tab. A successful build is released automatically." : "A successful build is released automatically."}
           />
         ) : (
           <div className="flex flex-col gap-4">
@@ -37,10 +37,14 @@ export function DeploymentsTab({ service }: { service: Service }) {
               builds={builds.data}
               replicas={service.replicas}
               rolling={rollback.pending ? target : undefined}
-              onRollback={(id) => {
-                setTarget(id);
-                rollback.run(id);
-              }}
+              onRollback={
+                admin
+                  ? (id) => {
+                      setTarget(id);
+                      rollback.run(id);
+                    }
+                  : undefined
+              }
             />
           </div>
         )

@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { api, ApiError, describe } from "@/lib/api";
 import { useAction, useApi } from "@/lib/hooks";
 import type { AuthProviders } from "@/lib/types";
-import { formValues } from "@/lib/util";
+import { formValues, linkTarget } from "@/lib/util";
 import { getPasskey, isAbort } from "@/lib/webauthn";
 import { Loaded } from "@/components/loaded";
 import { PageHeader } from "@/components/page-header";
@@ -127,7 +127,7 @@ function Methods({ providers, next, error, onCodeSent }: { providers: AuthProvid
 }
 
 const LegalLink = ({ href, children }: { href: string; children: string }) => (
-  <a href={href} target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-white">
+  <a href={href} {...linkTarget(href)} className="underline underline-offset-2 hover:text-white">
     {children}
   </a>
 );

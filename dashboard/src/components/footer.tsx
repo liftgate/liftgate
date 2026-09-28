@@ -3,6 +3,7 @@
 import { useApi } from "@/lib/hooks";
 import { legalLinks } from "@/lib/legal";
 import type { AuthProviders } from "@/lib/types";
+import { linkTarget } from "@/lib/util";
 
 export function Footer({ links: own = [] }: { links?: { label: string; href: string }[] }) {
   const links = [...own, ...legalLinks(useApi<AuthProviders>("/auth/providers").data)];
@@ -11,7 +12,7 @@ export function Footer({ links: own = [] }: { links?: { label: string; href: str
     <footer className="border-t border-graphite-700">
       <nav aria-label="Footer" className="mx-auto flex max-w-6xl flex-wrap gap-4 px-6 py-4 text-xs text-graphite-400">
         {links.map((link) => (
-          <a key={link.label} href={link.href} target="_blank" rel="noreferrer" className="hover:text-white">
+          <a key={link.label} href={link.href} {...linkTarget(link.href)} className="hover:text-white">
             {link.label}
           </a>
         ))}

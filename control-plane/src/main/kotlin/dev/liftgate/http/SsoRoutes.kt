@@ -55,7 +55,7 @@ fun Route.ssoRoutes(app: App) {
                     val response = call.receiveParameters()["SAMLResponse"] ?: invalid("SAMLResponse is required")
                     val (signedIn, next) = app.sso.acs(call.parameters["org"]!!, response, call.request.cookies[BROWSER_COOKIE].orEmpty())
                     call.startSession(app, signedIn.sessionId)
-                    call.respondRedirect(app.config.dashboardUrl + next)
+                    call.returnTo(app, next)
                 }
             }
             get("/metadata") {

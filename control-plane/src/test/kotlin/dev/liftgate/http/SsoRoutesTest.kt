@@ -30,6 +30,7 @@ import kotlin.test.assertTrue
 class SsoRoutesTest {
     private val sso = mockk<Sso> {
         coEvery { acs("acme", "PHNhbWxwOlJlc3BvbnNlLz4=", "nonce") } returns (SignedIn(UUID.randomUUID(), "session-9") to "/acme/web")
+        coEvery { acs("acme", "PHNhbWxwOlJlc3BvbnNlLz4=", "home") } returns (SignedIn(UUID.randomUUID(), "session-10") to "")
         coEvery { acs("acme", "PHNhbWxwOlJlc3BvbnNlLz4=", "") } throws LiftgateException(HttpStatusCode.BadRequest, "invalid_saml", "another browser")
         coEvery { lookup("dean@acme.com") } returns "acme"
         coEvery { lookup("dean@other.com") } returns null
@@ -49,6 +50,14 @@ class SsoRoutesTest {
         assertEquals(HttpStatusCode.Found, response.status)
         assertEquals("${testConfig().dashboardUrl}/acme/web", response.headers[HttpHeaders.Location])
         assertTrue(response.headers.getAll(HttpHeaders.SetCookie).orEmpty().any { it.startsWith("$SESSION_COOKIE=session-9") })
+    }
+
+    @Test
+    fun `acs without next returns to the dashboard home`() = testApplication {
+        application { liftgate(app) }
+        val response = createClient { followRedirects = false }
+            .submitForm("/api/v1/auth/sso/acme/acs", parameters { append("SAMLResponse", "PHNhbWxwOlJlc3BvbnNlLz4=") }) { cookie("liftgate_saml", "home") }
+        assertEquals("${testConfig().dashboardUrl}/dashboard", response.headers[HttpHeaders.Location])
     }
 
     @Test

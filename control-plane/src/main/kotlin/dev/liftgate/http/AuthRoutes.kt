@@ -59,6 +59,8 @@ fun ApplicationCall.startSession(app: App, sessionId: String) =
 
 fun ApplicationCall.endSession(app: App) = response.cookies.append(expired(app.sessionCookie).copy(secure = !app.localHttp))
 
+suspend fun ApplicationCall.returnTo(app: App, next: String) = respondRedirect(app.config.dashboardUrl + next.ifEmpty { "/dashboard" })
+
 suspend fun ApplicationCall.redirectOnError(app: App, back: String, block: suspend () -> Unit) = try {
     block()
 } catch (e: LiftgateException) {
@@ -96,7 +98,7 @@ fun Route.authRoutes(app: App) {
                     Intent.CONNECT -> call.sessionUser.id
                 }
                 if (provider.id == GITHUB) app.gitConnections.store(userId, identity.login ?: identity.subject, tokens)
-                call.respondRedirect(app.config.dashboardUrl + next)
+                call.returnTo(app, next)
             }
         }
         post("/logout") {

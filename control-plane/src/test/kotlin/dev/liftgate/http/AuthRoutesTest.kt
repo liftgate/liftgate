@@ -134,6 +134,18 @@ class AuthRoutesTest {
     }
 
     @Test
+    fun `sign-in without a safe next lands on the dashboard home`() = testApplication {
+        coEvery { signIn.complete(any()) } returns SignedIn(user.id, "session-3")
+        coEvery { gitConnections.store(user.id, "dean", any()) } just Runs
+        application { liftgate(app) }
+        listOf("", "?next=//evil.example", "?next=https://evil.example").forEach { query ->
+            val browser = browser()
+            val state = Url(browser.get("/api/v1/auth/github/login$query").headers[HttpHeaders.Location]!!).parameters["state"]
+            assertEquals("http://localhost:3000/dashboard", browser.get("/api/v1/auth/github/callback?code=c&state=$state").headers[HttpHeaders.Location], query)
+        }
+    }
+
+    @Test
     fun `a callback without the matching state cookie returns to login with the error`() = testApplication {
         application { liftgate(app) }
         val browser = browser()

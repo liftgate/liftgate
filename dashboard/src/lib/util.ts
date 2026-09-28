@@ -36,8 +36,11 @@ export const formValues = (form: HTMLFormElement) =>
 
 export const safeNext = (value: unknown) => {
   const url = typeof value === "string" && value.startsWith("/") ? new URL(value, "http://next.invalid") : undefined;
-  return url?.origin === "http://next.invalid" ? url.pathname + url.search + url.hash : "/";
+  return url?.origin === "http://next.invalid" ? url.pathname + url.search + url.hash : "/dashboard";
 };
+
+export const linkTarget = (href: string, origin = globalThis.location?.origin ?? "http://site.invalid") =>
+  URL.canParse(href, origin) && new URL(href, origin).origin === origin ? {} : { target: "_blank", rel: "noreferrer" };
 
 const authErrors: Record<string, string> = {
   access_denied: "Sign-in was cancelled at the provider.",

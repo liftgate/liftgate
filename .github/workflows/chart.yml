@@ -60,6 +60,12 @@ jobs:
           if render --set controlPlane.clientIpHeader=CF-Connecting-IP --set controlPlane.trustedProxyCidrs={10.0.0.0/8} 2> render.err; then exit 1; fi
           grep "upstreamOverwritesClientIpHeader=true" render.err
           render --set controlPlane.clientIpHeader=CF-Connecting-IP --set controlPlane.trustedProxyCidrs={10.0.0.0/8} --set controlPlane.upstreamOverwritesClientIpHeader=true | grep 'LIFTGATE_CLIENT_IP_HEADER: "CF-Connecting-IP"'
+      - name: landing guard
+        run: |
+          set -o pipefail
+          if helm template liftgate charts/liftgate ${{ matrix.args }} --set dashboard.landing=true --set dashboardUrl=https://dashboard.example.com 2> render.err; then exit 1; fi
+          grep "dashboard.landing needs" render.err
+          helm template liftgate charts/liftgate ${{ matrix.args }} --set dashboard.landing=true --show-only templates/dashboard.yaml | grep -A1 "name: LIFTGATE_LANDING" | grep 'value: "true"'
       - name: control plane service accounts, probes, secrets and routes
         run: |
           set -o pipefail

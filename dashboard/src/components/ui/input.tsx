@@ -1,7 +1,7 @@
 import type { InputHTMLAttributes, ReactNode, TextareaHTMLAttributes } from "react";
 
 const surfaceClasses =
-  "rounded-md border border-graphite-600 bg-graphite-950 px-3 text-sm text-white placeholder:text-graphite-400 focus:border-accent focus:outline-none disabled:opacity-50";
+  "rounded-md border border-graphite-400/70 bg-graphite-950 px-3 text-sm text-white placeholder:text-graphite-400 focus:border-accent focus:outline-none disabled:opacity-50";
 
 export const controlClasses = `h-8 ${surfaceClasses}`;
 

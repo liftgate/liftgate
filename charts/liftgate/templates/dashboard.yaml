@@ -1,3 +1,6 @@
+{{- if and .Values.dashboard.landing (ne (include "liftgate.host" .Values.publicUrl) (include "liftgate.host" (include "liftgate.dashboardUrl" .))) }}
+{{- fail "dashboard.landing needs dashboardUrl empty or on the publicUrl host: the session cookie is host-only, so a dashboard on another host would show the landing page to signed-in users" }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -40,6 +43,8 @@ spec:
               value: "0.0.0.0"
             - name: PORT
               value: "3000"
+            - name: LIFTGATE_LANDING
+              value: {{ .Values.dashboard.landing | default false | quote }}
           ports:
             - name: http
               containerPort: 3000

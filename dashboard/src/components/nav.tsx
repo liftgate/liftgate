@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAction, useApi } from "@/lib/hooks";
@@ -9,12 +10,12 @@ import { Mark } from "./mark";
 import { Button } from "./ui/button";
 import { Select } from "./ui/select";
 
-export function Nav() {
+export function Nav({ actions }: { actions?: ReactNode }) {
   const router = useRouter();
   const onLogin = usePathname().startsWith("/login");
   const { org, project, environment, service } = useParams<{ org?: string; project?: string; environment?: string; service?: string }>();
-  const me = useApi<User>(onLogin ? null : "/me");
-  const orgs = useApi<Organization[]>(onLogin ? null : "/orgs");
+  const me = useApi<User>(onLogin || actions ? null : "/me");
+  const orgs = useApi<Organization[]>(onLogin || actions ? null : "/orgs");
   const signOut = useAction(async () => {
     await api("/auth/logout", { method: "POST" });
     window.location.replace("/login");
@@ -55,9 +56,11 @@ export function Nav() {
                 {me.data.login}
               </Link>
             )}
-            <Button variant="ghost" pending={signOut.pending} onClick={() => signOut.run()}>
-              Sign out
-            </Button>
+            {actions ?? (
+              <Button variant="ghost" pending={signOut.pending} onClick={() => signOut.run()}>
+                Sign out
+              </Button>
+            )}
           </div>
         )}
       </div>

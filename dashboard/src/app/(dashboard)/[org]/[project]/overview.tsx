@@ -5,21 +5,19 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api } from "@/lib/api";
 import { useAction, useApi } from "@/lib/hooks";
-import type { Environment, ProjectTree, Service, ServiceSpec } from "@/lib/types";
+import type { ProjectTree, Service, ServiceSpec } from "@/lib/types";
 import { formValues } from "@/lib/util";
+import { EnvironmentCard } from "@/components/environment-card";
 import { Loaded } from "@/components/loaded";
 import { NameSlugFields } from "@/components/name-slug-fields";
 import { PageHeader } from "@/components/page-header";
 import { ServiceForm } from "@/components/service-form";
-import { StatusBadge } from "@/components/ui/badge";
 import { Button, buttonClasses } from "@/components/ui/button";
-import { Card, CardHeader } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { EmptyState, ErrorState } from "@/components/ui/empty-state";
 import { Field, FormError, Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Skeleton, TableSkeleton } from "@/components/ui/skeleton";
-import { Cell, Row, Table } from "@/components/ui/table";
 
 export function Overview({ org, projectSlug }: { org: string; projectSlug: string }) {
   const router = useRouter();
@@ -141,41 +139,5 @@ export function Overview({ org, projectSlug }: { org: string; projectSlug: strin
         />
       </Dialog>
     </div>
-  );
-}
-
-function EnvironmentCard({ environment, services, href }: { environment: Environment; services: Service[]; href: string }) {
-  return (
-    <Card>
-      <CardHeader
-        title={environment.name}
-        description={`${environment.branch} · ${environment.namespace}`}
-        actions={<StatusBadge status={environment.kind} />}
-      />
-      <div className="p-6">
-        {services.length === 0 ? (
-          <EmptyState title="No services in this environment" description="Add a web, worker, cron or static service." />
-        ) : (
-          <Table columns={["Service", "Kind", "Resources", "Replicas"]}>
-            {services.map((service) => (
-              <Row key={service.id}>
-                <Cell>
-                  <Link href={`${href}/${service.slug}`} className="font-medium hover:text-accent">
-                    {service.name}
-                  </Link>
-                </Cell>
-                <Cell>
-                  <StatusBadge status={service.kind} />
-                </Cell>
-                <Cell className="text-graphite-400">
-                  {service.cpuMillis}m CPU · {service.memoryMb} MB
-                </Cell>
-                <Cell>{service.replicas}</Cell>
-              </Row>
-            ))}
-          </Table>
-        )}
-      </div>
-    </Card>
   );
 }

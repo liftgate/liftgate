@@ -2,26 +2,15 @@
 
 import { useState } from "react";
 import { api } from "@/lib/api";
-import { useAction, useApi } from "@/lib/hooks";
-import type { EnvVar, Service } from "@/lib/types";
+import { useAction } from "@/lib/hooks";
+import type { EnvVar } from "@/lib/types";
 import { envPayload, keepsStoredValue, storedRows } from "@/lib/util";
-import { Loaded } from "@/components/loaded";
-import { Button } from "@/components/ui/button";
-import { Card, CardHeader } from "@/components/ui/card";
-import { EmptyState } from "@/components/ui/empty-state";
-import { FormError, Input } from "@/components/ui/input";
-import { TableSkeleton } from "@/components/ui/skeleton";
+import { Button } from "./ui/button";
+import { Card, CardHeader } from "./ui/card";
+import { EmptyState } from "./ui/empty-state";
+import { FormError, Input } from "./ui/input";
 
-export function EnvTab({ service }: { service: Service }) {
-  const vars = useApi<EnvVar[]>(`/services/${service.id}/env`);
-  return (
-    <Loaded query={vars} skeleton={<TableSkeleton />}>
-      {(initial) => <EnvEditor serviceId={service.id} initial={initial} />}
-    </Loaded>
-  );
-}
-
-function EnvEditor({ serviceId, initial }: { serviceId: string; initial: EnvVar[] }) {
+export function EnvEditor({ serviceId, initial }: { serviceId: string; initial: EnvVar[] }) {
   const [rows, setRows] = useState(() => storedRows(initial));
   const [saved, setSaved] = useState(false);
   const save = useAction(async () => {
@@ -59,7 +48,7 @@ function EnvEditor({ serviceId, initial }: { serviceId: string; initial: EnvVar[
         ) : (
           <div className="divide-y divide-graphite-700">
             {rows.map((row, i) => (
-              <div key={i} className="grid grid-cols-[1fr_2fr_auto_auto] items-center gap-4 px-6 py-2">
+              <div key={i} className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-2 px-6 py-3 md:grid-cols-[1fr_2fr_auto_auto] md:py-2">
                 <Input
                   aria-label="Name"
                   required
@@ -67,7 +56,7 @@ function EnvEditor({ serviceId, initial }: { serviceId: string; initial: EnvVar[
                   placeholder="NAME"
                   value={row.name}
                   onChange={(e) => update(i, { name: e.target.value })}
-                  className="font-mono"
+                  className="col-span-2 font-mono md:col-span-1"
                 />
                 <Input
                   aria-label="Value"
@@ -75,7 +64,7 @@ function EnvEditor({ serviceId, initial }: { serviceId: string; initial: EnvVar[
                   placeholder={keepsStoredValue(row) ? "Hidden. Type to replace." : "value"}
                   value={row.value ?? ""}
                   onChange={(e) => update(i, { value: e.target.value })}
-                  className="font-mono"
+                  className="col-span-2 font-mono md:col-span-1"
                 />
                 <label className="flex items-center gap-2 text-sm text-graphite-200">
                   <input

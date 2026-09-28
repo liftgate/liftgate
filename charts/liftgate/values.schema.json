@@ -79,6 +79,7 @@
       "properties": {
         "image": { "type": "string", "minLength": 1 },
         "tag": { "type": "string" },
+        "landing": { "type": "boolean" },
         "resources": { "type": "object" }
       }
     },

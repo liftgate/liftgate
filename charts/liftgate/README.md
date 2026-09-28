@@ -348,6 +348,7 @@ kubectl -n liftgate-system exec deploy/liftgate-control-plane -- /opt/liftgate/b
 
 `<user>` is a user id, login or email. Each change is written together with an `audit_log` row
 and an outbox event in one transaction.
+[`infra/ABUSE.md`](../../infra/ABUSE.md) is the runbook for abuse reports.
 
 Set `legal.termsUrl`, `legal.privacyUrl` and `legal.aupUrl` to show a consent line on sign-in
 and a footer with the documents; new accounts then record when they accepted the terms. Left

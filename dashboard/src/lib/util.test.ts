@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Environment, Project, Service } from "./types.ts";
-import { duration, envPayload, findService, keepsStoredValue, safeNext, shortSha, slugify, storedRows, stripAnsi, timeAgo } from "./util.ts";
+import { duration, envPayload, findService, keepsStoredValue, linkTarget, safeNext, shortSha, slugify, storedRows, stripAnsi, timeAgo } from "./util.ts";
 
 test("slugify lowercases and collapses separators", () => {
   assert.equal(slugify("  Acme Web App!  "), "acme-web-app");
@@ -39,9 +39,18 @@ test("stripAnsi leaves no escape sequence in a log line", () => {
   assert.ok(!stripAnsi(`${esc}[38;5;196mred${esc}[m`).includes(esc));
 });
 
-test("safeNext keeps only same-origin relative paths", () => {
+test("safeNext keeps only same-origin relative paths and falls back to the dashboard", () => {
   assert.equal(safeNext("/acme/web?tab=logs"), "/acme/web?tab=logs");
-  for (const value of ["//evil.dev", "/\\evil.dev", "/\t/evil.dev", "/\n/evil.dev", "https://evil.dev", "acme", undefined, ["/a"]]) assert.equal(safeNext(value), "/");
+  for (const value of ["//evil.dev", "/\\evil.dev", "/\t/evil.dev", "/\n/evil.dev", "https://evil.dev", "acme", undefined, ["/a"]]) assert.equal(safeNext(value), "/dashboard");
+});
+
+test("linkTarget opens a new tab only for links that leave the site", () => {
+  const newTab = { target: "_blank", rel: "noreferrer" };
+  for (const href of ["/dashboard", "/login", "/.well-known/security.txt", "https://liftgate.dev/legal/terms"]) assert.deepEqual(linkTarget(href, "https://liftgate.dev"), {});
+  for (const href of ["https://github.com/liftgate/liftgate", "https://railpack.com", "https://web-hello-dean.liftgate.app", "https://liftgate.dev.evil.dev/terms"])
+    assert.deepEqual(linkTarget(href, "https://liftgate.dev"), newTab);
+  assert.deepEqual(linkTarget("/legal/terms"), {});
+  assert.deepEqual(linkTarget("https://github.com/liftgate/liftgate"), newTab);
 });
 
 test("envPayload never sends an empty value for an untouched stored secret", () => {

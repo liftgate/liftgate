@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Footer } from "@/components/footer";
 import { Nav } from "@/components/nav";
 import { buttonClasses } from "@/components/ui/button";
+import { AppLink } from "./app-link";
 import { Closing } from "./closing";
 import { CloudOrYours } from "./cloud-or-yours";
 import { demo } from "./demo";
@@ -42,7 +43,7 @@ const footerLinks = [
   { label: "Security policy", href: `${repoUrl}/blob/main/SECURITY.md` },
 ];
 
-export function Landing() {
+export function Landing({ signedIn }: { signedIn: boolean }) {
   const { builds, deployments } = demo();
   return (
     <>
@@ -64,27 +65,26 @@ export function Landing() {
                   Source code
                 </a>
               </nav>
-              <Link href="/login" className={signInLink}>
-                <LinkPending />
-                Sign in
-              </Link>
-              <Link href="/login" className={buttonClasses("primary")}>
-                <LinkPending />
-                Request access
-              </Link>
+              {!signedIn && (
+                <Link href="/login" className={signInLink}>
+                  <LinkPending />
+                  Sign in
+                </Link>
+              )}
+              <AppLink signedIn={signedIn} />
             </>
           }
         />
       </div>
       <main id="main" className="mx-auto w-full max-w-6xl flex-1 px-6 pb-24 md:pb-40 xl:pb-52">
-        <Hero />
+        <Hero signedIn={signedIn} />
         <Stacks />
         <HowItWorks builds={builds} deployments={deployments} />
         <OneProject />
-        <CloudOrYours />
+        <CloudOrYours signedIn={signedIn} />
         <Security />
         <SelfHost />
-        <Closing />
+        <Closing signedIn={signedIn} />
       </main>
       <Footer links={footerLinks} />
     </>

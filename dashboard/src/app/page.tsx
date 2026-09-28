@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { Landing, landingMetadata } from "@/components/landing/landing";
-import { Shell } from "@/components/shell";
-import { landingOn, showsLanding } from "@/lib/landing";
-import { OrgChooser } from "./org-chooser";
+import { landingFor, landingOn } from "@/lib/landing";
 
 export async function generateMetadata(): Promise<Metadata> {
   await connection();
@@ -13,10 +12,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function Home() {
   const jar = await cookies();
-  if (showsLanding(process.env.LIFTGATE_LANDING, (name) => jar.has(name))) return <Landing />;
-  return (
-    <Shell>
-      <OrgChooser />
-    </Shell>
-  );
+  const landing = landingFor(process.env.LIFTGATE_LANDING, (name) => jar.has(name));
+  if (!landing) redirect("/dashboard");
+  return <Landing signedIn={landing.signedIn} />;
 }

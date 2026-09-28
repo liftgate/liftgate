@@ -10,7 +10,7 @@ export default function NotFound() {
         title="Page not found"
         description="The address does not match any organization, project or service."
         action={
-          <Link href="/" className={buttonClasses()}>
+          <Link href="/dashboard" className={buttonClasses()}>
             Back to the dashboard
           </Link>
         }

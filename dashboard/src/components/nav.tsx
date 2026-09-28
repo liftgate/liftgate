@@ -14,8 +14,9 @@ export function Nav({ actions }: { actions?: ReactNode }) {
   const router = useRouter();
   const onLogin = usePathname().startsWith("/login");
   const { org, project, environment, service } = useParams<{ org?: string; project?: string; environment?: string; service?: string }>();
-  const me = useApi<User>(onLogin || actions ? null : "/me");
-  const orgs = useApi<Organization[]>(onLogin || actions ? null : "/orgs");
+  const inApp = !onLogin && !actions;
+  const me = useApi<User>(inApp && "/me");
+  const orgs = useApi<Organization[]>(inApp && "/orgs");
   const signOut = useAction(async () => {
     await api("/auth/logout", { method: "POST" });
     window.location.replace("/login");
@@ -27,7 +28,7 @@ export function Nav({ actions }: { actions?: ReactNode }) {
     <header className="border-b border-graphite-700 bg-graphite-900">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-6 px-6">
         <nav className="flex min-w-0 items-center gap-2 text-sm">
-          <Link href="/" className="flex items-center gap-2 font-semibold">
+          <Link href={inApp ? "/dashboard" : "/"} className="flex items-center gap-2 font-semibold">
             <Mark />
             Liftgate
           </Link>

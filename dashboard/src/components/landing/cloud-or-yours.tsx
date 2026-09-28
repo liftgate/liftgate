@@ -1,14 +1,13 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
 import { buttonClasses } from "@/components/ui/button";
-import { LinkPending } from "./link-pending";
+import { AppLink } from "./app-link";
 import { repoUrl } from "./links";
 import { Section } from "./section";
 import { h3, inlineLink } from "./styles";
 
 const strong = (text: string) => <span className="font-medium text-white">{text}</span>;
 
-const columns: { title: string; note: string; rows: [string, ReactNode][]; action: ReactNode; className: string }[] = [
+const columns: { title: string; note: string; rows: [string, ReactNode][]; action: (signedIn: boolean) => ReactNode; className: string }[] = [
   {
     title: "Liftgate Cloud",
     note: "Run by us",
@@ -18,12 +17,7 @@ const columns: { title: string; note: string; rows: [string, ReactNode][]; actio
       ["Sign-in", "GitHub, passkeys and SAML single sign-on."],
       ["New accounts", "Approved by hand. You can sign in right away and deploy once approved."],
     ],
-    action: (
-      <Link href="/login" className={buttonClasses("primary", "mt-2 justify-self-start", "lg")}>
-        <LinkPending />
-        Request access
-      </Link>
-    ),
+    action: (signedIn) => <AppLink signedIn={signedIn} size="lg" className="mt-2 justify-self-start" />,
     className: "lg:pr-12",
   },
   {
@@ -44,7 +38,7 @@ const columns: { title: string; note: string; rows: [string, ReactNode][]; actio
       ["Sign-in", "GitHub, passkeys and SAML. Turn on Google, GitLab, Bitbucket and email codes too."],
       ["New accounts", "Open, by approval or closed. Your choice."],
     ],
-    action: (
+    action: () => (
       <a href="#self-hosting" className={buttonClasses("secondary", "mt-2 justify-self-start", "lg")}>
         Self-host
       </a>
@@ -53,7 +47,7 @@ const columns: { title: string; note: string; rows: [string, ReactNode][]; actio
   },
 ];
 
-export function CloudOrYours() {
+export function CloudOrYours({ signedIn }: { signedIn: boolean }) {
   return (
     <Section
       id="cloud-or-yours"
@@ -80,7 +74,7 @@ export function CloudOrYours() {
                 </div>
               ))}
             </dl>
-            {column.action}
+            {column.action(signedIn)}
           </div>
         ))}
       </div>

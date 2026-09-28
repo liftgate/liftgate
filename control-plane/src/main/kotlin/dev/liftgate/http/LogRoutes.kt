@@ -21,13 +21,13 @@ fun Route.logRoutes(app: App) {
     val sockets = ConcurrentHashMap<UUID, Int>()
     route("/logs") {
         webSocket("/builds/{id}") {
-            relay(app, sockets) {
+            relay(sockets) {
                 val id = call.build(app).id
                 app.nats.logs.follow(id) { app.builds.byId(id)?.status.let { it != BuildStatus.QUEUED && it != BuildStatus.RUNNING } }
             }
         }
         webSocket("/services/{id}") {
-            relay(app, sockets) {
+            relay(sockets) {
                 val scope = call.service(app)
                 app.podLogs.follow(scope.environment.namespace, scope.service.id, call.request.queryParameters["previous"] == "true")
             }
@@ -35,7 +35,7 @@ fun Route.logRoutes(app: App) {
     }
 }
 
-private suspend fun DefaultWebSocketServerSession.relay(app: App, sockets: ConcurrentHashMap<UUID, Int>, lines: suspend () -> Flow<String>) {
+private suspend fun DefaultWebSocketServerSession.relay(sockets: ConcurrentHashMap<UUID, Int>, lines: suspend () -> Flow<String>) {
     val flow = try {
         lines()
     } catch (e: LiftgateException) {

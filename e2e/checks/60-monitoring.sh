@@ -29,7 +29,7 @@ for series in \
   liftgate_outbox_oldest_pending_seconds \
   'liftgate_builds{status="queued"}' \
   'max_over_time(liftgate_messages_total{outcome="acked"}[1h])' \
-  'max_over_time(liftgate_release_duration_seconds_count[1h])' \
+  'max_over_time(liftgate_release_duration_seconds_count{status="running"}[1h])' \
   'ktor_http_server_requests_seconds_count{route=~"/(healthz|readyz|metrics)"}' \
   nats_server_max_storage \
   nats_server_total_message_bytes \

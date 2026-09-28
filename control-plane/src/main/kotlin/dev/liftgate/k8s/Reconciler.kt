@@ -1,7 +1,6 @@
 package dev.liftgate.k8s
 
 import dev.liftgate.App
-import dev.liftgate.db.sql
 import dev.liftgate.deploy.Deployment
 import dev.liftgate.deploy.DeploymentStatus
 import dev.liftgate.events.Subject
@@ -13,7 +12,6 @@ import io.fabric8.kubernetes.api.model.gatewayapi.v1.Gateway
 import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPRoute
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.KubernetesClientException
-import io.micrometer.core.instrument.Timer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -81,12 +79,7 @@ class Reconciler(private val app: App, private val kube: KubernetesClient) {
 
     fun start(): Job {
         val consumers = CoroutineScope(app.scope.coroutineContext + SupervisorJob(app.scope.coroutineContext.job))
-        app.nats.consume(Subject.RELEASE_REQUESTED, "reconciler-release-requested", consumers) {
-            val deploymentId = it.uuid("deploymentId")
-            val sample = Timer.start()
-            release(deploymentId)
-            app.deployments.byId(deploymentId)?.let { deployment -> sample.stop(app.metrics.timer("liftgate.release.duration", "status", deployment.status.sql)) }
-        }
+        app.nats.consume(Subject.RELEASE_REQUESTED, "reconciler-release-requested", consumers) { release(it.uuid("deploymentId")) }
         app.nats.consume(Subject.DOMAIN_VERIFY_REQUESTED, "reconciler-domain-verify-requested", consumers) { reroute(it.uuid("serviceId")) }
         app.nats.consume(Subject.TEARDOWN_REQUESTED, "reconciler-teardown-requested", consumers) {
             teardown(it.getValue("namespace").jsonPrimitive.content, it["serviceId"]?.jsonPrimitive?.content?.let(UUID::fromString))

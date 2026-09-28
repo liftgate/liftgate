@@ -33,7 +33,7 @@ export function HowItWorks({ builds, deployments }: { builds: Build[]; deploymen
       caption: "The Deployments tab once the build is released.",
       figure: (
         <div inert className="max-md:[&_:is(th,td):not(:first-child,:last-child)]:hidden md:rounded-lg md:border md:border-graphite-700 md:bg-graphite-950 md:p-6">
-          <DeploymentTable deployments={deployments} builds={builds} replicas={1} onRollback={() => undefined} />
+          <DeploymentTable deployments={deployments} builds={builds} replicas={1} />
         </div>
       ),
     },

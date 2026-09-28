@@ -37,14 +37,11 @@ export function DeploymentsTab({ service, admin }: { service: Service; admin: bo
               builds={builds.data}
               replicas={service.replicas}
               rolling={rollback.pending ? target : undefined}
-              onRollback={
-                admin
-                  ? (id) => {
-                      setTarget(id);
-                      rollback.run(id);
-                    }
-                  : undefined
-              }
+              onRollback={(id) => {
+                setTarget(id);
+                rollback.run(id);
+              }}
+              readOnly={!admin}
             />
           </div>
         )

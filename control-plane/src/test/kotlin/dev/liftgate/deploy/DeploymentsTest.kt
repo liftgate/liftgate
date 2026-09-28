@@ -94,18 +94,13 @@ class DeploymentsTest {
 
     @Test
     fun `builds release, a running deployment supersedes older ones and a rollback replaces the running one once it runs`() = runBlocking {
-        val orgs = Orgs(db)
-        val projects = Projects(db)
-        val org = orgs.create("acme", "Acme", db.tx { insertUser("dean", null, null, null) }.id)
-        val project = projects.create(org.id, "shop", "Shop", "acme/shop", 42)
-        val service = services.create(projects.environments(project.id).single().id, ServiceSpec("api", "API", ServiceKind.WEB))
-        assertEquals(org, services.scope(service.id)?.org)
-        suspend fun release(sha: String) = assertNotNull(builds.markSucceeded(builds.request(service.id, sha, null, "main").id, "registry/acme/shop-api:$sha"))
+        val service = seed()
+        assertEquals("acme", services.scope(service.id)?.org?.slug)
 
-        val first = release("aaa")
+        val first = release(service, "aaa")
         deployments.transition(first.id, DeploymentStatus.RELEASING)
         deployments.transition(first.id, DeploymentStatus.RUNNING, replicasReady = 1)
-        val second = release("bbb")
+        val second = release(service, "bbb")
         deployments.transition(second.id, DeploymentStatus.RUNNING, replicasReady = 1)
         assertEquals(DeploymentStatus.SUPERSEDED, deployments.byId(first.id)?.status)
         assertEquals(second.id, deployments.current(service.id)?.id)

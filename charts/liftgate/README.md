@@ -453,6 +453,7 @@ empty, neither appears.
 | `plans` | `free`, `unlimited` | `LIFTGATE_PLANS`; see [Plans](#plans) |
 | `defaultPlan` | `unlimited` | `LIFTGATE_DEFAULT_PLAN`; the plan of every organization that has not been given one with `admin plan` |
 | `allowSharedSite` | `false` | Render although `deployDomain` ends in the same two labels as `publicUrl` or `dashboardUrl`; see [Separate sites](#separate-sites) |
+| `deniedEgressCidrs` | `[]` | `LIFTGATE_DENIED_EGRESS_CIDRS`; public IPv4 CIDRs that tenant pods and build jobs may not reach, such as the host's own address, on top of the private ranges they never reach |
 
 Derived variables: `LIFTGATE_DATABASE_URL` points at the CloudNativePG `-rw` Service (or
 `postgres.externalUrl`), `LIFTGATE_DATABASE_USER` and `LIFTGATE_DATABASE_PASSWORD` come from
@@ -490,7 +491,8 @@ Creating or resizing past a limit answers `409 plan_limit` naming it, and nothin
 changes that do not add to an organization that is already over a limit still pass. Each
 environment namespace gets a ResourceQuota of twice `replicas`, `cpuMillis`, `memoryMb` and
 `replicas × ephemeralMb`, so a rolling update can surge. SMTP ports 25, 465, 587 and 2525 are
-closed on every plan. `GET /api/v1/orgs/<org>/usage` reports what an organization uses against its plan.
+closed on every plan and to build jobs, which reach the internet over TCP only and resolve names
+through `kube-system`. `GET /api/v1/orgs/<org>/usage` reports what an organization uses against its plan.
 
 ## Node pools
 

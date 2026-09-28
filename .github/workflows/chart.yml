@@ -45,6 +45,17 @@ jobs:
           helm template liftgate charts/liftgate ${{ matrix.args }} --set runtimeClass= --set allowUnsandboxedTenants=true --show-only templates/configmap.yaml | grep 'LIFTGATE_ALLOW_RUNC: "true"'
           helm template liftgate charts/liftgate ${{ matrix.args }} --set-json 'build.allowedEgressCidrs=[{"cidr":"10.200.0.1/32","ports":[5050]}]' --show-only templates/networkpolicy.yaml \
             | yq -e 'select(.metadata.name == "build-isolation") | .spec.egress | (length == 3 and .[1].to[0].ipBlock.except[0] == "10.0.0.0/8" and .[2].to[0].ipBlock.cidr == "10.200.0.1/32" and (.[2].ports | length) == 1 and .[2].ports[0].protocol == "TCP" and .[2].ports[0].port == 5050)'
+      - name: build egress ports, denied cidrs and platform resources
+        run: |
+          set -o pipefail
+          helm template liftgate charts/liftgate ${{ matrix.args }} --set-json 'deniedEgressCidrs=["172.93.106.84/32"]' | yq ea -o json '[.]' > rendered.json
+          jq -e '.[] | select(.metadata.name == "build-isolation") | .spec.egress[1]
+            | .to[0].ipBlock.except[-1] == "172.93.106.84/32" and .ports == ([[1, 24], [26, 464], [466, 586], [588, 2524], [2526, 65535]] | map({protocol: "TCP", port: .[0], endPort: .[1]}))' rendered.json
+          jq -e '.[] | select(.kind == "ConfigMap" and .metadata.name == "liftgate") | .data.LIFTGATE_DENIED_EGRESS_CIDRS == "172.93.106.84/32"' rendered.json
+          jq -e '[.[] | select(.kind == "StatefulSet" and .metadata.name == "liftgate-nats") | .spec.template.spec.containers[] | select(.name == "nats") | .resources.requests.memory] == ["128Mi"]' rendered.json
+          jq -e '[.[] | select(.kind == "Cluster") | .spec.resources.requests.memory] == ["512Mi"]' rendered.json
+          if helm template liftgate charts/liftgate ${{ matrix.args }} --set-json 'deniedEgressCidrs=["fd00::/8"]' 2> render.err; then exit 1; fi
+          grep "/deniedEgressCidrs" render.err
       - name: gitlab, deploy domain and client ip guards
         run: |
           set -o pipefail

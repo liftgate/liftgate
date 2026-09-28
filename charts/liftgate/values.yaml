@@ -188,3 +188,5 @@ plans:
   unlimited: {}
 
 defaultPlan: unlimited
+
+deniedEgressCidrs: []

@@ -125,6 +125,9 @@ data:
   LIFTGATE_BUILD_LOGS_MAX_BYTES: {{ int64 .Values.build.logsMaxBytes | quote }}
   LIFTGATE_LOG_READER_ROLE: {{ printf "%s-log-reader" (include "liftgate.fullname" .) | quote }}
   LIFTGATE_LOG_READER_ACCOUNT: {{ include "liftgate.roleName" (list . (eq (include "liftgate.ha" .) "true" | ternary "api" "all")) | quote }}
+  {{- with .Values.deniedEgressCidrs }}
+  LIFTGATE_DENIED_EGRESS_CIDRS: {{ join "," . | quote }}
+  {{- end }}
 {{- with include "liftgate.sharedSite" . }}
 {{- if not $.Values.allowSharedSite }}
 {{- fail (printf "deployDomain %s shares the site %s with publicUrl or dashboardUrl, so tenant apps would be same-site with the dashboard; use a separate registrable domain, or set allowSharedSite=true if %s is a public suffix such as co.uk" $.Values.deployDomain . .) }}

@@ -173,9 +173,9 @@ object Resources {
         .endSpec()
         .build()
 
-    fun networkPolicies(r: Release, gatewayNamespace: String): List<NetworkPolicy> {
+    fun networkPolicies(r: Release, gatewayNamespace: String, deniedCidrs: List<String> = emptyList()): List<NetworkPolicy> {
         val sameNamespace = NetworkPolicyPeerBuilder().withNewPodSelector().endPodSelector().build()
-        val internet = NetworkPolicyPeerBuilder().withNewIpBlock().withCidr("0.0.0.0/0").withExcept(privateRanges).endIpBlock().build()
+        val internet = NetworkPolicyPeerBuilder().withNewIpBlock().withCidr("0.0.0.0/0").withExcept(privateRanges + deniedCidrs).endIpBlock().build()
         return listOf(
             policy(r, "default-deny").build(),
             policy(r, "allow-internal").editSpec()

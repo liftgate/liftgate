@@ -100,6 +100,7 @@ data class Config(
     val buildLogsMaxBytes: Long,
     val logReaderRole: String?,
     val logReaderAccount: String,
+    val deniedEgressCidrs: List<String>,
 ) {
     companion object {
         private val taint = Regex("""([\w./-]+)(?:=([\w.-]*))?(?::(NoSchedule|PreferNoSchedule|NoExecute))?""")
@@ -227,6 +228,9 @@ data class Config(
                 buildLogsMaxBytes = text("BUILD_LOGS_MAX_BYTES", "536870912").toLongOrNull()?.takeIf { it > 0 } ?: error("LIFTGATE_BUILD_LOGS_MAX_BYTES must be a positive number of bytes"),
                 logReaderRole = optional("LOG_READER_ROLE"),
                 logReaderAccount = text("LOG_READER_ACCOUNT", "liftgate"),
+                deniedEgressCidrs = optional("DENIED_EGRESS_CIDRS")?.split(',')?.map(String::trim)?.onEach {
+                    if (':' in it || runCatching { IpSubnetFilterRule(it, IpFilterRuleType.REJECT) }.isFailure) error("LIFTGATE_DENIED_EGRESS_CIDRS must be IPv4 CIDRs such as 203.0.113.7/32")
+                }.orEmpty(),
             )
         }
     }

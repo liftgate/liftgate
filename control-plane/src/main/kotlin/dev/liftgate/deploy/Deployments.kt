@@ -111,23 +111,27 @@ class Deployments(private val db: Db, private val metrics: MeterRegistry = Simpl
             updated(id, to)
             current.createdAt.takeIf { current.status.sql in unreleased && to in outcomes }
         } ?: return
-        metrics.timer("liftgate.release.duration", "status", to.sql).record(Duration.between(createdAt, Instant.now()))
+        released(to, createdAt)
     }
 
     suspend fun redrive() {
         db.tx {
             val now = now()
-            DeploymentsTable.updateReturning(listOf(DeploymentsTable.id), { unreleasedBefore(now.minusMinutes(TIMEOUT_MINUTES)) }) {
+            val timedOut = DeploymentsTable.updateReturning(listOf(DeploymentsTable.id, DeploymentsTable.createdAt), { unreleasedBefore(now.minusMinutes(TIMEOUT_MINUTES)) }) {
                 it[status] = DeploymentStatus.FAILED.sql
                 it[error] = "timed out"
-            }.toList().forEach { updated(it[DeploymentsTable.id], DeploymentStatus.FAILED) }
+            }.toList().onEach { updated(it[DeploymentsTable.id], DeploymentStatus.FAILED) }
             val requested = requestedSince(Subject.RELEASE_REQUESTED, "deploymentId", now.minusMinutes(REQUEUE_MINUTES))
             DeploymentsTable.select(DeploymentsTable.id).where { unreleasedBefore(now.minusMinutes(REQUEUE_MINUTES)) }
                 .map { it[DeploymentsTable.id] }
                 .filter { it.toString() !in requested }
                 .forEach { requestRelease(it) }
-        }
+            timedOut.map { it[DeploymentsTable.createdAt].toInstant() }
+        }.forEach { released(DeploymentStatus.FAILED, it) }
     }
+
+    private fun released(status: DeploymentStatus, createdAt: Instant) =
+        metrics.timer("liftgate.release.duration", "status", status.sql).record(Duration.between(createdAt, Instant.now()))
 
     private fun find(id: UUID, lock: Boolean = false) =
         DeploymentsTable.selectAll().where { DeploymentsTable.id eq id }.apply { if (lock) forUpdate() }.singleOrNull()?.toDeployment()

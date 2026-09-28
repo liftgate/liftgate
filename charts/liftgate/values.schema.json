@@ -47,7 +47,7 @@
     "controlPlane": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["image", "tag", "replicas", "logLevel", "trustedProxies", "javaOpts", "resources", "clientIpHeader", "upstreamOverwritesClientIpHeader", "trustedProxyCidrs", "databasePoolSize"],
+      "required": ["image", "tag", "replicas", "logLevel", "trustedProxies", "javaOpts", "resources", "clientIpHeader", "upstreamOverwritesClientIpHeader", "trustedProxyCidrs", "databasePoolSize", "notificationDeniedCidrs"],
       "properties": {
         "image": { "type": "string", "minLength": 1 },
         "tag": { "type": "string" },
@@ -69,7 +69,8 @@
         "clientIpHeader": { "type": "string" },
         "upstreamOverwritesClientIpHeader": { "type": "boolean" },
         "trustedProxyCidrs": { "type": "array", "items": { "type": "string" } },
-        "databasePoolSize": { "type": "integer", "minimum": 0 }
+        "databasePoolSize": { "type": "integer", "minimum": 0 },
+        "notificationDeniedCidrs": { "type": "array", "items": { "type": "string" } }
       }
     },
     "dashboard": {

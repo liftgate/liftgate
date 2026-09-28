@@ -101,6 +101,7 @@ data class Config(
     val logReaderRole: String?,
     val logReaderAccount: String,
     val deniedEgressCidrs: List<String>,
+    val notificationDeniedCidrs: List<IpSubnetFilterRule>,
 ) {
     companion object {
         private val taint = Regex("""([\w./-]+)(?:=([\w.-]*))?(?::(NoSchedule|PreferNoSchedule|NoExecute))?""")
@@ -141,9 +142,10 @@ data class Config(
             val allowEntry = Regex("github:[a-z0-9-]+|@[^@\\s]+|[^@\\s]+@[^@\\s]+")
             val signupAllow = optional("SIGNUP_ALLOW")?.split(',')?.map { it.trim().lowercase() }?.filter(String::isNotEmpty).orEmpty()
                 .onEach { if (!allowEntry.matches(it)) error("LIFTGATE_SIGNUP_ALLOW entries must be emails, @domains or github:<login>, not $it") }
-            val trustedProxyCidrs = optional("TRUSTED_PROXY_CIDRS")?.split(',')?.map {
-                runCatching { IpSubnetFilterRule(it.trim(), IpFilterRuleType.ACCEPT) }.getOrElse { error("LIFTGATE_TRUSTED_PROXY_CIDRS must be CIDRs such as 10.0.0.0/8[,fd00::/8]") }
+            fun cidrs(name: String) = optional(name)?.split(',')?.map {
+                runCatching { IpSubnetFilterRule(it.trim(), IpFilterRuleType.ACCEPT) }.getOrElse { error("LIFTGATE_$name must be CIDRs such as 10.0.0.0/8[,fd00::/8]") }
             }.orEmpty()
+            val trustedProxyCidrs = cidrs("TRUSTED_PROXY_CIDRS")
             val clientIpHeader = optional("CLIENT_IP_HEADER")?.also { if (trustedProxyCidrs.isEmpty()) error("LIFTGATE_CLIENT_IP_HEADER needs LIFTGATE_TRUSTED_PROXY_CIDRS") }
             val registryTokenAuth = when (text("REGISTRY_AUTH", "shared")) {
                 "shared" -> false
@@ -231,6 +233,7 @@ data class Config(
                 deniedEgressCidrs = optional("DENIED_EGRESS_CIDRS")?.split(',')?.map(String::trim)?.onEach {
                     if (':' in it || runCatching { IpSubnetFilterRule(it, IpFilterRuleType.REJECT) }.isFailure) error("LIFTGATE_DENIED_EGRESS_CIDRS must be IPv4 CIDRs such as 203.0.113.7/32")
                 }.orEmpty(),
+                notificationDeniedCidrs = cidrs("NOTIFICATION_DENIED_CIDRS"),
             )
         }
     }

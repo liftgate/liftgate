@@ -99,7 +99,7 @@ object Resources {
     private const val TENANT_UID = 1000L
     private const val MAX_PORT = 65535
     private const val ROLLOUT_HEADROOM = 2
-    private val privateRanges = listOf("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "169.254.0.0/16")
+    val privateRanges = listOf("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "169.254.0.0/16")
     private val tcpWithoutSmtp = listOf(1 to 24, 26 to 464, 466 to 586, 588 to 2524, 2526 to MAX_PORT)
 
     fun namespace(r: Release): Namespace = NamespaceBuilder()

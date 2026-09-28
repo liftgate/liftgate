@@ -10,6 +10,8 @@ import dev.liftgate.service.ServiceKind
 import dev.liftgate.service.ServiceSpec
 import dev.liftgate.service.Services
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import java.util.UUID
@@ -79,5 +81,9 @@ class BuildsTest {
         )
         assertNotNull(builds.byId(first.id)?.finishedAt)
         assertEquals(0L, releases())
+        assertEquals(
+            listOf(buildJsonObject { put("buildId", first.id.toString()); put("status", "cancelled") }),
+            db.tx { Outbox.selectAll().where { Outbox.subject eq Subject.BUILD_COMPLETED.value }.map { it[Outbox.payload] } },
+        )
     }
 }

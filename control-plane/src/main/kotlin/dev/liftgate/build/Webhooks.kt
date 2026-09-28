@@ -18,11 +18,11 @@ private const val BRANCH_PREFIX = "refs/heads/"
  * @date 9/17/2026
  */
 object Webhooks {
-    fun verify(secret: String, body: ByteArray, signatureHeader: String?): Boolean {
-        val mac = Mac.getInstance(HMAC).apply { init(SecretKeySpec(secret.toByteArray(), HMAC)) }
-        val expected = "sha256=" + mac.doFinal(body).joinToString("") { "%02x".format(it) }
-        return signatureHeader != null && MessageDigest.isEqual(expected.toByteArray(), signatureHeader.toByteArray())
-    }
+    fun sign(secret: String, body: ByteArray): String =
+        "sha256=" + Mac.getInstance(HMAC).apply { init(SecretKeySpec(secret.toByteArray(), HMAC)) }.doFinal(body).joinToString("") { "%02x".format(it) }
+
+    fun verify(secret: String, body: ByteArray, signatureHeader: String?): Boolean =
+        signatureHeader != null && MessageDigest.isEqual(sign(secret, body).toByteArray(), signatureHeader.toByteArray())
 }
 
 /**

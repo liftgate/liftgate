@@ -410,3 +410,23 @@ object RegistryOrphans : Table("registry_orphans") {
     val repository = text("repository")
     override val primaryKey = PrimaryKey(repository)
 }
+
+/**
+ * @author Dean
+ * @date 9/27/2026
+ */
+object NotificationChannels : Table("notification_channels") {
+    val id = javaUUID("id")
+    val orgId = fk("org_id", Organizations.id, CASCADE)
+    val name = text("name")
+    val kind = oneOf("kind", "webhook", "slack", "discord")
+    val urlEncrypted = binary("url_encrypted")
+    val secretEncrypted = binary("secret_encrypted").nullable()
+    val events = array<String>("events")
+    val createdAt = createdAtColumn()
+    override val primaryKey = PrimaryKey(id)
+
+    init {
+        index("notification_channels_org", false, orgId)
+    }
+}

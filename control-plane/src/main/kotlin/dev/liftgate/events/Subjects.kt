@@ -18,6 +18,7 @@ enum class Subject(val value: String) {
     ORG_UNSUSPENDED("liftgate.org.unsuspended"),
     USER_UPDATED("liftgate.user.updated"),
     ORG_PLAN_CHANGED("liftgate.org.plan.changed"),
+    NOTIFICATION_REQUESTED("liftgate.notification.requested"),
 }
 
 fun buildLogSubject(buildId: UUID) = "liftgate.logs.build.$buildId"

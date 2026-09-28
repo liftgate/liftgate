@@ -3,6 +3,7 @@ package dev.liftgate.deploy
 import dev.liftgate.TestDatabase
 import dev.liftgate.db.Outbox
 import dev.liftgate.events.Subject
+import dev.liftgate.events.changed
 import dev.liftgate.http.LiftgateException
 import dev.liftgate.org.Orgs
 import dev.liftgate.org.insertUser
@@ -15,6 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.jsonPrimitive
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import kotlin.test.Test
@@ -104,5 +106,21 @@ class DeploymentsTest {
 
         assertEquals(1L, released("running"))
         assertEquals(1L, released("failed"))
+    }
+
+    @Test
+    fun `an update that only changes the ready replicas is published as unchanged`() = runBlocking {
+        val db = TestDatabase.clean()
+        val deployments = Deployments(db)
+        val projects = Projects(db)
+        val project = projects.create(Orgs(db).create("acme", "Acme", db.tx { insertUser("dean", null, null, null) }.id).id, "shop", "Shop", "acme/shop", 42)
+        val service = Services(db).create(projects.environments(project.id).single().id, ServiceSpec("api", "API", ServiceKind.WEB))
+        val builds = Builds(db)
+        val deployment = assertNotNull(builds.markSucceeded(builds.request(service.id, "aaa", null, "main").id, "registry/acme/shop-api:aaa"))
+        deployments.transition(deployment.id, DeploymentStatus.RUNNING, replicasReady = 1)
+        deployments.transition(deployment.id, DeploymentStatus.RUNNING, replicasReady = 2)
+        deployments.transition(deployment.id, DeploymentStatus.FAILED, error = "crash loop")
+        val updates = db.tx { Outbox.selectAll().where { Outbox.subject eq Subject.DEPLOYMENT_UPDATED.value }.orderBy(Outbox.id).map { it[Outbox.payload] } }
+        assertEquals(listOf("running" to true, "running" to false, "failed" to true), updates.map { it.getValue("status").jsonPrimitive.content to it.changed })
     }
 }

@@ -40,7 +40,7 @@ export const safeNext = (value: unknown) => {
 };
 
 export const linkTarget = (href: string, origin = globalThis.location?.origin ?? "http://site.invalid") =>
-  new URL(href, origin).origin === origin ? {} : { target: "_blank", rel: "noreferrer" };
+  URL.canParse(href, origin) && new URL(href, origin).origin === origin ? {} : { target: "_blank", rel: "noreferrer" };
 
 const authErrors: Record<string, string> = {
   access_denied: "Sign-in was cancelled at the provider.",

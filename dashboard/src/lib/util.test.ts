@@ -47,7 +47,7 @@ test("safeNext keeps only same-origin relative paths and falls back to the dashb
 test("linkTarget opens a new tab only for links that leave the site", () => {
   const newTab = { target: "_blank", rel: "noreferrer" };
   for (const href of ["/dashboard", "/login", "/.well-known/security.txt", "https://liftgate.dev/legal/terms"]) assert.deepEqual(linkTarget(href, "https://liftgate.dev"), {});
-  for (const href of ["https://github.com/liftgate/liftgate", "https://railpack.com", "https://web-hello-dean.liftgate.app", "https://liftgate.dev.evil.dev/terms"])
+  for (const href of ["https://github.com/liftgate/liftgate", "https://railpack.com", "https://web-hello-dean.liftgate.app", "https://liftgate.dev.evil.dev/terms", "https://", "https://liftgate dev/terms", "https://liftgate.dev:99999/"])
     assert.deepEqual(linkTarget(href, "https://liftgate.dev"), newTab);
   assert.deepEqual(linkTarget("/legal/terms"), {});
   assert.deepEqual(linkTarget("https://github.com/liftgate/liftgate"), newTab);

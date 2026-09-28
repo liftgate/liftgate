@@ -7,7 +7,15 @@ export type User = {
   status: UserStatus;
 };
 
-export type Organization = { id: string; slug: string; name: string; plan: string; suspendedAt: string | null; suspendedReason: string | null };
+export type Organization = {
+  id: string;
+  slug: string;
+  name: string;
+  plan: string;
+  suspendedAt: string | null;
+  suspendedReason: string | null;
+  role: OrgRole | null;
+};
 
 export type Project = {
   id: string;
@@ -187,4 +195,21 @@ export type NotificationChannel = {
   events: NotificationEvent[];
   createdAt: string;
   secret: string | null;
+};
+
+export type Member = { user: User; role: OrgRole };
+
+export type CreatedInvitation = { url: string; expiresAt: string; emailed: boolean };
+
+export type InvitationPreview = { slug: string; name: string; role: OrgRole; invitedBy: string };
+
+export type AuditEntry = {
+  id: number;
+  actor: User | null;
+  viaToken: boolean;
+  action: string;
+  targetType: string;
+  targetId: string;
+  details: Record<string, string>;
+  createdAt: string;
 };

@@ -1,5 +1,6 @@
 import { useEffect, useEffectEvent, useState, useTransition } from "react";
 import { api, ApiError, describe } from "./api";
+import type { Organization } from "./types";
 
 export type Query<T> = { data?: T; error?: ApiError; loading: boolean; reload: () => void };
 
@@ -62,4 +63,10 @@ export function usePolling(active: boolean, fn: () => void, ms = 5000) {
     const id = setInterval(tick, ms);
     return () => clearInterval(id);
   }, [active, ms]);
+}
+
+export function useRole(org: string) {
+  const query = useApi<Organization>(`/orgs/${org}`);
+  const role = query.data?.role;
+  return { query, admin: role === "owner" || role === "admin", owner: role === "owner" };
 }

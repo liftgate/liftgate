@@ -1,27 +1,17 @@
 "use client";
 
-import { redirect, useRouter } from "next/navigation";
-import { api } from "@/lib/api";
-import { useAction, useApi } from "@/lib/hooks";
+import { redirect } from "next/navigation";
+import { useApi } from "@/lib/hooks";
 import type { Organization, User } from "@/lib/types";
-import { formValues } from "@/lib/util";
-import { NameSlugFields } from "@/components/name-slug-fields";
+import { CreateOrgForm } from "@/components/create-org-form";
 import { PageHeader } from "@/components/page-header";
-import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { ErrorState } from "@/components/ui/empty-state";
-import { FormError } from "@/components/ui/input";
 import { PageSkeleton } from "@/components/ui/skeleton";
 
 export function OrgChooser() {
-  const router = useRouter();
   const me = useApi<User>("/me");
   const orgs = useApi<Organization[]>("/orgs");
-  const create = useAction(async (form: HTMLFormElement) => {
-    const { name, slug } = formValues(form);
-    const org = await api<Organization>("/orgs", { method: "POST", body: { slug, name } });
-    router.push(`/${org.slug}`);
-  });
   const failed = me.error ?? orgs.error;
   if (failed) return <ErrorState error={failed} retry={me.error ? me.reload : orgs.reload} />;
   if (!me.data || !orgs.data) return <PageSkeleton />;
@@ -38,21 +28,7 @@ export function OrgChooser() {
   return (
     <Card className="mx-auto mt-16 w-full max-w-lg">
       <CardHeader title="Create your organization" description="Projects and members belong to an organization." />
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          create.run(e.currentTarget);
-        }}
-        className="flex flex-col gap-4 p-6"
-      >
-        <NameSlugFields />
-        <FormError message={create.error} />
-        <div className="flex justify-end">
-          <Button type="submit" variant="primary" pending={create.pending}>
-            Create organization
-          </Button>
-        </div>
-      </form>
+      <CreateOrgForm className="p-6" />
     </Card>
   );
 }

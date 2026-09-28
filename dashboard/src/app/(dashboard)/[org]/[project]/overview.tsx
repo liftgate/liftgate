@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api } from "@/lib/api";
-import { useAction, useApi } from "@/lib/hooks";
+import { useAction, useApi, useRole } from "@/lib/hooks";
 import type { ProjectTree, Service, ServiceSpec } from "@/lib/types";
 import { formValues } from "@/lib/util";
 import { EnvironmentCard } from "@/components/environment-card";
@@ -21,6 +21,7 @@ import { Skeleton, TableSkeleton } from "@/components/ui/skeleton";
 
 export function Overview({ org, projectSlug }: { org: string; projectSlug: string }) {
   const router = useRouter();
+  const { admin } = useRole(org);
   const [dialog, setDialog] = useState<"environment" | "service">();
   const tree = useApi<ProjectTree>(`/orgs/${org}/projects/${projectSlug}/tree`);
   const project = tree.data?.project;
@@ -59,14 +60,16 @@ export function Overview({ org, projectSlug }: { org: string; projectSlug: strin
         title={project?.name ?? <Skeleton className="h-6 w-48" />}
         description={project && `${project.repoFullName} · ${project.repoDefaultBranch}`}
         actions={
-          <>
-            <Button onClick={() => setDialog("environment")} disabled={!project}>
-              New environment
-            </Button>
-            <Button variant="primary" onClick={() => setDialog("service")} disabled={!environments?.length}>
-              New service
-            </Button>
-          </>
+          admin && (
+            <>
+              <Button onClick={() => setDialog("environment")} disabled={!project}>
+                New environment
+              </Button>
+              <Button variant="primary" onClick={() => setDialog("service")} disabled={!environments?.length}>
+                New service
+              </Button>
+            </>
+          )
         }
       />
       <Loaded query={tree} skeleton={<TableSkeleton />}>
@@ -75,7 +78,7 @@ export function Overview({ org, projectSlug }: { org: string; projectSlug: strin
             <EmptyState
               title="No environments yet"
               description="An environment tracks one branch of the repository and holds its services."
-              action={<Button onClick={() => setDialog("environment")}>New environment</Button>}
+              action={admin && <Button onClick={() => setDialog("environment")}>New environment</Button>}
             />
           ) : (
             list.map((environment) => (

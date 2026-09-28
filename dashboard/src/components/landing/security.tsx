@@ -58,7 +58,7 @@ const rules: { title: string; body: string; path: string; lines: [number, number
   },
   {
     title: "Secrets you can set but not read back",
-    body: "Variables are encrypted with AES-256-GCM and injected at runtime, not at build time. The API never sends a secret value back.",
+    body: "Variables are encrypted with AES-256-GCM and available to builds and at runtime. Secret values never become Docker build arguments, and the API never sends one back.",
     path: "control-plane/src/main/kotlin/dev/liftgate/service/EnvVars.kt",
     lines: [20, 34],
     className: "bg-graphite-950 md:col-span-2 lg:col-span-12 xl:flex-row",

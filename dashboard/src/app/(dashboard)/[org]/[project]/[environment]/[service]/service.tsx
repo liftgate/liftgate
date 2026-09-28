@@ -39,6 +39,7 @@ export function ServiceView({ org, projectSlug, environmentSlug, serviceSlug }: 
   const lookup = useApi(`${org}/${projectSlug}/${environmentSlug}/${serviceSlug}`, () => loadService(org, projectSlug, environmentSlug, serviceSlug));
   const { query: role, admin } = useRole(org);
   if (lookup.error) return <ErrorState error={lookup.error} retry={lookup.reload} />;
+  if (role.error) return <ErrorState error={role.error} retry={role.reload} />;
   if (!lookup.data || role.loading) return <PageSkeleton />;
   const { service, environment } = lookup.data;
   return (

@@ -381,6 +381,7 @@ empty, neither appears.
 | `postgres.externalPassword` | `""` | |
 | `postgres.storage` | `10Gi` | Volume per instance |
 | `postgres.maxConnections` | `100` | PostgreSQL `max_connections` |
+| `postgres.resources` | 250m / 512Mi, no limit | Resources of each CloudNativePG instance |
 | `postgres.backup.enabled` | `false` | WAL archiving and scheduled base backups, see [Backups](#backups); required for `ha` with a managed database |
 | `postgres.backup.endpointUrl` | `""` | S3 endpoint; empty means AWS S3 |
 | `postgres.backup.destinationPath` | `""` | `s3://<bucket>/<optional prefix>`; required when `enabled` with a managed database |
@@ -394,6 +395,7 @@ empty, neither appears.
 | `nats.externalUrl` | `""` | NATS URL when not managed |
 | `nats.config.*` | JetStream on, 5Gi | Passed through to the nats chart |
 | `nats.natsBox.enabled` | `false` | Set `true` for a `nats` CLI pod to inspect streams |
+| `nats.container.resources` | 100m / 128Mi, limit 1Gi | Resources of each NATS server |
 | `gateway.create` | `true` | Render Gateway, HTTPRoutes and Certificates |
 | `gateway.name` | `liftgate` | `LIFTGATE_GATEWAY_NAME` |
 | `gateway.namespace` | `""` | `LIFTGATE_GATEWAY_NAMESPACE` for an existing Gateway when `gateway.create=false`; empty or `gateway.create=true` means the release namespace |

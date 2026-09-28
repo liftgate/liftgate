@@ -18,6 +18,10 @@ spec:
       max_connections: {{ .Values.postgres.maxConnections | quote }}
   storage:
     size: {{ .Values.postgres.storage }}
+  {{- with .Values.postgres.resources }}
+  resources:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   {{- with .Values.nodeSelector }}
   affinity:
     nodeSelector:

@@ -27,7 +27,7 @@ export function Invitation({ token }: { token: string }) {
             description="It expired, was already used, or the person who sent it can no longer invite you. Ask them for a new link."
           />
           <div className="flex justify-end">
-            <Link href="/" className={buttonClasses()}>
+            <Link href="/dashboard" className={buttonClasses()}>
               Go to your organizations
             </Link>
           </div>

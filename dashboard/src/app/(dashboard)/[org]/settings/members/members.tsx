@@ -39,7 +39,7 @@ export function Members({ org }: { org: string }) {
   });
   const remove = useAction(async (member: Member) => {
     await api(`/orgs/${org}/members/${leaving ? "me" : member.user.id}`, { method: "DELETE" });
-    if (leaving) return window.location.replace("/");
+    if (leaving) return window.location.replace("/dashboard");
     setRemoving(undefined);
     members.reload();
   });

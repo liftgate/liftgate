@@ -20,8 +20,9 @@ Alertmanager, kube-state-metrics and node-exporter. kube-state-metrics adds
 | kubelet and cAdvisor | jobs `kubernetes-nodes` and `kubernetes-nodes-cadvisor` |
 
 The release namespace denies ingress by default. The chart's `liftgate-prometheus`
-NetworkPolicy lets Prometheus server pods in that namespace reach ports 7777, 8080, 8081, 9093
-and 9187 of every pod there; a Prometheus in another namespace needs its own policy.
+NetworkPolicy lets Prometheus server pods in that namespace reach ports 7777, 8080, 8081, 9093,
+9100 and 9187 of every pod there; a Prometheus in another namespace needs its own policy.
+node-exporter runs without host networking, so it opens no port on the nodes.
 
 ```sh
 kubectl -n liftgate-system port-forward service/prometheus 9090:9090 &

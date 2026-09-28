@@ -51,5 +51,6 @@ kube-state-metrics:
     - persistentvolumeclaims=[cnpg.io/cluster]
 prometheus-node-exporter:
   enabled: true
+  hostNetwork: false
 prometheus-pushgateway:
   enabled: false

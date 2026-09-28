@@ -550,8 +550,8 @@ The control plane's HTTP port, the dashboard and cert-manager's HTTP-01 solver p
 traffic from anywhere; Hazelcast only from the control plane; NATS only from this release's
 pods; and PostgreSQL only from its own instances and the CloudNativePG operator. The Prometheus
 server from [`infra/`](../../infra), when it runs in the release namespace, reaches every pod
-there on the metrics ports 7777, 8080, 8081, 9093 and 9187. Anything else installed in the release
-namespace is reachable only from the control plane unless it brings its own NetworkPolicy.
+there on the metrics ports 7777, 8080, 8081, 9093, 9100 and 9187. Anything else installed in the
+release namespace is reachable only from the control plane unless it brings its own NetworkPolicy.
 
 ## Registry authentication
 

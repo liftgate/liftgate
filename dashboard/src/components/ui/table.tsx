@@ -7,7 +7,7 @@ export function Table({ columns, children }: { columns: string[]; children: Reac
         <thead className="bg-graphite-900 text-xs uppercase tracking-wide text-graphite-400">
           <tr>
             {columns.map((column, i) => (
-              <th key={i} scope="col" className="h-10 px-4 font-medium">
+              <th key={i} scope="col" className="h-10 px-3 font-medium md:px-4">
                 {column}
               </th>
             ))}
@@ -24,5 +24,5 @@ export function Row({ selected = false, children }: { selected?: boolean; childr
 }
 
 export function Cell({ mono = false, className = "", children }: { mono?: boolean; className?: string; children?: ReactNode }) {
-  return <td className={`h-12 px-4 align-middle ${mono ? "font-mono text-xs" : ""} ${className}`}>{children}</td>;
+  return <td className={`h-12 px-3 align-middle md:px-4 ${mono ? "font-mono text-xs" : ""} ${className}`}>{children}</td>;
 }

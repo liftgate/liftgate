@@ -18,10 +18,8 @@ export function OneProject() {
       }
     >
       <figure className="mt-8 grid grid-cols-1 gap-6 md:mt-12 lg:grid-cols-12">
-        <div className="-mr-6 overflow-hidden md:mr-0 md:overflow-visible lg:col-span-9 lg:row-start-1">
-          <div inert className="min-w-140">
-            <EnvironmentCard environment={environment} services={services} href="#" />
-          </div>
+        <div inert className="max-md:[&_:is(th,td):last-child]:hidden lg:col-span-9 lg:row-start-1">
+          <EnvironmentCard environment={environment} services={services} href="#" />
         </div>
         <div inert className="lg:col-span-7 lg:col-start-6 lg:row-start-2 lg:-mt-12">
           <Card className="lg:shadow-2xl">

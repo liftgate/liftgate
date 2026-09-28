@@ -45,7 +45,7 @@ export function BuildLogPreview({ title, lines }: { title: string; lines: string
 
   return (
     <div ref={ref}>
-      <LogPanel title={title} lines={lines.slice(0, count)} status="open" className="h-128" />
+      <LogPanel title={title} lines={lines.slice(0, count)} status="open" className="h-128 max-md:overflow-hidden max-md:mask-r-from-[calc(100%-4rem)]" />
     </div>
   );
 }

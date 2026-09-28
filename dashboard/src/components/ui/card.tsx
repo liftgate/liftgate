@@ -6,7 +6,7 @@ export function Card({ className = "", children }: { className?: string; childre
 
 export function CardHeader({ title, description, actions }: { title: ReactNode; description?: ReactNode; actions?: ReactNode }) {
   return (
-    <div className="flex items-start justify-between gap-4 border-b border-graphite-700 px-6 py-4">
+    <div className="flex items-start justify-between gap-4 border-b border-graphite-700 px-6 py-4 max-md:flex-col">
       <div className="min-w-0">
         <h2 className="text-base font-medium">{title}</h2>
         {description && <p className="mt-1 text-sm text-graphite-400">{description}</p>}

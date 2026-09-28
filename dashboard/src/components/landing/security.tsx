@@ -64,10 +64,8 @@ const rules: { title: string; body: string; path: string; lines: [number, number
     className: "bg-graphite-950 md:col-span-2 lg:col-span-12 xl:flex-row",
     textClassName: "xl:w-96 xl:shrink-0",
     visual: (
-      <div className="pb-6 pl-6 max-md:mask-r-from-[calc(100%-4rem)] md:pr-6 xl:min-w-0 xl:flex-1 xl:pt-6 xl:pl-0">
-        <div inert className="w-192 md:w-auto">
-          <EnvEditor serviceId="demo" initial={envVars} />
-        </div>
+      <div inert className="px-6 pb-6 xl:min-w-0 xl:flex-1 xl:pt-6 xl:pl-0">
+        <EnvEditor serviceId="demo" initial={envVars} />
       </div>
     ),
   },

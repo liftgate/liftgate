@@ -48,7 +48,7 @@ export function EnvEditor({ serviceId, initial }: { serviceId: string; initial: 
         ) : (
           <div className="divide-y divide-graphite-700">
             {rows.map((row, i) => (
-              <div key={i} className="grid grid-cols-[1fr_2fr_auto_auto] items-center gap-4 px-6 py-2">
+              <div key={i} className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-2 px-6 py-3 md:grid-cols-[1fr_2fr_auto_auto] md:py-2">
                 <Input
                   aria-label="Name"
                   required
@@ -56,7 +56,7 @@ export function EnvEditor({ serviceId, initial }: { serviceId: string; initial: 
                   placeholder="NAME"
                   value={row.name}
                   onChange={(e) => update(i, { name: e.target.value })}
-                  className="font-mono"
+                  className="col-span-2 font-mono md:col-span-1"
                 />
                 <Input
                   aria-label="Value"
@@ -64,7 +64,7 @@ export function EnvEditor({ serviceId, initial }: { serviceId: string; initial: 
                   placeholder={keepsStoredValue(row) ? "Hidden. Type to replace." : "value"}
                   value={row.value ?? ""}
                   onChange={(e) => update(i, { value: e.target.value })}
-                  className="font-mono"
+                  className="col-span-2 font-mono md:col-span-1"
                 />
                 <label className="flex items-center gap-2 text-sm text-graphite-200">
                   <input

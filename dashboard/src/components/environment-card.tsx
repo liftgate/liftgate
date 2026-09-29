@@ -1,11 +1,13 @@
 import Link from "next/link";
 import type { Environment, Service } from "@/lib/types";
+import { shortSha, timeAgo } from "@/lib/util";
 import { StatusBadge } from "./ui/badge";
+import { Button } from "./ui/button";
 import { Card, CardHeader } from "./ui/card";
 import { EmptyState } from "./ui/empty-state";
 import { Cell, Row, Table } from "./ui/table";
 
-export function EnvironmentCard({ environment, services, href }: { environment: Environment; services: Service[]; href: string }) {
+export function EnvironmentCard({ environment, services, href, onNewService }: { environment: Environment; services: Service[]; href: string; onNewService?: () => void }) {
   return (
     <Card>
       <CardHeader
@@ -15,9 +17,13 @@ export function EnvironmentCard({ environment, services, href }: { environment: 
       />
       <div className="p-6">
         {services.length === 0 ? (
-          <EmptyState title="No services in this environment" description="Add a web, worker, cron or static service." />
+          <EmptyState
+            title="No services in this environment"
+            description="Add a web, worker, cron or static service."
+            action={onNewService && <Button onClick={onNewService}>New service</Button>}
+          />
         ) : (
-          <Table columns={["Service", "Kind", "Resources", "Replicas"]}>
+          <Table columns={["Service", "Status", "URL", "Last deploy"]}>
             {services.map((service) => (
               <Row key={service.id}>
                 <Cell>
@@ -26,12 +32,26 @@ export function EnvironmentCard({ environment, services, href }: { environment: 
                   </Link>
                 </Cell>
                 <Cell>
-                  <StatusBadge status={service.kind} />
+                  <StatusBadge status={service.current?.status ?? "not deployed"} />
                 </Cell>
-                <Cell className="text-graphite-400">
-                  {service.cpuMillis}m CPU · {service.memoryMb} MB
+                <Cell mono>
+                  {service.url ? (
+                    <a href={service.url} target="_blank" rel="noreferrer" className="hover:text-accent">
+                      {service.url.replace("https://", "")}
+                    </a>
+                  ) : (
+                    <span className="font-sans text-sm text-graphite-400">None</span>
+                  )}
                 </Cell>
-                <Cell>{service.replicas}</Cell>
+                <Cell className="whitespace-nowrap text-graphite-400">
+                  {service.current ? (
+                    <span title={service.current.createdAt}>
+                      {timeAgo(service.current.createdAt)} · <span className="font-mono text-xs">{shortSha(service.current.commitSha)}</span>
+                    </span>
+                  ) : (
+                    "Never"
+                  )}
+                </Cell>
               </Row>
             ))}
           </Table>

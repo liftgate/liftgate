@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api } from "@/lib/api";
 import { useAction, useApi, useRole } from "@/lib/hooks";
-import type { ProjectTree, Service, ServiceSpec } from "@/lib/types";
-import { formValues } from "@/lib/util";
+import type { AuthProviders, ProjectTree, Service, ServiceSpec } from "@/lib/types";
+import { formValues, platformHost } from "@/lib/util";
 import { EnvironmentCard } from "@/components/environment-card";
 import { Loaded } from "@/components/loaded";
 import { NameSlugFields } from "@/components/name-slug-fields";
@@ -19,13 +19,16 @@ import { Field, FormError, Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Skeleton, TableSkeleton } from "@/components/ui/skeleton";
 
-export function Overview({ org, projectSlug }: { org: string; projectSlug: string }) {
+export function Overview({ org, projectSlug, onboarding }: { org: string; projectSlug: string; onboarding: boolean }) {
   const router = useRouter();
   const { query: role, admin } = useRole(org);
-  const [dialog, setDialog] = useState<"environment" | "service">();
+  const [dialog, setDialog] = useState<"environment" | "service" | undefined>(onboarding ? "service" : undefined);
+  const [environmentId, setEnvironmentId] = useState<string>();
   const tree = useApi<ProjectTree>(`/orgs/${org}/projects/${projectSlug}/tree`);
+  const deployDomain = useApi<AuthProviders>("/auth/providers").data?.deployDomain;
   const project = tree.data?.project;
   const environments = tree.data?.environments;
+  const environment = environments?.find((e) => e.id === environmentId) ?? environments?.[0];
   const createEnvironment = useAction(async (form: HTMLFormElement) => {
     const v = formValues(form);
     await api(`/projects/${project?.id}/environments`, {
@@ -35,10 +38,18 @@ export function Overview({ org, projectSlug }: { org: string; projectSlug: strin
     setDialog(undefined);
     tree.reload();
   });
-  const createService = useAction(async (spec: ServiceSpec, values: Record<string, string>) => {
-    const service = await api<Service>(`/environments/${values.environmentId}/services`, { method: "POST", body: spec });
-    router.push(`/${org}/${projectSlug}/${environments?.find((e) => e.id === service.environmentId)?.slug}/${service.slug}`);
+  const createService = useAction(async (spec: ServiceSpec) => {
+    const service = await api<Service & { buildId: string }>(`/environments/${environment?.id}/services?deploy=true`, { method: "POST", body: spec });
+    router.push(`/${org}/${projectSlug}/${environment?.slug}/${service.slug}?tab=builds&build=${service.buildId}`);
   });
+  const newService = (id?: string) => {
+    setEnvironmentId(id);
+    setDialog("service");
+  };
+  const close = () => {
+    setDialog(undefined);
+    if (onboarding) window.history.replaceState(null, "", `/${org}/${projectSlug}`);
+  };
   if (tree.error?.status === 404) {
     return (
       <EmptyState
@@ -65,7 +76,7 @@ export function Overview({ org, projectSlug }: { org: string; projectSlug: strin
               <Button onClick={() => setDialog("environment")} disabled={!project}>
                 New environment
               </Button>
-              <Button variant="primary" onClick={() => setDialog("service")} disabled={!environments?.length}>
+              <Button variant="primary" onClick={() => newService()} disabled={!environments?.length}>
                 New service
               </Button>
             </>
@@ -87,6 +98,7 @@ export function Overview({ org, projectSlug }: { org: string; projectSlug: strin
                 environment={environment}
                 services={services.filter((s) => s.environmentId === environment.id)}
                 href={`${href}/${environment.slug}`}
+                onNewService={admin ? () => newService(environment.id) : undefined}
               />
             ))
           )
@@ -121,24 +133,29 @@ export function Overview({ org, projectSlug }: { org: string; projectSlug: strin
           </div>
         </form>
       </Dialog>
-      <Dialog open={dialog === "service"} title="New service" onClose={() => setDialog(undefined)}>
+      <Dialog open={admin && dialog === "service" && !!environment} title={onboarding ? "Configure and deploy" : "New service"} onClose={close}>
         <ServiceForm
           before={
-            <Field label="Environment">
-              <Select name="environmentId" required>
-                {environments?.map((environment) => (
-                  <option key={environment.id} value={environment.id}>
-                    {environment.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
+            environments && environments.length > 1 && (
+              <Field label="Environment">
+                <Select value={environment?.id} onChange={(e) => setEnvironmentId(e.target.value)}>
+                  {environments.map((environment) => (
+                    <option key={environment.id} value={environment.id}>
+                      {environment.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            )
           }
+          prefill={onboarding ? project?.name : undefined}
+          hostFor={environment && deployDomain ? (slug) => platformHost({ service: slug, environment: environment.slug, project: projectSlug, org }, deployDomain) : undefined}
           pending={createService.pending}
           error={createService.error}
-          submitLabel="Create service"
+          errorField={createService.field}
+          submitLabel="Deploy"
           onSubmit={createService.run}
-          onCancel={() => setDialog(undefined)}
+          onCancel={close}
         />
       </Dialog>
     </div>

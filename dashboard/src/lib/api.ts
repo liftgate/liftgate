@@ -3,6 +3,7 @@ export class ApiError extends Error {
     readonly status: number,
     readonly code: string,
     message: string,
+    readonly field?: string,
   ) {
     super(message);
   }
@@ -36,8 +37,8 @@ export async function api<T>(path: string, init: { method?: Method; body?: unkno
 
 function toError(status: number, text: string) {
   try {
-    const body = JSON.parse(text) as { error?: string; message?: string };
-    return new ApiError(status, body.error ?? "http_error", body.message ?? `Request failed with status ${status}`);
+    const body = JSON.parse(text) as { error?: string; message?: string; field?: string };
+    return new ApiError(status, body.error ?? "http_error", body.message ?? `Request failed with status ${status}`, body.field);
   } catch {
     return new ApiError(status, "http_error", `Request failed with status ${status}`);
   }

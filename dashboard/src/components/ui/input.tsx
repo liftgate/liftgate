@@ -13,12 +13,18 @@ export function Textarea({ className = "", ...rest }: TextareaHTMLAttributes<HTM
   return <textarea {...rest} className={`${surfaceClasses} py-2 ${className}`} />;
 }
 
-export function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+export function Field({ label, hint, error, children }: { label: string; hint?: string; error?: string; children: ReactNode }) {
   return (
     <label className="flex flex-col gap-2 text-sm">
       <span className="font-medium text-graphite-200">{label}</span>
       {children}
-      {hint && <span className="text-xs text-graphite-400">{hint}</span>}
+      {error ? (
+        <span role="alert" className="text-xs text-danger">
+          {error}
+        </span>
+      ) : (
+        hint && <span className="text-xs text-graphite-400">{hint}</span>
+      )}
     </label>
   );
 }

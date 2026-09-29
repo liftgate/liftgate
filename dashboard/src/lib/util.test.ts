@@ -1,7 +1,22 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { Environment, Project, Service } from "./types.ts";
-import { duration, envPayload, findService, keepsStoredValue, linkTarget, safeNext, shortSha, slugify, storedRows, stripAnsi, timeAgo } from "./util.ts";
+import type { Build, Deployment, Environment, Project, Service } from "./types.ts";
+import {
+  canRollBack,
+  currentDeployment,
+  duration,
+  envPayload,
+  findService,
+  keepsStoredValue,
+  linkTarget,
+  platformHost,
+  safeNext,
+  shortSha,
+  slugify,
+  storedRows,
+  stripAnsi,
+  timeAgo,
+} from "./util.ts";
 
 test("slugify lowercases and collapses separators", () => {
   assert.equal(slugify("  Acme Web App!  "), "acme-web-app");
@@ -86,4 +101,28 @@ test("findService resolves the service in the environment named by the url", () 
   assert.equal(findService(tree, "staging", "worker")?.service.id, "staging-worker");
   assert.equal(findService(tree, "production", "worker")?.environment.slug, "production");
   assert.equal(findService(tree, "preview", "worker"), undefined);
+});
+
+test("platformHost previews the readable hostname the API assigns, and gives up past one DNS label", () => {
+  const labels = { service: "api", environment: "production", project: "shop", org: "acme" };
+  assert.equal(platformHost(labels, "liftgate.app"), "api-shop-acme.liftgate.app");
+  assert.equal(platformHost({ ...labels, environment: "staging" }, "apps.example.net"), "api-staging-shop-acme.apps.example.net");
+  assert.equal(platformHost({ ...labels, service: "a".repeat(40), project: "b".repeat(20) }, "liftgate.app"), undefined);
+});
+
+test("the current deployment is the running one, else the newest", () => {
+  const rows = (...statuses: string[]) => statuses.map((status, i) => ({ id: `d${i}`, status }));
+  assert.equal(currentDeployment(rows("failed", "running", "superseded"))?.id, "d1");
+  assert.equal(currentDeployment(rows("pending", "failed"))?.id, "d0");
+  assert.equal(currentDeployment([]), undefined);
+});
+
+test("rollback is offered only to replaced deployments whose image is still retained", () => {
+  const build = { imagePruned: false } as Build;
+  const at = (status: Deployment["status"]) => ({ status }) as Deployment;
+  assert.equal(canRollBack(at("superseded"), build), true);
+  assert.equal(canRollBack(at("rolled_back"), build), true);
+  for (const status of ["running", "failed", "pending", "releasing"] as const) assert.equal(canRollBack(at(status), build), false, status);
+  assert.equal(canRollBack(at("superseded"), { imagePruned: true } as Build), false);
+  assert.equal(canRollBack(at("superseded")), false);
 });

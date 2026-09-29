@@ -1,5 +1,5 @@
 import type { Build, Deployment } from "@/lib/types";
-import { shortSha, timeAgo } from "@/lib/util";
+import { canRollBack, currentDeployment, shortSha, timeAgo } from "@/lib/util";
 import { StatusBadge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Cell, Row, Table } from "./ui/table";
@@ -19,41 +19,39 @@ export function DeploymentTable({
   onRollback?: (id: string) => void;
   readOnly?: boolean;
 }) {
+  const sorted = [...deployments].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const current = currentDeployment(sorted);
   return (
     <Table columns={["Status", "Build", "Ready", "Created", ""]}>
-      {[...deployments]
-        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-        .map((deployment, i) => {
-          const build = builds?.find((b) => b.id === deployment.buildId);
-          return (
-            <Row key={deployment.id}>
-              <Cell>
-                <div className="flex gap-2">
-                  <StatusBadge status={deployment.status} />
-                  {deployment.status === "running" && deployment.health && deployment.health !== "healthy" && <StatusBadge status={deployment.health} />}
-                </div>
-                {deployment.error && <p className="mt-1 max-w-xs text-xs text-danger">{deployment.error}</p>}
-              </Cell>
-              <Cell mono>
-                {build ? shortSha(build.commitSha) : deployment.buildId.slice(0, 8)}
-                {build?.commitMessage && <span className="ml-2 font-sans text-sm text-graphite-400">{build.commitMessage.split("\n")[0]}</span>}
-              </Cell>
-              <Cell>
-                {deployment.replicasReady}/{replicas}
-              </Cell>
-              <Cell className="text-graphite-400">
-                <span title={deployment.createdAt}>{timeAgo(deployment.createdAt)}</span>
-              </Cell>
-              <Cell className="text-right">
-                {!readOnly && i > 0 && !build?.imagePruned && (
-                  <Button disabled={!!rolling} pending={rolling === deployment.id} onClick={onRollback && (() => onRollback(deployment.id))}>
-                    Roll back to this
-                  </Button>
-                )}
-              </Cell>
-            </Row>
-          );
-        })}
+      {sorted.map((deployment) => {
+        const build = builds?.find((b) => b.id === deployment.buildId);
+        return (
+          <Row key={deployment.id}>
+            <Cell>
+              <div className="flex gap-2">
+                <StatusBadge status={deployment.status} />
+                {deployment.status === "running" && deployment.health && deployment.health !== "healthy" && <StatusBadge status={deployment.health} />}
+              </div>
+              {deployment.error && <p className="mt-1 max-w-xs text-xs text-danger">{deployment.error}</p>}
+            </Cell>
+            <Cell mono>
+              {build ? shortSha(build.commitSha) : deployment.buildId.slice(0, 8)}
+              {build?.commitMessage && <span className="ml-2 font-sans text-sm text-graphite-400">{build.commitMessage.split("\n")[0]}</span>}
+            </Cell>
+            <Cell>{deployment === current && `${deployment.replicasReady}/${replicas}`}</Cell>
+            <Cell className="text-graphite-400">
+              <span title={deployment.createdAt}>{timeAgo(deployment.createdAt)}</span>
+            </Cell>
+            <Cell className="text-right">
+              {!readOnly && canRollBack(deployment, build) && (
+                <Button disabled={!!rolling} pending={rolling === deployment.id} onClick={onRollback && (() => onRollback(deployment.id))}>
+                  Roll back to this
+                </Button>
+              )}
+            </Cell>
+          </Row>
+        );
+      })}
     </Table>
   );
 }

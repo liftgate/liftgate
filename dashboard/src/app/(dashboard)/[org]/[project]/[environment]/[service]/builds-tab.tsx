@@ -15,14 +15,18 @@ import { TableSkeleton } from "@/components/ui/skeleton";
 
 const inProgress = (status: string) => ["queued", "running"].includes(status.toLowerCase());
 
-export function BuildsTab({ service, admin }: { service: Service; admin: boolean }) {
+export function BuildsTab({ service, admin, linked, onSelect }: { service: Service; admin: boolean; linked?: string; onSelect: (id?: string) => void }) {
   const builds = useApi<Build[]>(`/services/${service.id}/builds`);
-  const [selected, setSelected] = useState<string | null>();
+  const [selected, setSelected] = useState<string | null | undefined>(linked);
+  const select = (id: string | null) => {
+    setSelected(id);
+    onSelect(id ?? undefined);
+  };
   const deploy = useAction(async (form: HTMLFormElement) => {
     const { ref } = formValues(form);
     const build = await api<Build | undefined>(`/services/${service.id}/deploy`, { method: "POST", body: ref ? { ref } : {} });
     form.reset();
-    if (build?.id) setSelected(build.id);
+    if (build?.id) select(build.id);
     builds.reload();
   });
   usePolling(!!builds.data?.some((b) => inProgress(b.status)), builds.reload);
@@ -39,9 +43,9 @@ export function BuildsTab({ service, admin }: { service: Service; admin: boolean
                 e.preventDefault();
                 deploy.run(e.currentTarget);
               }}
-              className="flex gap-2"
+              className="flex w-full gap-2"
             >
-              <Input name="ref" placeholder="Branch or commit (optional)" className="w-64 font-mono" />
+              <Input name="ref" placeholder="Branch or commit (optional)" className="min-w-0 flex-1 font-mono sm:w-64" />
               <Button type="submit" variant="primary" pending={deploy.pending}>
                 Deploy
               </Button>
@@ -58,7 +62,7 @@ export function BuildsTab({ service, admin }: { service: Service; admin: boolean
                 description={admin ? "Push to the tracked branch or deploy a ref above." : "A push to the tracked branch starts a build."}
               />
             ) : (
-              <BuildTable builds={list} selected={selected} onToggle={(id) => setSelected(id === selected ? null : id)} />
+              <BuildTable builds={list} selected={selected} onToggle={(id) => select(id === selected ? null : id)} />
             )
           }
         </Loaded>

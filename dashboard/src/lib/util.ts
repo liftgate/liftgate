@@ -1,4 +1,4 @@
-import type { EnvVar, ProjectTree } from "./types";
+import type { Build, Deployment, EnvVar, ProjectTree, ServiceKind } from "./types";
 
 export function timeAgo(iso: string) {
   const seconds = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
@@ -70,3 +70,14 @@ export const findService = (tree: ProjectTree, environmentSlug: string, serviceS
   const service = tree.services.find((s) => s.environmentId === environment?.id && s.slug === serviceSlug);
   return environment && service && { environment, service };
 };
+
+export const servesHttp = (kind: ServiceKind) => kind === "web" || kind === "static";
+
+export const platformHost = (labels: { service: string; environment: string; project: string; org: string }, deployDomain: string) => {
+  const label = [labels.service, labels.environment === "production" ? "" : labels.environment, labels.project, labels.org].filter(Boolean).join("-");
+  return label.length <= 63 ? `${label}.${deployDomain}` : undefined;
+};
+
+export const currentDeployment = <T extends { status: string }>(newestFirst: T[]) => newestFirst.find((d) => d.status === "running") ?? newestFirst[0];
+
+export const canRollBack = (deployment: Deployment, build?: Build) => ["superseded", "rolled_back"].includes(deployment.status) && !!build && !build.imagePruned;

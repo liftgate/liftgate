@@ -1,11 +1,12 @@
 import { EnvironmentCard } from "@/components/environment-card";
+import type { Service } from "@/lib/types";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Field, Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { environment, services } from "./demo";
+import { environment } from "./demo";
 import { Section } from "./section";
 
-export function OneProject() {
+export function OneProject({ services }: { services: Service[] }) {
   return (
     <Section
       id="one-project"

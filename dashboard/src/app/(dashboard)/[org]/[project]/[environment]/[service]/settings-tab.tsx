@@ -38,6 +38,7 @@ export function SettingsTab({ service, projectHref, onChanged }: { service: Serv
             initial={service}
             pending={save.pending}
             error={save.error}
+            errorField={save.field}
             actions={<SaveActions pending={save.pending} status={status} />}
             onSubmit={(spec, _, andRedeploy) => save.run(spec, andRedeploy)}
           />

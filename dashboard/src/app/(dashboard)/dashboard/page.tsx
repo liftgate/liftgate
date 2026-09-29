@@ -1,5 +1,5 @@
 import { OrgChooser } from "./org-chooser";
 
-export default function DashboardPage() {
-  return <OrgChooser />;
+export default async function DashboardPage({ searchParams }: PageProps<"/dashboard">) {
+  return <OrgChooser installed={(await searchParams).installed !== undefined} />;
 }

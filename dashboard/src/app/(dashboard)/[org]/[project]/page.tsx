@@ -6,7 +6,7 @@ export async function generateMetadata({ params }: PageProps<"/[org]/[project]">
   return { title: `${project} · ${org}` };
 }
 
-export default async function ProjectPage({ params }: PageProps<"/[org]/[project]">) {
+export default async function ProjectPage({ params, searchParams }: PageProps<"/[org]/[project]">) {
   const { org, project } = await params;
-  return <Overview org={org} projectSlug={project} />;
+  return <Overview org={org} projectSlug={project} onboarding={(await searchParams).new === "service"} />;
 }

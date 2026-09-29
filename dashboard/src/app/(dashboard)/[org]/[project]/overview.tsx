@@ -17,11 +17,11 @@ import { Dialog } from "@/components/ui/dialog";
 import { EmptyState, ErrorState } from "@/components/ui/empty-state";
 import { Field, FormError, Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { Skeleton, TableSkeleton } from "@/components/ui/skeleton";
+import { PageSkeleton, Skeleton, TableSkeleton } from "@/components/ui/skeleton";
 
 export function Overview({ org, projectSlug }: { org: string; projectSlug: string }) {
   const router = useRouter();
-  const { admin } = useRole(org);
+  const { query: role, admin } = useRole(org);
   const [dialog, setDialog] = useState<"environment" | "service">();
   const tree = useApi<ProjectTree>(`/orgs/${org}/projects/${projectSlug}/tree`);
   const project = tree.data?.project;
@@ -53,6 +53,8 @@ export function Overview({ org, projectSlug }: { org: string; projectSlug: strin
     );
   }
   if (tree.error) return <ErrorState error={tree.error} retry={tree.reload} />;
+  if (role.error) return <ErrorState error={role.error} retry={role.reload} />;
+  if (role.loading) return <PageSkeleton />;
   const href = `/${org}/${projectSlug}`;
   return (
     <div className="flex flex-col gap-8">

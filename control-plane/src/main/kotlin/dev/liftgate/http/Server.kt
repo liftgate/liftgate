@@ -21,6 +21,7 @@ import io.ktor.server.plugins.bodylimit.RequestBodyLimit
 import io.ktor.server.plugins.calllogging.CallLogging
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.plugins.cors.routing.CORS
+import io.ktor.server.plugins.defaultheaders.DefaultHeaders
 import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.request.httpMethod
 import io.ktor.server.request.path
@@ -42,6 +43,13 @@ fun Application.liftgate(app: App) {
     install(CallLogging)
     install(MicrometerMetrics) { registry = app.metrics }
     install(WebSockets) { maxFrameSize = WEBSOCKET_FRAME_LIMIT }
+    install(DefaultHeaders) {
+        header(HttpHeaders.Server, "Liftgate")
+        header(HttpHeaders.StrictTransportSecurity, "max-age=63072000")
+        header("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
+        header("X-Content-Type-Options", "nosniff")
+        header("Referrer-Policy", "strict-origin-when-cross-origin")
+    }
     val dashboard = Url(app.config.dashboardUrl)
     if (dashboard.protocolWithAuthority != Url(app.config.publicUrl).protocolWithAuthority) install(CORS) {
         allowHost(dashboard.hostWithPortIfSpecified, listOf(dashboard.protocol.name))

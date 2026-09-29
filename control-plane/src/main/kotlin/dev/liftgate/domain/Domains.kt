@@ -104,7 +104,7 @@ class Domains(
                 it[DomainsTable.edgeId] = edgeId
             }.singleOrNull()?.toDomain()?.also { routingChanged(it) }?.withRecords(platform(domain.serviceId))
         } ?: run {
-            edgeId?.let { edge?.delete(it) }
+            if (edgeId != null && !db.tx { verified(domain.hostname) }) edge?.delete(edgeId)
             notFound("domain")
         }
     }

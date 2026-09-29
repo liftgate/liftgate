@@ -121,6 +121,9 @@ customDomains:
   `gatewayServerName` and comes from `gateway.issuer`. The proxy forwards to the gateway with
   `gatewayServerName` as the TLS server name, trusts that issuer, and keeps the `Host` header.
   `gatewayServerName` must not be a name another listener matches.
+- Turning edge mode on for an installation that ran gateway mode removes the custom-domain
+  listeners and `Certificate`s the reconciler created. Domains verified before the switch get no
+  custom hostname; remove them and add them again.
 - A proxy that issues certificates on demand can ask
   `GET <publicUrl>/api/v1/domains/allowed?domain=<hostname>` before issuing: it answers 200 for
   verified hostnames and `deployDomain`, 404 otherwise, and is rate limited per client IP.

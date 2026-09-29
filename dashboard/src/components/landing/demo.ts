@@ -1,4 +1,5 @@
 import type { Build, Deployment, Environment, EnvVar, Service, ServiceKind } from "@/lib/types";
+import { servesHttp } from "@/lib/util";
 
 export const environment: Environment = {
   id: "env",
@@ -64,7 +65,7 @@ export function demo(now = Date.now()) {
     healthCheckPath: null,
     internalHost: null,
     watchPaths: [],
-    url: kind === "web" || kind === "static" ? `https://${id}-hello-dean.liftgate.app` : null,
+    url: servesHttp(kind) ? `https://${id}-hello-dean.liftgate.app` : null,
     current: { deploymentId: id, status: "running", replicasReady: 1, commitSha: "4f2c9e1b7d03a58c6e21f94b0d7a3c85e1f6b209", createdAt: ago(10) },
   });
   const build = (id: string, status: Build["status"], commitSha: string, commitMessage: string, branch: string, seconds: number): Build => ({

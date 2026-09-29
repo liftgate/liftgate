@@ -60,8 +60,8 @@ import kotlin.test.assertFalse
 class ServiceRoutesTest {
     private val user = User(UUID.randomUUID(), "dean", null, null, null)
     private val org = Organization(UUID.randomUUID(), "acme", "Acme", "free")
-    private val project = Project(UUID.randomUUID(), org.id, "shop", "Shop", "acme/shop", "main", 42)
-    private val environment = Environment(UUID.randomUUID(), project.id, "production", "Production", EnvironmentKind.PRODUCTION, "main", "env-0123456789ab")
+    private val project = Project(UUID.randomUUID(), org.id, "shop", "Shop", "acme/shop", "master", 42)
+    private val environment = Environment(UUID.randomUUID(), project.id, "production", "Production", EnvironmentKind.PRODUCTION, "master", "env-0123456789ab")
     private val service = Service(UUID.randomUUID(), environment.id, "api", "API", ServiceKind.WORKER, "/", BuildStrategy.AUTO, "Dockerfile", null, 1, 500, 512, null, null)
     private val services = mockk<Services>()
     private val access = mockk<Access>()
@@ -164,8 +164,8 @@ class ServiceRoutesTest {
         coEvery { services.create(environment.id, any()) } returns web
         coEvery { services.scope(service.id) } returns ServiceScope(web, environment, project, org)
         coEvery { domains.ensurePlatform(any()) } returns mockk()
-        every { app.github } returns mockk<GitHubApp> { coEvery { branchHead(42, "acme/shop", "main") } returns ("c".repeat(40) to "first commit") }
-        every { app.builds } returns mockk<Builds> { coEvery { request(web.id, "c".repeat(40), "first commit", "main") } returns build }
+        every { app.github } returns mockk<GitHubApp> { coEvery { branchHead(42, "acme/shop", "master") } returns ("c".repeat(40) to "first commit") }
+        every { app.builds } returns mockk<Builds> { coEvery { request(web.id, "c".repeat(40), "first commit", "master") } returns build }
         application { liftgate(app) }
         val response = client.post("/api/v1/environments/${environment.id}/services?deploy=true") { jsonBody("""{"slug":"api","name":"API","kind":"web"}""") }
         assertEquals(HttpStatusCode.Created, response.status)

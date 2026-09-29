@@ -197,7 +197,7 @@ class AuditTest {
             coEvery { check("https://ops.acme.dev") } returns "https://ops.acme.dev"
             coEvery { send(any(), any()) } returns null
         }
-        every { it.github } returns mockk<GitHubApp> { coEvery { installation("ghu_token", "acme/web") } returns 42 }
+        every { it.github } returns mockk<GitHubApp> { coEvery { installation("ghu_token", "acme/web") } returns (42L to "main") }
         every { it.gitConnections } returns mockk<GitConnections> { coEvery { github(users.getValue("owner")) } returns ("ghu_token" to "dean") }
     }
 

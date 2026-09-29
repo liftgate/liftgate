@@ -121,7 +121,7 @@ export function Overview({ org, projectSlug, onboarding }: { org: string; projec
               </Select>
             </Field>
             <Field label="Branch" hint="Pushes to this branch trigger builds">
-              <Input name="branch" required defaultValue={project?.repoDefaultBranch} className="font-mono" />
+              <Input name="branch" required pattern=".*\S.*" defaultValue={project?.repoDefaultBranch} className="font-mono" />
             </Field>
           </div>
           <FormError message={createEnvironment.error} />

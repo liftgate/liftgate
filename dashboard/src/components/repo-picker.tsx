@@ -72,6 +72,7 @@ export function RepoPicker({ next, value, error, onChange }: { next: string; val
                     className="size-4 shrink-0 accent-accent"
                   />
                   <span className="min-w-0 flex-1 truncate font-mono text-xs">{repo.fullName}</span>
+                  <span className="max-w-24 shrink-0 truncate font-mono text-xs text-graphite-400">{repo.defaultBranch}</span>
                   {repo.private && <Badge>private</Badge>}
                 </label>
               ))}

@@ -99,7 +99,7 @@ export function ServiceForm({
         </Field>
         {kind === "cron" && (
           <Field label="Cron schedule" error={at("cronSchedule")}>
-            <Input name="cronSchedule" required placeholder="*/5 * * * *" defaultValue={initial?.cronSchedule ?? ""} className="font-mono" />
+            <Input name="cronSchedule" required pattern=".*\S.*" placeholder="*/5 * * * *" defaultValue={initial?.cronSchedule ?? ""} className="font-mono" />
           </Field>
         )}
       </div>

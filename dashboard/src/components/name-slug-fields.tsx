@@ -25,6 +25,7 @@ export function NameSlugFields({
           <Input
             name="name"
             required
+            pattern=".*\S.*"
             value={value.name}
             onChange={(e) => setValue({ name: e.target.value, slug: initial ? value.slug : toSlug(e.target.value) })}
           />
@@ -34,9 +35,8 @@ export function NameSlugFields({
             name="slug"
             required
             readOnly={!!initial}
-            minLength={2}
             maxLength={40}
-            pattern="[a-z0-9]+(-[a-z0-9]+)*"
+            pattern="(?=.{2,40}$)[a-z0-9]+(-[a-z0-9]+)*"
             value={value.slug}
             onChange={(e) => setValue({ ...value, slug: e.target.value })}
             className={initial ? "font-mono opacity-60" : "font-mono"}

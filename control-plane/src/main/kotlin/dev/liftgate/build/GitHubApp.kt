@@ -57,9 +57,9 @@ class GitHubApp(private val config: GitHubConfig, private val client: HttpClient
         if (e.response.status == HttpStatusCode.NotFound) false else throw e
     }
 
-    suspend fun installation(userToken: String, repoFullName: String): Long? = try {
-        client.get("$API/repos/$repoFullName") { github(userToken) }.body<Repository>().permissions.push.takeIf { it }
-            ?.let { client.get("$API/repos/$repoFullName/installation") { github(appJwt()) }.body<Installation>().id }
+    suspend fun installation(userToken: String, repoFullName: String): Pair<Long, String>? = try {
+        client.get("$API/repos/$repoFullName") { github(userToken) }.body<Repository>().takeIf { it.permissions.push }
+            ?.let { client.get("$API/repos/$repoFullName/installation") { github(appJwt()) }.body<Installation>().id to it.defaultBranch }
     } catch (e: ResponseException) {
         null
     }

@@ -43,9 +43,9 @@ fun Route.projectRoutes(app: App) {
             if (body.name.isBlank()) invalid("name is required", "name")
             if (!repoPattern.matches(body.repoFullName)) invalid("the repository must be owner/name", "repoFullName")
             val (token, login) = app.gitConnections.github(call.principal.user.id) ?: githubNotConnected()
-            val installationId = github.installation(token, body.repoFullName)
+            val (installationId, defaultBranch) = github.installation(token, body.repoFullName)
                 ?: invalid("install the GitHub App on ${body.repoFullName} from an account that can push to it", "repoFullName")
-            call.respond(HttpStatusCode.Created, app.projects.create(org.id, body.slug, body.name.trim(), body.repoFullName, installationId, login))
+            call.respond(HttpStatusCode.Created, app.projects.create(org.id, body.slug, body.name.trim(), body.repoFullName, installationId, login, defaultBranch))
         }
         get("/{project}/tree") {
             val tree = app.services.tree(call.parameters["slug"]!!, call.parameters["project"]!!, call.principal.user.id) ?: notFound("project")

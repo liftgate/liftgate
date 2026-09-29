@@ -52,7 +52,7 @@ class ProjectRoutesTest {
         every { orgs } returns this@ProjectRoutesTest.orgs
         every { projects } returns Projects(this@ProjectRoutesTest.db)
         every { gitConnections } returns mockk<GitConnections> { coEvery { github(user.id) } returns ("ghu_dean" to "dean") }
-        every { github } returns mockk<GitHubApp> { coEvery { installation("ghu_dean", any()) } returns 42 }
+        every { github } returns mockk<GitHubApp> { coEvery { installation("ghu_dean", any()) } returns (42L to "master") }
     }
 
     @Test
@@ -71,6 +71,20 @@ class ProjectRoutesTest {
             val project = json.decodeFromString(Project.serializer(), response.bodyAsText())
             assertEquals(Triple(repo, 42L, "dean"), Triple(project.repoFullName, project.installationId, project.importedByLogin))
         }
+    }
+
+    @Test
+    fun `production tracks the repository's default branch`() = testApplication {
+        orgs.create("acme", "Acme", user.id)
+        application { liftgate(app) }
+        val response = client.post("/api/v1/orgs/acme/projects") {
+            session()
+            contentType(ContentType.Application.Json)
+            setBody("""{"slug":"legacy","name":"Legacy","repoFullName":"acme/legacy"}""")
+        }
+        val project = json.decodeFromString(Project.serializer(), response.bodyAsText())
+        assertEquals("master", project.repoDefaultBranch)
+        assertEquals(listOf("master"), app.projects.environments(project.id).map { it.branch })
     }
 
     @Test

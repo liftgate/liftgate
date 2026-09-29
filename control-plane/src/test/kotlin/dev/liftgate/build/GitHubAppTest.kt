@@ -41,7 +41,7 @@ class GitHubAppTest {
             val headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
             when (request.url.encodedPath) {
                 "/app/installations/42/access_tokens" -> respond("""{"token":"ghs_token","expires_at":"2026-09-17T12:00:00Z"}""", HttpStatusCode.Created, headers)
-                "/repos/acme/shop" -> respond("""{"permissions":{"push":true}}""", HttpStatusCode.OK, headers)
+                "/repos/acme/shop" -> respond("""{"default_branch":"master","permissions":{"push":true}}""", HttpStatusCode.OK, headers)
                 "/repos/acme/docs" -> respond("""{"permissions":{"push":false}}""", HttpStatusCode.OK, headers)
                 "/repos/acme/shop/installation" -> respond("""{"id":42}""", HttpStatusCode.OK, headers)
                 "/repos/acme/shop/commits/main" -> respond("""{"sha":"abc123","commit":{"message":"ship it"}}""", HttpStatusCode.OK, headers)
@@ -105,8 +105,8 @@ class GitHubAppTest {
     }
 
     @Test
-    fun `an installation is bound only to a repository the user can push to`() = runBlocking {
-        assertEquals(42, app().installation("ghu_user", "acme/shop"))
+    fun `an installation is bound only to a repository the user can push to, with its default branch`() = runBlocking {
+        assertEquals(42L to "master", app().installation("ghu_user", "acme/shop"))
         assertEquals("Bearer ghu_user", requests.first().headers[HttpHeaders.Authorization])
         assertNull(app().installation("ghu_user", "acme/docs"))
         assertNull(app().installation("ghu_user", "rival/private"))

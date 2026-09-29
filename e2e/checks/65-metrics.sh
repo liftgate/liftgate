@@ -36,17 +36,20 @@ insert into api_tokens (id, org_id, name, token_hash, created_by) values
 insert into environments (id, project_id, slug, name, kind, branch, namespace) values
     ('$environment', '00000000-0000-4000-8000-000000000003', 'metrics', 'Metrics', 'preview', 'metrics', '$ns');
 insert into services (id, environment_id, slug, name, kind, cpu_millis, memory_mb, start_command) values
-    ('$service', '$environment', 'burner', 'Burner', 'worker', 100, 96, 'while :; do :; done');
+    ('$service', '$environment', 'burner', 'Burner', 'worker', 100, 128, 'while :; do :; done');
 insert into builds (id, service_id, commit_sha, branch, status, image_ref, started_at, finished_at) values
     ('00000000-0000-4000-8000-000000000654', '$service', '0000000000000000000000000000000000000000', 'metrics', 'succeeded', 'busybox:1.36', now(), now());
-insert into deployments (id, service_id, build_id, status) values
-    ('00000000-0000-4000-8000-000000000655', '$service', '00000000-0000-4000-8000-000000000654', 'pending');
+insert into deployments (id, service_id, build_id, status, config) values
+    ('00000000-0000-4000-8000-000000000655', '$service', '00000000-0000-4000-8000-000000000654', 'pending',
+     '{"slug": "burner", "name": "Burner", "kind": "worker", "cpuMillis": 100, "memoryMb": 96, "startCommand": "while :; do :; done"}');
 insert into outbox (subject, payload) values
     ('liftgate.release.requested', '{"deploymentId": "00000000-0000-4000-8000-000000000655"}');
 EOF
 kubectl wait namespace/$ns --for=create --timeout=5m
 kubectl -n $ns wait deployment/burner --for=create --timeout=5m
 kubectl -n $ns rollout status deployment/burner --timeout=5m
+limit="$(kubectl -n $ns get deployment/burner -o jsonpath='{.spec.template.spec.containers[0].resources.limits.memory}')"
+test "$limit" = 96Mi || { echo "FAIL: the burner runs with a $limit memory limit instead of its deployment's 96Mi"; exit 1; }
 
 start=$(date +%s)
 until [ "$(metrics "$token" "")" = 200 ] && jq -e '

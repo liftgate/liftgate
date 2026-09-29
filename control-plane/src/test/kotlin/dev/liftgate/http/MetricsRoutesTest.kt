@@ -4,6 +4,9 @@ import dev.liftgate.App
 import dev.liftgate.TestDatabase
 import dev.liftgate.auth.Access
 import dev.liftgate.auth.Sessions
+import dev.liftgate.deploy.Builds
+import dev.liftgate.deploy.DeploymentStatus
+import dev.liftgate.deploy.Deployments
 import dev.liftgate.metering.Prometheus
 import dev.liftgate.metering.Prometheus.Point
 import dev.liftgate.metering.ServiceMetrics
@@ -43,6 +46,7 @@ import kotlinx.coroutines.runBlocking
 import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
@@ -58,6 +62,8 @@ class MetricsRoutesTest {
     private val orgs = Orgs(db)
     private val projects = Projects(db)
     private val services = Services(db)
+    private val builds = Builds(db)
+    private val deployments = Deployments(db)
     private val member = runBlocking { db.tx { insertUser("dean", null, null, null) } }
     private val rival = runBlocking { db.tx { insertUser("eve", null, null, null) } }
     private val queries = ConcurrentLinkedQueue<String>()
@@ -73,6 +79,7 @@ class MetricsRoutesTest {
 
     private fun app() = mockk<App>().also {
         every { it.services } returns services
+        every { it.deployments } returns deployments
         every { it.access } returns Access(orgs)
         every { it.sessions } returns mockk<Sessions> {
             coEvery { resolve("member") } returns member
@@ -115,6 +122,17 @@ class MetricsRoutesTest {
         assertTrue(queries.all { "kube_pod_labels{namespace=\"$namespace\", label_liftgate_dev_service_id=\"${service.id}\"}" in it && "container!=" !in it }, report)
         assertTrue(queries.filter { "cpu" in it || "memory" in it }.all { "container=\"\", pod!=\"\"" in it }, report)
         assertTrue(queries.filterNot { "memory" in it }.all { "[300s]" in it }, report)
+    }
+
+    @Test
+    fun `the memory limit is the one the running deployment was released with, not a setting saved since`() = testApplication {
+        val (service) = seed()
+        val released = assertNotNull(builds.markSucceeded(builds.request(service.id, "aaa", null, "main").id, "registry/acme/shop-web:aaa"))
+        deployments.transition(released.id, DeploymentStatus.RUNNING, replicasReady = 1)
+        services.update(service.id, service.spec().copy(memoryMb = 1024))
+        application { liftgate(app()) }
+        val response = client.get("/api/v1/services/${service.id}/metrics") { cookie(SESSION_COOKIE, "member") }
+        assertEquals(256L * 1024 * 1024, json.decodeFromString(ServiceMetrics.serializer(), response.bodyAsText()).memoryLimitBytes)
     }
 
     @Test

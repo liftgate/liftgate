@@ -51,7 +51,7 @@ fun Route.metricsRoutes(app: App) {
                     }
                 }.sumOf { pod -> pod.status?.containerStatuses.orEmpty().sumOf { it.restartCount ?: 0 } }
             }
-            ServiceMetrics(start, end, step, cpu.await(), memory.await(), scope.service.memoryMb * MIB, rx.await(), tx.await(), restarts.await())
+            ServiceMetrics(start, end, step, cpu.await(), memory.await(), (app.deployments.current(scope.service.id)?.config?.memoryMb ?: scope.service.memoryMb) * MIB, rx.await(), tx.await(), restarts.await())
         }
         call.respond(metrics)
     }

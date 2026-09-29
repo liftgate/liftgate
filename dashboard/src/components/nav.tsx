@@ -53,7 +53,7 @@ export function Nav({ actions }: { actions?: ReactNode }) {
                 aria-label="Organization"
                 value={org}
                 onChange={(e) => (e.target.value ? router.push(`/${e.target.value}`) : setCreating(true))}
-                className="max-w-28 sm:max-w-40"
+                className="max-w-24 sm:max-w-40"
               >
                 {orgs.data.map((o) => (
                   <option key={o.slug} value={o.slug}>

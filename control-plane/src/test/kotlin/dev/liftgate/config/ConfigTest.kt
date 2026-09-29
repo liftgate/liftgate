@@ -305,4 +305,13 @@ class ConfigTest {
             assertTrue("LIFTGATE_BUILD_LOGS_MAX_BYTES" in assertFailsWith<IllegalStateException> { Config.fromEnv(minimalEnv + ("LIFTGATE_BUILD_LOGS_MAX_BYTES" to it)) }.message.orEmpty(), it)
         }
     }
+
+    @Test
+    fun `denied egress cidrs are ipv4 cidrs and default to none`() {
+        assertEquals(emptyList(), Config.fromEnv(minimalEnv).deniedEgressCidrs)
+        assertEquals(listOf("203.0.113.7/32", "203.0.113.0/24"), Config.fromEnv(minimalEnv + ("LIFTGATE_DENIED_EGRESS_CIDRS" to "203.0.113.7/32, 203.0.113.0/24")).deniedEgressCidrs)
+        listOf("203.0.113.7", "10.0.0.0/33", "fd00::/8").forEach {
+            assertTrue("LIFTGATE_DENIED_EGRESS_CIDRS" in assertFailsWith<IllegalStateException> { Config.fromEnv(minimalEnv + ("LIFTGATE_DENIED_EGRESS_CIDRS" to it)) }.message.orEmpty(), it)
+        }
+    }
 }

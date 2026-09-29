@@ -6,6 +6,10 @@ server:
     size: 8Gi
   service:
     servicePort: 9090
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
 serverFiles:
   prometheus.yml:
     rule_files:
@@ -26,6 +30,12 @@ extraScrapeConfigs: |
         target_label: cluster
 alertmanager:
   enabled: true
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 128Mi
   extraSecretMounts:
     - name: receivers
       mountPath: /etc/alertmanager/receivers
@@ -50,8 +60,20 @@ kube-state-metrics:
   metricLabelsAllowlist:
     - pods=[liftgate.dev/service-id,liftgate.dev/org-id]
     - persistentvolumeclaims=[cnpg.io/cluster]
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 256Mi
 prometheus-node-exporter:
   enabled: true
   hostNetwork: false
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 128Mi
 prometheus-pushgateway:
   enabled: false

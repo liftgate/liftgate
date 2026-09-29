@@ -381,6 +381,7 @@ empty, neither appears.
 | `postgres.externalPassword` | `""` | |
 | `postgres.storage` | `10Gi` | Volume per instance |
 | `postgres.maxConnections` | `100` | PostgreSQL `max_connections` |
+| `postgres.resources` | `{}` | Resources of each CloudNativePG instance, such as `{requests: {cpu: 250m, memory: 512Mi}}`. Without requests the scheduler does not reserve room for the database, and it is among the first pods evicted under memory pressure. CloudNativePG deletes and recreates every instance when this changes, so set it in a maintenance window |
 | `postgres.backup.enabled` | `false` | WAL archiving and scheduled base backups, see [Backups](#backups); required for `ha` with a managed database |
 | `postgres.backup.endpointUrl` | `""` | S3 endpoint; empty means AWS S3 |
 | `postgres.backup.destinationPath` | `""` | `s3://<bucket>/<optional prefix>`; required when `enabled` with a managed database |
@@ -394,6 +395,7 @@ empty, neither appears.
 | `nats.externalUrl` | `""` | NATS URL when not managed |
 | `nats.config.*` | JetStream on, 5Gi | Passed through to the nats chart |
 | `nats.natsBox.enabled` | `false` | Set `true` for a `nats` CLI pod to inspect streams |
+| `nats.container.resources` | 100m / 128Mi, limit 1Gi | Resources of each NATS server |
 | `gateway.create` | `true` | Render Gateway, HTTPRoutes and Certificates |
 | `gateway.name` | `liftgate` | `LIFTGATE_GATEWAY_NAME` |
 | `gateway.namespace` | `""` | `LIFTGATE_GATEWAY_NAMESPACE` for an existing Gateway when `gateway.create=false`; empty or `gateway.create=true` means the release namespace |
@@ -451,6 +453,7 @@ empty, neither appears.
 | `plans` | `free`, `unlimited` | `LIFTGATE_PLANS`; see [Plans](#plans) |
 | `defaultPlan` | `unlimited` | `LIFTGATE_DEFAULT_PLAN`; the plan of every organization that has not been given one with `admin plan` |
 | `allowSharedSite` | `false` | Render although `deployDomain` ends in the same two labels as `publicUrl` or `dashboardUrl`; see [Separate sites](#separate-sites) |
+| `deniedEgressCidrs` | `[]` | `LIFTGATE_DENIED_EGRESS_CIDRS`; public IPv4 CIDRs that tenant pods and build jobs may not reach, such as the host's own address, on top of the private ranges they never reach |
 
 Derived variables: `LIFTGATE_DATABASE_URL` points at the CloudNativePG `-rw` Service (or
 `postgres.externalUrl`), `LIFTGATE_DATABASE_USER` and `LIFTGATE_DATABASE_PASSWORD` come from
@@ -488,7 +491,8 @@ Creating or resizing past a limit answers `409 plan_limit` naming it, and nothin
 changes that do not add to an organization that is already over a limit still pass. Each
 environment namespace gets a ResourceQuota of twice `replicas`, `cpuMillis`, `memoryMb` and
 `replicas × ephemeralMb`, so a rolling update can surge. SMTP ports 25, 465, 587 and 2525 are
-closed on every plan. `GET /api/v1/orgs/<org>/usage` reports what an organization uses against its plan.
+closed on every plan and to build jobs, which reach the internet over TCP only and resolve names
+through `kube-system`. `GET /api/v1/orgs/<org>/usage` reports what an organization uses against its plan.
 
 ## Node pools
 

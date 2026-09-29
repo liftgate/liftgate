@@ -52,6 +52,7 @@ postgres:
     serverName: ""
     recoverFrom: ""
     recoverTo: ""
+  resources: {}
 
 nats:
   managed: true
@@ -67,6 +68,13 @@ nats:
       replicas: 3
   natsBox:
     enabled: false
+  container:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        memory: 1Gi
 
 gateway:
   create: true
@@ -177,3 +185,5 @@ plans:
   unlimited: {}
 
 defaultPlan: unlimited
+
+deniedEgressCidrs: []

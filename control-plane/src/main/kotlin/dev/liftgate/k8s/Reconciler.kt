@@ -128,7 +128,7 @@ class Reconciler(private val app: App, private val kube: KubernetesClient) {
     }
 
     private fun environment(r: Release): List<HasMetadata> = with(app.config) {
-        listOf(Resources.namespace(r), Resources.resourceQuota(r)) + Resources.networkPolicies(r, gatewayNamespace) +
+        listOf(Resources.namespace(r), Resources.resourceQuota(r)) + Resources.networkPolicies(r, gatewayNamespace, deniedEgressCidrs) +
             listOfNotNull(logReaderRole?.let { Resources.logReaderBinding(r, it, logReaderAccount, kube.namespace) })
     }
 

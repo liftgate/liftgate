@@ -69,6 +69,7 @@ class Meter(private val app: App, private val prometheus: Prometheus) {
         app.db.tx {
             val known = Services.select(Services.id).where { Services.id inList usage.map { it.first.serviceId }.distinct() }.map { it[Services.id] }.toSet()
             val records = usage.filter { it.first.serviceId in known }
+            if (records.isEmpty()) return@tx
             UsageRecords.batchInsert(records) { (owner, metric, quantity) ->
                 this[UsageRecords.orgId] = owner.orgId
                 this[UsageRecords.serviceId] = owner.serviceId

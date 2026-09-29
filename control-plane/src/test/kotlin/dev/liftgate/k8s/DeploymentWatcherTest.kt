@@ -83,8 +83,8 @@ class DeploymentWatcherTest {
     @Test
     fun `the informer records rollouts of managed deployments`() {
         val deployments = mockk<Deployments>(relaxUnitFun = true)
-        client.resource(rollout()).create()
         DeploymentWatcher(app(deployments), client).start().use {
+            client.resource(rollout()).create()
             coVerify(timeout = 10_000) { deployments.transition(testDeployment.id, DeploymentStatus.RUNNING, 2, null) }
         }
     }
@@ -94,8 +94,8 @@ class DeploymentWatcherTest {
         val deployments = mockk<Deployments> {
             coEvery { transition(testDeployment.id, DeploymentStatus.RUNNING, 2, null) } throws SQLException("connection refused") andThen Unit
         }
-        client.resource(rollout()).create()
         DeploymentWatcher(app(deployments), client).start().use {
+            client.resource(rollout()).create()
             coVerify(timeout = 15_000, exactly = 2) { deployments.transition(testDeployment.id, DeploymentStatus.RUNNING, 2, null) }
         }
     }

@@ -68,6 +68,15 @@ spec:
               - 192.168.0.0/16
               - 100.64.0.0/10
               - 169.254.0.0/16
+              {{- range .Values.deniedEgressCidrs }}
+              - {{ . | quote }}
+              {{- end }}
+      ports:
+        {{- range list (list 1 24) (list 26 464) (list 466 586) (list 588 2524) (list 2526 65535) }}
+        - protocol: TCP
+          port: {{ index . 0 }}
+          endPort: {{ index . 1 }}
+        {{- end }}
     {{- range .Values.build.allowedEgressCidrs }}
     {{- $entry := kindIs "string" . | ternary (dict "cidr" .) . }}
     - to:

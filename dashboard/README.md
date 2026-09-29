@@ -31,12 +31,16 @@ The dashboard runs on `http://localhost:3000` and expects the control plane on `
 
 `npm run lint` and `npm run build` must both pass before a change is merged.
 
+`npm run test:e2e` runs the Playwright browser tests in `e2e/` against the production build with the API mocked, at 1440, 768 and 375 px wide, including axe accessibility checks. Run `npm run build` first, and `npx playwright install chromium` once.
+
 ## Configuration
 
 | Variable | Meaning |
 |---|---|
 | `NEXT_PUBLIC_API_URL` | Origin of the control plane as seen from the browser. Leave empty when the API is served under `/api` on the same host as the dashboard, as in local development. |
 | `LIFTGATE_LANDING` | `true` serves the Liftgate Cloud landing page at `/`, with a Dashboard link instead of Sign in and Request access when a session cookie is present. Read by the server at request time rather than inlined at build time, so one image serves both settings. Try it locally with `LIFTGATE_LANDING=true npm run dev`. |
+| `LIFTGATE_DASHBOARD_URL` | The dashboard's public URL, used for absolute links in page metadata such as `og:image`. The chart sets it. |
+| `LIFTGATE_API_URL` | Where the dashboard's server reaches the control plane, for example `http://liftgate-control-plane:8080`. With it set, a path whose organization does not exist returns 404. The chart sets it. |
 
 `NEXT_PUBLIC_*` variables are inlined at build time. Set them when running `npm run build` or as a Docker build argument; changing them on a running container has no effect. Copy `.env.example` to `.env.local` for local overrides.
 

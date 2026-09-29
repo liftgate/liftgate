@@ -164,7 +164,7 @@ class Domains(
     private fun Domain.withRecords(platform: String?) = if (kind == DomainKind.PLATFORM) this else copy(
         dnsRecords = listOfNotNull(
             verificationToken?.takeIf { verifiedAt == null }?.let { DnsRecord("TXT", "_liftgate.$hostname", it) },
-            (edge?.cnameTarget ?: platform)?.let { DnsRecord("CNAME", hostname, it) },
+            (if (edge != null) "cname.$deployDomain" else platform)?.let { DnsRecord("CNAME", hostname, it) },
         ),
     )
 

@@ -80,10 +80,10 @@ class ConfigTest {
         val edge = mapOf("LIFTGATE_CLOUDFLARE_ZONE_ID" to "zone", "LIFTGATE_CLOUDFLARE_API_TOKEN" to "token")
         assertNull(Config.fromEnv(minimalEnv).cloudflare)
         val reconciler = Config.fromEnv(minimalEnv + edge)
-        assertEquals(CloudflareConfig("zone", "token", "cname.liftgate.app"), reconciler.cloudflare)
+        assertEquals(CloudflareConfig("zone", "token"), reconciler.cloudflare)
         assertEquals(100, reconciler.customDomainsMax)
-        val api = Config.fromEnv(minimalEnv + edge + mapOf("LIFTGATE_ROLE" to "api", "LIFTGATE_CLOUDFLARE_CNAME_TARGET" to "customers.example.net", "LIFTGATE_CUSTOM_DOMAINS_MAX" to "50"))
-        assertEquals("customers.example.net" to 50, api.cloudflare?.cnameTarget to api.customDomainsMax)
+        val api = Config.fromEnv(minimalEnv + edge + mapOf("LIFTGATE_ROLE" to "api", "LIFTGATE_CUSTOM_DOMAINS_MAX" to "50"))
+        assertEquals(CloudflareConfig("zone", "token") to 50, api.cloudflare to api.customDomainsMax)
         assertNull(Config.fromEnv(minimalEnv + ("LIFTGATE_ROLE" to "meter") + ("LIFTGATE_CLOUDFLARE_ZONE_ID" to "zone")).cloudflare)
         listOf(edge - "LIFTGATE_CLOUDFLARE_API_TOKEN" to "LIFTGATE_CLOUDFLARE_API_TOKEN", edge - "LIFTGATE_CLOUDFLARE_ZONE_ID" to "LIFTGATE_CLOUDFLARE_ZONE_ID").forEach { (env, name) ->
             assertTrue(name in assertFailsWith<IllegalStateException> { Config.fromEnv(minimalEnv + env) }.message.orEmpty(), env.toString())

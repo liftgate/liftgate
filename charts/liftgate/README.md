@@ -101,7 +101,6 @@ customDomains:
   cloudflare:
     zoneId: <zone that holds deployDomain>
     apiToken: <token with Zone, SSL and Certificates, Edit on that zone>
-    cnameTarget: ""
     gatewayServerName: edge.example.net
 ```
 
@@ -112,15 +111,16 @@ customDomains:
 - The control plane owns every custom hostname in the zone. The same poll deletes any custom
   hostname that is at least 10 minutes old and that no domain references, such as those of
   deleted services, projects, organizations and accounts.
-- Users point a CNAME at `cnameTarget`, `cname.<deployDomain>` by default.
+- Users point a CNAME at `cname.<deployDomain>`.
 - With `customDomains.max` left at `null`, the control plane caps custom domains at 100, the
   number of custom hostnames Cloudflare for SaaS includes on its Free plan; each one beyond
-  that is billed.
-- The zone needs Cloudflare for SaaS enabled, `cnameTarget` as a proxied record, and a fallback
-  origin that reaches a reverse proxy in front of the gateway. Cloudflare sends the custom
-  hostname as both SNI and `Host` to the fallback origin, so the proxy needs a certificate for
-  every custom hostname; with the zone's SSL mode on Full rather than Full (strict), Cloudflare
-  accepts one the proxy issues itself.
+  that is billed. Verification also counts the custom hostnames in the zone, so those of a
+  deleted service hold their place until the poll deletes them.
+- The zone needs Cloudflare for SaaS enabled, `cname.<deployDomain>` as a proxied record, and
+  a fallback origin that reaches a reverse proxy in front of the gateway. Cloudflare sends the
+  custom hostname as both SNI and `Host` to the fallback origin, so the proxy needs a
+  certificate for every custom hostname; with the zone's SSL mode on Full rather than Full
+  (strict), Cloudflare accepts one the proxy issues itself.
 - The chart adds a listener `https-edge` without a hostname, whose certificate names
   `gatewayServerName` and comes from `gateway.issuer`. The proxy forwards to the gateway with
   `gatewayServerName` as the TLS server name, trusts that issuer, and keeps the `Host` header.
@@ -525,7 +525,6 @@ other than 2xx is retried with a growing delay for an hour.
 | `customDomains.max` | `null` | `LIFTGATE_CUSTOM_DOMAINS_MAX`; the number of custom domains across every organization; `null` means unlimited in gateway mode and 100 in edge mode |
 | `customDomains.cloudflare.zoneId` | `""` | `LIFTGATE_CLOUDFLARE_ZONE_ID`; turns on edge mode, see [Custom domains](#custom-domains) |
 | `customDomains.cloudflare.apiToken` | `""` | `LIFTGATE_CLOUDFLARE_API_TOKEN`, required with `zoneId`; stored in the api and reconciler Secrets |
-| `customDomains.cloudflare.cnameTarget` | `""` | `LIFTGATE_CLOUDFLARE_CNAME_TARGET`; the name users point their CNAME at, `cname.<deployDomain>` when empty |
 | `customDomains.cloudflare.gatewayServerName` | `""` | Required with `zoneId`; the name on the `https-edge` listener's certificate |
 | `plans` | `free`, `unlimited` | `LIFTGATE_PLANS`; see [Plans](#plans) |
 | `defaultPlan` | `unlimited` | `LIFTGATE_DEFAULT_PLAN`; the plan of every organization that has not been given one with `admin plan` |

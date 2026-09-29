@@ -293,7 +293,6 @@
           "properties": {
             "zoneId": { "type": "string" },
             "apiToken": { "type": "string" },
-            "cnameTarget": { "type": "string" },
             "gatewayServerName": { "type": "string" }
           },
           "if": { "properties": { "zoneId": { "minLength": 1 } }, "required": ["zoneId"] },

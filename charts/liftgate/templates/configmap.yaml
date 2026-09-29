@@ -119,13 +119,8 @@ data:
   LIFTGATE_CUSTOM_DOMAINS_MAX: {{ int .Values.customDomains.max | quote }}
   {{- end }}
   LIFTGATE_CERT_ISSUER: {{ .Values.gateway.issuer | quote }}
-  {{- with .Values.customDomains.cloudflare }}
-  {{- if .zoneId }}
-  LIFTGATE_CLOUDFLARE_ZONE_ID: {{ .zoneId | quote }}
-  {{- with .cnameTarget }}
-  LIFTGATE_CLOUDFLARE_CNAME_TARGET: {{ . | quote }}
-  {{- end }}
-  {{- end }}
+  {{- with .Values.customDomains.cloudflare.zoneId }}
+  LIFTGATE_CLOUDFLARE_ZONE_ID: {{ . | quote }}
   {{- end }}
   {{- if eq (include "liftgate.ha" .) "true" }}
   LIFTGATE_INTERNAL_URL: {{ printf "http://%s-control-plane.%s:8080" (include "liftgate.fullname" .) .Release.Namespace | quote }}

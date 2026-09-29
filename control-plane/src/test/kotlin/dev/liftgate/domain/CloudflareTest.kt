@@ -43,14 +43,12 @@ class CloudflareTest {
     private val api = "/client/v4/zones/zone/custom_hostnames"
     private val requests = mutableListOf<HttpRequestData>()
     private var answer: (HttpRequestData) -> Pair<HttpStatusCode, String> = { error("unexpected ${it.method.value} ${it.url}") }
-    private val cloudflare = Cloudflare(
-        CloudflareConfig("zone", "token", "cname.liftgate.app"),
-        HttpClient(MockEngine { request ->
-            requests += request
-            val (status, body) = answer(request)
-            respond(body, status, headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString()))
-        }) { install(ContentNegotiation) { json(json) } },
-    )
+    private val client = HttpClient(MockEngine { request ->
+        requests += request
+        val (status, body) = answer(request)
+        respond(body, status, headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString()))
+    }) { install(ContentNegotiation) { json(json) } }
+    private val cloudflare = Cloudflare(CloudflareConfig("zone", "token"), client)
     private val db by lazy { TestDatabase.clean() }
 
     private fun ok(result: String) = HttpStatusCode.OK to """{"success":true,"errors":[],"messages":[],"result":$result}"""
@@ -138,6 +136,19 @@ class CloudflareTest {
         }
         domains.refreshEdge()
         assertEquals(listOf("$api/h1"), requests.filter { it.method == HttpMethod.Delete }.map { it.url.encodedPath })
+    }
+
+    @Test
+    fun `hostnames Cloudflare still holds count against the cap before a new one is created`() = runBlocking {
+        var token = ""
+        val domains = Domains(db, "liftgate.app", edge = Cloudflare(CloudflareConfig("zone", "token"), client, max = 1), txt = { listOf(token) })
+        val domain = domains.addCustom(service(), "shop.example.com")
+        token = checkNotNull(domain.verificationToken)
+        answer = { ok("[${hostname("h1", "deleted.example.com")}]") }
+        val error = assertFailsWith<LiftgateException> { domains.verify(domain.id) }
+        assertEquals(HttpStatusCode.Conflict to "plan_limit", error.status to error.code)
+        assertTrue(requests.none { it.method == HttpMethod.Post })
+        assertNull(domains.byId(domain.id)?.verifiedAt)
     }
 
     @Test

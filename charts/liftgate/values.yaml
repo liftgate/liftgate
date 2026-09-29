@@ -160,7 +160,6 @@ customDomains:
   cloudflare:
     zoneId: ""
     apiToken: ""
-    cnameTarget: ""
     gatewayServerName: ""
 
 allowSharedSite: false

@@ -5,6 +5,7 @@ package dev.liftgate.domain
 import dev.liftgate.config.CloudflareConfig
 import dev.liftgate.http.InstantSerializer
 import dev.liftgate.http.LiftgateException
+import dev.liftgate.http.planLimit
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.HttpRequestBuilder
@@ -36,11 +37,12 @@ private val lost = setOf("moved", "blocked", "pending_blocked", "deleted", "pend
  * @author Dean
  * @date 9/27/2026
  */
-class Cloudflare(private val config: CloudflareConfig, private val client: HttpClient) {
-    val cnameTarget get() = config.cnameTarget
-
-    suspend fun create(hostname: String): String = hostnames().firstOrNull { it.hostname == hostname }?.id
-        ?: read<Hostname>(
+class Cloudflare(private val config: CloudflareConfig, private val client: HttpClient, private val max: Int? = null) {
+    suspend fun create(hostname: String): String {
+        val hostnames = hostnames()
+        hostnames.firstOrNull { it.hostname == hostname }?.let { return it.id }
+        if (max != null && hostnames.size >= max) planLimit("this installation allows $max custom domains in total and all of them are in use")
+        return read<Hostname>(
             send(HttpMethod.Post) {
                 setBody(buildJsonObject {
                     put("hostname", hostname)
@@ -48,6 +50,7 @@ class Cloudflare(private val config: CloudflareConfig, private val client: HttpC
                 })
             },
         ).id
+    }
 
     suspend fun hostnames(): List<Hostname> {
         val hostnames = mutableListOf<Hostname>()

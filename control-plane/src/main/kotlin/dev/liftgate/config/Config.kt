@@ -160,12 +160,10 @@ data class Config(
             }
             val publicUrl = text("PUBLIC_URL", "http://localhost:8080")
             val httpPort = text("HTTP_PORT", "8080").toInt()
-            val deployDomain = text("DEPLOY_DOMAIN", "liftgate.app").takeIf { it.length <= DomainNames.MAX_DEPLOY_DOMAIN }
-                ?: error("LIFTGATE_DEPLOY_DOMAIN must be at most ${DomainNames.MAX_DEPLOY_DOMAIN} characters, so generated hostnames stay within 253")
             val cloudflareToken = optional("CLOUDFLARE_API_TOKEN")
             check(cloudflareToken == null || optional("CLOUDFLARE_ZONE_ID") != null) { "LIFTGATE_CLOUDFLARE_API_TOKEN needs LIFTGATE_CLOUDFLARE_ZONE_ID" }
             val cloudflare = optional("CLOUDFLARE_ZONE_ID")?.takeIf { role in setOf(Role.API, Role.RECONCILER, Role.ALL) }?.let {
-                CloudflareConfig(it, cloudflareToken ?: error("LIFTGATE_CLOUDFLARE_ZONE_ID needs LIFTGATE_CLOUDFLARE_API_TOKEN"), text("CLOUDFLARE_CNAME_TARGET", "cname.$deployDomain"))
+                CloudflareConfig(it, cloudflareToken ?: error("LIFTGATE_CLOUDFLARE_ZONE_ID needs LIFTGATE_CLOUDFLARE_API_TOKEN"))
             }
 
             return Config(
@@ -181,7 +179,8 @@ data class Config(
                 publicUrl = publicUrl,
                 dashboardUrl = dashboardUrl,
                 trustedProxies = text("TRUSTED_PROXIES", "0").toIntOrNull()?.takeIf { it >= 0 } ?: error("LIFTGATE_TRUSTED_PROXIES must be a number of proxy hops"),
-                deployDomain = deployDomain,
+                deployDomain = text("DEPLOY_DOMAIN", "liftgate.app").takeIf { it.length <= DomainNames.MAX_DEPLOY_DOMAIN }
+                    ?: error("LIFTGATE_DEPLOY_DOMAIN must be at most ${DomainNames.MAX_DEPLOY_DOMAIN} characters, so generated hostnames stay within 253"),
                 github = github,
                 google = oauthClient("GOOGLE"),
                 gitlab = oauthClient("GITLAB"),

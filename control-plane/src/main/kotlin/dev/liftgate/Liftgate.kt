@@ -103,7 +103,7 @@ class App(val config: Config) : AutoCloseable {
     val envVars by lazy { EnvVars(db, secrets) }
     val builds = Builds(db)
     val deployments = Deployments(db, metrics, limits)
-    val domains = Domains(db, config.deployDomain, limits, config.cloudflare?.let { Cloudflare(it, http) })
+    val domains = Domains(db, config.deployDomain, limits, config.cloudflare?.let { Cloudflare(it, http, config.customDomainsMax) })
     val github by lazy { config.github?.let { GitHubApp(it, http) } }
     val oauth by lazy { OAuth(http, config.publicUrl, OAuthProviders.enabled(config)) }
     val signIn by lazy { SignIn(db, sessions, config.signup, config.signupAllow, consent = config.termsUrl != null) }

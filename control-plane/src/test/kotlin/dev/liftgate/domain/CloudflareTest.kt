@@ -26,6 +26,7 @@ import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.jdbc.insert
+import java.time.Instant
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -54,8 +55,8 @@ class CloudflareTest {
 
     private fun ok(result: String) = HttpStatusCode.OK to """{"success":true,"errors":[],"messages":[],"result":$result}"""
 
-    private fun hostname(id: String, name: String, status: String = "pending", ssl: String = "pending_validation") =
-        """{"id":"$id","hostname":"$name","status":"$status","ssl":{"status":"$ssl","validation_errors":[]},"verification_errors":[]}"""
+    private fun hostname(id: String, name: String, status: String = "pending", ssl: String = "pending_validation", created: Instant = Instant.now()) =
+        """{"id":"$id","hostname":"$name","status":"$status","ssl":{"status":"$ssl","validation_errors":[]},"verification_errors":[],"created_at":"$created"}"""
 
     private val HttpRequestData.page get() = url.parameters["page"]
 
@@ -115,10 +116,28 @@ class CloudflareTest {
         assertNotNull(verified.verifiedAt)
         assertEquals(listOf(DnsRecord("CNAME", "shop.example.com", "cname.liftgate.app")), verified.dnsRecords)
         assertEquals("h1", domains.byId(domain.id)?.edgeId)
-        answer = { ok("""{"id":"h1"}""") }
+        answer = { HttpStatusCode.OK to """{"id":"h1"}""" }
         domains.delete(domain.id)
         assertEquals(HttpMethod.Delete to "$api/h1", requests.last().method to requests.last().url.encodedPath)
         assertNull(domains.byId(domain.id))
+    }
+
+    @Test
+    fun `the poller deletes custom hostnames no domain references once they are ten minutes old`() = runBlocking {
+        var token = ""
+        val serviceId = service()
+        val domains = Domains(db, "liftgate.app", edge = cloudflare, txt = { listOf(token) })
+        val domain = domains.addCustom(serviceId, "shop.example.com")
+        token = checkNotNull(domain.verificationToken)
+        answer = { if (it.method == HttpMethod.Get) ok("[]") else ok(hostname("h1", "shop.example.com")) }
+        domains.verify(domain.id)
+        Services(db).delete(serviceId)
+        answer = {
+            if (it.method == HttpMethod.Delete) HttpStatusCode.OK to """{"id":"h1"}"""
+            else ok(listOf(hostname("h1", "shop.example.com", created = Instant.EPOCH), hostname("h2", "fresh.example.com")).joinToString(",", "[", "]"))
+        }
+        domains.refreshEdge()
+        assertEquals(listOf("$api/h1"), requests.filter { it.method == HttpMethod.Delete }.map { it.url.encodedPath })
     }
 
     @Test
@@ -153,7 +172,7 @@ class CloudflareTest {
             ok(
                 listOf(
                     """{"id":"h1","hostname":"pending.example.com","status":"pending","ssl":{"status":"pending_validation"},"verification_errors":["custom hostname does not CNAME to this zone."]}""",
-                    hostname("h2", "active.example.com", "active", "active"),
+                    hostname("h2", "active.example.com", "active", "active", Instant.EPOCH),
                     """{"id":"h3","hostname":"failed.example.com","status":"pending","ssl":{"status":"validation_timed_out","validation_errors":[{"message":"caa_error: blocked by CAA"}]}}""",
                 ).joinToString(",", "[", "]"),
             )
@@ -164,5 +183,6 @@ class CloudflareTest {
         assertEquals(CertificateState("ready"), states["active.example.com"])
         assertEquals(CertificateState("failed", "caa_error: blocked by CAA"), states["failed.example.com"])
         assertEquals(CertificateState("failed", "Cloudflare has no custom hostname for lost.example.com"), states["lost.example.com"])
+        assertTrue(requests.none { it.method == HttpMethod.Delete })
     }
 }

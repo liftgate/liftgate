@@ -31,6 +31,8 @@ import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.update
 import org.jetbrains.exposed.v1.jdbc.updateReturning
+import java.time.Duration
+import java.time.Instant
 import java.util.UUID
 
 fun ResultRow.toDomain() = Domain(
@@ -44,6 +46,8 @@ fun ResultRow.toDomain() = Domain(
     this[DomainsTable.certificateMessage],
     this[DomainsTable.edgeId],
 )
+
+private val orphanAge = Duration.ofMinutes(10)
 
 private fun String.host() = trim().lowercase().removeSuffix(".")
 
@@ -117,11 +121,13 @@ class Domains(
 
     suspend fun refreshEdge() {
         val edge = edge ?: return
-        val domains = db.tx { DomainsTable.selectAll().where { DomainsTable.edgeId.isNotNull() }.map { it.toDomain() } }
         val hostnames = edge.hostnames().associateBy { it.id }
+        val domains = db.tx { DomainsTable.selectAll().where { DomainsTable.edgeId.isNotNull() }.map { it.toDomain() } }
         val changed = domains.map { it to (hostnames[it.edgeId]?.certificate ?: CertificateState("failed", "Cloudflare has no custom hostname for ${it.hostname}")) }
             .filter { (domain, state) -> state != CertificateState(domain.certificateStatus, domain.certificateMessage) }
         if (changed.isNotEmpty()) db.tx { changed.forEach { (domain, state) -> setCertificate(domain.hostname, state) } }
+        val cutoff = Instant.now() - orphanAge
+        (hostnames - domains.mapNotNull { it.edgeId }).values.filter { it.createdAt?.isBefore(cutoff) == true }.forEach { edge.delete(it.id) }
     }
 
     suspend fun byId(id: UUID): Domain? = db.tx { find(id) }

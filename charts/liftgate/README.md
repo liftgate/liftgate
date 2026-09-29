@@ -109,6 +109,9 @@ customDomains:
   and a DV certificate. Deleting the domain deletes the custom hostname. No listener or
   `Certificate` is created, and the reconciler leader polls Cloudflare every 30 seconds for the
   certificate status.
+- The control plane owns every custom hostname in the zone. The same poll deletes any custom
+  hostname that is at least 10 minutes old and that no domain references, such as those of
+  deleted services, projects, organizations and accounts.
 - Users point a CNAME at `cnameTarget`, `cname.<deployDomain>` by default.
 - With `customDomains.max` left at `null`, the control plane caps custom domains at 100, the
   number of custom hostnames Cloudflare for SaaS includes on its Free plan; each one beyond

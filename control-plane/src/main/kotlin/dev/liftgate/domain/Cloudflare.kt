@@ -1,6 +1,9 @@
+@file:UseSerializers(InstantSerializer::class)
+
 package dev.liftgate.domain
 
 import dev.liftgate.config.CloudflareConfig
+import dev.liftgate.http.InstantSerializer
 import dev.liftgate.http.LiftgateException
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -17,11 +20,14 @@ import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.UseSerializers
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
+import java.time.Instant
 
+private const val API = "https://api.cloudflare.com/client/v4"
 private const val PAGE_SIZE = 50
 private val serving = setOf("active", "active_redeploying")
 private val lost = setOf("moved", "blocked", "pending_blocked", "deleted", "pending_deletion")
@@ -30,7 +36,7 @@ private val lost = setOf("moved", "blocked", "pending_blocked", "deleted", "pend
  * @author Dean
  * @date 9/27/2026
  */
-class Cloudflare(private val config: CloudflareConfig, private val client: HttpClient, private val api: String = "https://api.cloudflare.com/client/v4") {
+class Cloudflare(private val config: CloudflareConfig, private val client: HttpClient) {
     val cnameTarget get() = config.cnameTarget
 
     suspend fun create(hostname: String): String = hostnames().firstOrNull { it.hostname == hostname }?.id
@@ -54,11 +60,11 @@ class Cloudflare(private val config: CloudflareConfig, private val client: HttpC
 
     suspend fun delete(id: String) {
         val response = send(HttpMethod.Delete, "/$id")
-        if (response.status != HttpStatusCode.NotFound) read<JsonElement>(response)
+        if (!response.status.isSuccess() && response.status != HttpStatusCode.NotFound) read<JsonElement>(response)
     }
 
     private suspend fun send(method: HttpMethod, path: String = "", block: HttpRequestBuilder.() -> Unit = {}) =
-        client.request("$api/zones/${config.zoneId}/custom_hostnames$path") {
+        client.request("$API/zones/${config.zoneId}/custom_hostnames$path") {
             this.method = method
             bearerAuth(config.apiToken)
             contentType(ContentType.Application.Json)
@@ -87,6 +93,7 @@ class Cloudflare(private val config: CloudflareConfig, private val client: HttpC
         val status: String = "",
         val ssl: Ssl? = null,
         @SerialName("verification_errors") val verificationErrors: List<String> = emptyList(),
+        @SerialName("created_at") val createdAt: Instant? = null,
     ) {
         val certificate: CertificateState
             get() {

@@ -213,6 +213,18 @@ class RegistryJanitorTest {
     }
 
     @Test
+    fun `the image a job from the previous release pushes under the previous repository name survives while its build runs`() = runBlocking {
+        val api = services.create(environment(), ServiceSpec("api", "API", ServiceKind.WEB)).id
+        release(api, "registry.test/acme/shop-api:${sha(1)}")
+        builds.request(api, sha(2), null, "main").also { builds.markRunning(it.id) }
+        registry["acme/shop-api"] = mutableMapOf(sha(1) to "sha256:d01", sha(2) to "sha256:d02", sha(3) to "sha256:d03")
+
+        assertEquals(1, janitor(testConfig().copy(registry = "registry.test")).runOnce())
+
+        assertEquals(setOf(sha(1), sha(2)), registry.getValue("acme/shop-api").keys)
+    }
+
+    @Test
     fun `shared registry auth logs in with the registry-credentials secret when there is one`() = runBlocking {
         release(services.create(environment(), ServiceSpec("api", "API", ServiceKind.WEB)).id, "registry.test/acme/shop/production/api:${sha(1)}")
         registry["acme/shop/production/api"] = mutableMapOf(sha(1) to "sha256:d01")

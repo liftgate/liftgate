@@ -1,23 +1,30 @@
 "use client";
 
+import { useState } from "react";
 import { api } from "@/lib/api";
-import { useAction, useApi } from "@/lib/hooks";
+import { useAction, useApi, usePolling } from "@/lib/hooks";
 import type { AuthProviders, Domain, Service } from "@/lib/types";
 import { formValues } from "@/lib/util";
 import { Loaded } from "@/components/loaded";
 import { StatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
+import { CopyField } from "@/components/ui/copy-field";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FormError, Input } from "@/components/ui/input";
 import { Skeleton, TableSkeleton } from "@/components/ui/skeleton";
 import { Cell, Row, Table } from "@/components/ui/table";
 
+const CHECK_MS = 15_000;
 const isCustom = (domain: Domain) => domain.kind.toLowerCase() === "custom";
+const unverified = (domain: Domain) => isCustom(domain) && !domain.verifiedAt;
+const settling = (domain: Domain) => isCustom(domain) && (!domain.verifiedAt || domain.certificateStatus.toLowerCase() !== "ready");
 
 export function DomainsTab({ service, admin }: { service: Service; admin: boolean }) {
   const domains = useApi<Domain[]>(`/services/${service.id}/domains`);
   const providers = useApi<AuthProviders>(admin && "/auth/providers");
+  const [verifying, setVerifying] = useState<string>();
+  const [removing, setRemoving] = useState<string>();
   const add = useAction(async (form: HTMLFormElement) => {
     const { hostname } = formValues(form);
     await api(`/services/${service.id}/domains`, { method: "POST", body: { hostname } });
@@ -33,6 +40,14 @@ export function DomainsTab({ service, admin }: { service: Service; admin: boolea
     await api(`/domains/${domain.id}`, { method: "DELETE" });
     domains.reload();
   });
+  usePolling(
+    !!domains.data?.some(settling),
+    () =>
+      Promise.allSettled(domains.data?.filter((domain) => admin && unverified(domain)).map((domain) => api(`/domains/${domain.id}/verify`, { method: "POST" })) ?? []).then(
+        domains.reload,
+      ),
+    CHECK_MS,
+  );
   return (
     <div className="flex flex-col gap-6">
       <Card>
@@ -54,11 +69,8 @@ export function DomainsTab({ service, admin }: { service: Service; admin: boolea
                         <a href={`https://${domain.hostname}`} target="_blank" rel="noreferrer" className="hover:text-accent">
                           {domain.hostname}
                         </a>
-                        {isCustom(domain) && !domain.verifiedAt && domain.verificationToken && (
-                          <p className="mt-1 max-w-md font-sans text-xs text-graphite-400">
-                            Create a TXT record at <code className="font-mono text-graphite-200">_liftgate.{domain.hostname}</code> with the value{" "}
-                            <code className="font-mono text-graphite-200">{domain.verificationToken}</code>, then verify.
-                          </p>
+                        {domain.verifiedAt && domain.certificateMessage && (
+                          <p className="mt-1 max-w-md font-sans text-xs text-graphite-400">{domain.certificateMessage}</p>
                         )}
                       </Cell>
                       <Cell>
@@ -68,17 +80,34 @@ export function DomainsTab({ service, admin }: { service: Service; admin: boolea
                         <StatusBadge status={domain.verifiedAt ? "verified" : "pending"} />
                       </Cell>
                       <Cell>
-                        <StatusBadge status={domain.certificateStatus} />
+                        {domain.verifiedAt ? (
+                          <StatusBadge status={domain.certificateStatus} />
+                        ) : (
+                          <span className="text-xs text-graphite-400">After verification</span>
+                        )}
                       </Cell>
                       <Cell className="text-right">
                         {admin && isCustom(domain) && (
                           <div className="flex justify-end gap-2">
                             {!domain.verifiedAt && (
-                              <Button pending={verify.pending} onClick={() => verify.run(domain.id)}>
+                              <Button
+                                pending={verify.pending && verifying === domain.id}
+                                onClick={() => {
+                                  setVerifying(domain.id);
+                                  verify.run(domain.id);
+                                }}
+                              >
                                 Verify
                               </Button>
                             )}
-                            <Button variant="danger" pending={remove.pending} onClick={() => remove.run(domain)}>
+                            <Button
+                              variant="danger"
+                              pending={remove.pending && removing === domain.id}
+                              onClick={() => {
+                                setRemoving(domain.id);
+                                remove.run(domain);
+                              }}
+                            >
                               Remove
                             </Button>
                           </div>
@@ -90,6 +119,26 @@ export function DomainsTab({ service, admin }: { service: Service; admin: boolea
               )
             }
           </Loaded>
+          {admin && domains.data?.filter((domain) => settling(domain) && domain.dnsRecords.length > 0).map((domain) => (
+            <div key={domain.id} className="flex flex-col gap-4 rounded-lg border border-graphite-700 p-4">
+              <div className="flex flex-col gap-1">
+                <h3 className="text-sm font-medium">
+                  DNS records for <span className="font-mono">{domain.hostname}</span>
+                </h3>
+                <p className="text-xs text-graphite-400">
+                  {domain.verifiedAt
+                    ? "Keep the CNAME record in place while the certificate is issued."
+                    : "Create these records at your DNS provider. Liftgate checks them every 15 seconds."}
+                </p>
+              </div>
+              {domain.dnsRecords.map((record) => (
+                <div key={record.type} className="grid gap-4 md:grid-cols-2">
+                  <CopyField label={`${record.type} name`} value={record.name} />
+                  <CopyField label={record.type === "CNAME" ? "CNAME target" : `${record.type} value`} value={record.value} />
+                </div>
+              ))}
+            </div>
+          ))}
         </div>
       </Card>
       {admin && (
@@ -97,7 +146,10 @@ export function DomainsTab({ service, admin }: { service: Service; admin: boolea
           {({ customDomains }) =>
             customDomains ? (
               <Card>
-                <CardHeader title="Add a custom domain" description="Ownership is checked with a TXT record; point the hostname at your Liftgate gateway to receive traffic." />
+                <CardHeader
+                  title="Add a custom domain"
+                  description="Liftgate then lists the DNS records to create. An apex domain needs CNAME flattening or an ALIAS record at your DNS provider."
+                />
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();

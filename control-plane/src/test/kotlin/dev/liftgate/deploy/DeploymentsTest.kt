@@ -121,23 +121,18 @@ class DeploymentsTest {
 
     @Test
     fun `a release is timed from its creation until its rollout runs or fails`() = runBlocking {
-        val db = TestDatabase.clean()
         val metrics = SimpleMeterRegistry()
         val deployments = Deployments(db, metrics)
-        val projects = Projects(db)
-        val project = projects.create(Orgs(db).create("acme", "Acme", db.tx { insertUser("dean", null, null, null) }.id).id, "shop", "Shop", "acme/shop", 42)
-        val service = Services(db).create(projects.environments(project.id).single().id, ServiceSpec("api", "API", ServiceKind.WEB))
-        val builds = Builds(db)
-        suspend fun release(sha: String) = assertNotNull(builds.markSucceeded(builds.request(service.id, sha, null, "main").id, "registry/acme/shop-api:$sha"))
+        val service = seed()
         fun released(status: String) = metrics.timer("liftgate.release.duration", "status", status).count()
 
-        val web = release("aaa")
+        val web = release(service, "aaa")
         deployments.transition(web.id, DeploymentStatus.RELEASING)
         deployments.transition(web.id, DeploymentStatus.RELEASING, replicasReady = 1)
         coroutineScope { repeat(2) { launch(Dispatchers.IO) { deployments.transition(web.id, DeploymentStatus.RUNNING, replicasReady = 2) } } }
         deployments.transition(web.id, DeploymentStatus.RUNNING, replicasReady = 1)
         deployments.transition(web.id, DeploymentStatus.FAILED, error = "crash loop")
-        val stalled = release("bbb")
+        val stalled = release(service, "bbb")
         deployments.transition(stalled.id, DeploymentStatus.RELEASING)
         deployments.transition(stalled.id, DeploymentStatus.FAILED, error = "api has timed out progressing")
 

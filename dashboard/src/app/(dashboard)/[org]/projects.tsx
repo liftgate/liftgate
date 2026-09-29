@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { useAction, useApi, useRole } from "@/lib/hooks";
 import type { GitHubRepository, Project, Usage } from "@/lib/types";
 import { formValues } from "@/lib/util";
@@ -25,14 +25,21 @@ export function Projects({ org, opening }: { org: string; opening: boolean }) {
   const { query: role, admin } = useRole(org);
   const [creating, setCreating] = useState(opening);
   const [repo, setRepo] = useState<GitHubRepository>();
+  const [picker, setPicker] = useState(0);
   const projects = useApi<Project[]>(`/orgs/${org}/projects`);
   const create = useAction(async (form: HTMLFormElement) => {
     const v = formValues(form);
-    const project = await api<Project>(`/orgs/${org}/projects`, {
-      method: "POST",
-      body: { slug: v.slug, name: v.name, repoFullName: v.repoFullName },
-    });
-    router.push(`/${org}/${project.slug}?new=service`);
+    try {
+      const project = await api<Project>(`/orgs/${org}/projects`, {
+        method: "POST",
+        body: { slug: v.slug, name: v.name, repoFullName: v.repoFullName },
+      });
+      router.push(`/${org}/${project.slug}?new=service`);
+    } catch (e) {
+      if (!(e instanceof ApiError && e.code === "github_not_connected")) throw e;
+      setRepo(undefined);
+      setPicker((n) => n + 1);
+    }
   });
   const at = (field: string) => (create.field === field ? create.error : undefined);
   const close = () => {
@@ -93,7 +100,7 @@ export function Projects({ org, opening }: { org: string; opening: boolean }) {
           }}
           className="flex flex-col gap-4"
         >
-          <RepoPicker next={`/${org}?new=project`} value={repo?.fullName} error={at("repoFullName")} onChange={setRepo} />
+          <RepoPicker key={picker} next={`/${org}?new=project`} value={repo?.fullName} error={at("repoFullName")} onChange={setRepo} />
           {repo && <NameSlugFields key={repo.fullName} prefill={repo.fullName.split("/")[1]} errorAt={at} />}
           <FormError message={create.field ? undefined : create.error} />
           <div className="flex justify-end gap-2">

@@ -44,7 +44,7 @@ class Reconciler(private val app: App, private val kube: KubernetesClient) {
         try {
             apply(release)
         } catch (e: KubernetesClientException) {
-            if (e.code !in 400..499 || e.code == 409 || e.code == 429) throw e
+            if (e.retryable) throw e
             log.warn("release of deployment {} failed", deployment.id, e)
             return app.deployments.transition(deployment.id, DeploymentStatus.FAILED, error = e.status?.message ?: e.message)
         }

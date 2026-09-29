@@ -80,16 +80,11 @@ class DeploymentWatcher(private val app: App, private val kube: KubernetesClient
                 return
             } catch (e: LiftgateException) {
                 return log.debug("ignored rollout of deployment {}: {}", rollout.deploymentId, e.message)
-            } catch (e: SQLException) {
-                log.warn("could not record rollout of deployment {}, retrying", rollout.deploymentId, e)
-                delay(recordRetry)
-            } catch (e: KubernetesClientException) {
-                if (e.code in 400..499 && e.code != 409 && e.code != 429) return log.warn("could not record rollout of deployment {}", rollout.deploymentId, e)
-                log.warn("could not record rollout of deployment {}, retrying", rollout.deploymentId, e)
-                delay(recordRetry)
             } catch (e: Exception) {
                 currentCoroutineContext().ensureActive()
-                return log.warn("could not record rollout of deployment {}", rollout.deploymentId, e)
+                if (e !is SQLException && !(e is KubernetesClientException && e.retryable)) return log.warn("could not record rollout of deployment {}", rollout.deploymentId, e)
+                log.warn("could not record rollout of deployment {}, retrying", rollout.deploymentId, e)
+                delay(recordRetry)
             }
         }
     }

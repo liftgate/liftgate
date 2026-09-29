@@ -10,6 +10,7 @@ import dev.liftgate.auth.Sessions
 import dev.liftgate.config.EmailConfig
 import dev.liftgate.db.Invitations as InvitationsTable
 import dev.liftgate.db.Memberships
+import dev.liftgate.db.Organizations
 import dev.liftgate.db.now
 import dev.liftgate.db.sql
 import dev.liftgate.http.ErrorBody
@@ -40,6 +41,7 @@ import jakarta.mail.Message
 import jakarta.mail.internet.MimeMessage
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.builtins.ListSerializer
+import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.update
 import java.util.UUID
@@ -184,6 +186,40 @@ class InvitationsTest {
         assertEquals(HttpStatusCode.Forbidden, client.setRole("owner", second, "member").status)
         assertEquals(HttpStatusCode.Conflict to "last_owner", client.delete("/api/v1/orgs/acme/members/me") { session("second") }.error())
         assertEquals(HttpStatusCode.NotFound, client.setRole("second", UUID.randomUUID(), "admin").status)
+    }
+
+    @Test
+    fun `nobody becomes an owner past the plan's owned organizations limit`() = testApplication {
+        val limits = Limits(Plans(mapOf("free" to Plan(ownedOrgs = 1)), "free"))
+        val limited = Orgs(db, limits)
+        every { app.orgs } returns limited
+        every { app.invitations } returns Invitations(db, null, DASHBOARD, limits)
+        application { liftgate(app) }
+        val member = user("member", OrgRole.MEMBER)
+        val outsider = user("outsider")
+        limited.create("member-co", "Member Co", member)
+        limited.create("outsider-co", "Outsider Co", outsider)
+        assertEquals(HttpStatusCode.NoContent, client.setRole("owner", owner, "owner").status)
+        assertEquals(HttpStatusCode.Conflict to "plan_limit", client.setRole("owner", member, "owner").error())
+        assertEquals(OrgRole.MEMBER, orgs.role(acme.id, member))
+        val invitation = client.invite("owner", "owner").invitation()
+        assertEquals(HttpStatusCode.Conflict to "plan_limit", client.accept("outsider", invitation).error())
+        assertNull(orgs.role(acme.id, outsider))
+        val newbie = user("newbie")
+        assertEquals(HttpStatusCode.OK, client.accept("newbie", invitation).status)
+        assertEquals(OrgRole.OWNER, orgs.role(acme.id, newbie))
+    }
+
+    @Test
+    fun `nobody leaves or joins a suspended organization`() = testApplication {
+        application { liftgate(app) }
+        val second = user("second", OrgRole.OWNER)
+        val invitation = client.invite("owner", "member").invitation()
+        db.tx { Organizations.update({ Organizations.id eq acme.id }) { it[suspendedAt] = now() } }
+        assertEquals(HttpStatusCode.Forbidden to "org_suspended", client.delete("/api/v1/orgs/acme/members/me") { session("second") }.error())
+        assertEquals(listOf(OrgRole.OWNER), orgs.forUser(second).map { it.role })
+        user("newbie")
+        assertEquals(HttpStatusCode.Forbidden to "org_suspended", client.accept("newbie", invitation).error())
     }
 
     @Test

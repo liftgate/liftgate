@@ -8,7 +8,7 @@ import { formValues } from "@/lib/util";
 import { Loaded } from "@/components/loaded";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, Spinner } from "@/components/ui/button";
 import { CopyField } from "@/components/ui/copy-field";
 import { Dialog } from "@/components/ui/dialog";
 import { Field, FormError, Input } from "@/components/ui/input";
@@ -27,6 +27,7 @@ export function Members({ org }: { org: string }) {
   const [inviting, setInviting] = useState(false);
   const [sent, setSent] = useState<Sent>();
   const [removing, setRemoving] = useState<Member>();
+  const [changing, setChanging] = useState<{ id: string; role: string; list: Member[] }>();
   const leaving = !!removing && removing.user.id === me.data?.id;
   const invite = useAction(async (form: HTMLFormElement) => {
     const { role, email } = formValues(form);
@@ -34,7 +35,10 @@ export function Members({ org }: { org: string }) {
     setSent({ ...created, role, email });
   });
   const changeRole = useAction(async (member: Member, role: string) => {
-    await api(`/orgs/${org}/members/${member.user.id}`, { method: "PATCH", body: { role } });
+    await api(`/orgs/${org}/members/${member.user.id}`, { method: "PATCH", body: { role } }).catch((e: unknown) => {
+      setChanging(undefined);
+      throw e;
+    });
     members.reload();
   });
   const remove = useAction(async (member: Member) => {
@@ -66,6 +70,7 @@ export function Members({ org }: { org: string }) {
           <Table columns={["Member", "Email", "Role", ""]}>
             {list.map((member) => {
               const self = member.user.id === me.data?.id;
+              const saving = changing?.id === member.user.id && changing.list === list;
               return (
                 <Row key={member.user.id}>
                   <Cell className="font-medium">
@@ -75,18 +80,24 @@ export function Members({ org }: { org: string }) {
                   <Cell className="text-graphite-400">{member.user.email}</Cell>
                   <Cell>
                     {owner ? (
-                      <Select
-                        aria-label={`Role of ${member.user.login}`}
-                        value={member.role}
-                        disabled={changeRole.pending}
-                        onChange={(e) => changeRole.run(member, e.target.value)}
-                      >
-                        {roles.map((role) => (
-                          <option key={role} value={role}>
-                            {role}
-                          </option>
-                        ))}
-                      </Select>
+                      <span className="flex items-center gap-2">
+                        <Select
+                          aria-label={`Role of ${member.user.login}`}
+                          value={saving ? changing.role : member.role}
+                          disabled={changeRole.pending || saving}
+                          onChange={(e) => {
+                            setChanging({ id: member.user.id, role: e.target.value, list });
+                            changeRole.run(member, e.target.value);
+                          }}
+                        >
+                          {roles.map((role) => (
+                            <option key={role} value={role}>
+                              {role}
+                            </option>
+                          ))}
+                        </Select>
+                        {saving && <Spinner />}
+                      </span>
                     ) : (
                       <Badge>{member.role}</Badge>
                     )}

@@ -108,6 +108,7 @@ class Orgs(private val db: Db, private val limits: Limits = Limits()) {
     suspend fun role(orgId: UUID, userId: UUID): OrgRole? = db.tx { memberRole(orgId, userId) }
 
     suspend fun setRole(orgId: UUID, userId: UUID, role: OrgRole) = db.tx {
+        if (role == OrgRole.OWNER && memberRole(orgId, userId) != OrgRole.OWNER) limits.ownedOrgs(userId)
         changeMembers(orgId) { Memberships.update({ (Memberships.orgId eq orgId) and (Memberships.userId eq userId) }) { it[Memberships.role] = role.sql } }
     }
 
@@ -157,7 +158,7 @@ class Orgs(private val db: Db, private val limits: Limits = Limits()) {
     }
 
     private fun changeMembers(orgId: UUID, change: () -> Int) {
-        Organizations.select(Organizations.id).where { Organizations.id eq orgId }.forUpdate(ForUpdateOption.ForUpdate).single()
+        if (Organizations.select(Organizations.suspendedAt).where { Organizations.id eq orgId }.forUpdate(ForUpdateOption.ForUpdate).single()[Organizations.suspendedAt] != null) orgSuspended()
         if (change() == 0) notFound("member")
         if (Memberships.selectAll().where { (Memberships.orgId eq orgId) and (Memberships.role eq OrgRole.OWNER.sql) }.empty()) {
             throw LiftgateException(HttpStatusCode.Conflict, "last_owner", "an organization needs an owner, make someone else an owner first")

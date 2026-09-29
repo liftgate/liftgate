@@ -452,7 +452,6 @@ object NotificationChannels : Table("notification_channels") {
 object Invitations : Table("invitations") {
     val id = javaUUID("id")
     val orgId = fk("org_id", Organizations.id, CASCADE)
-    val email = text("email").nullable()
     val role = oneOf("role", "owner", "admin", "member")
     val tokenHash = text("token_hash").uniqueIndex()
     val createdBy = fk("created_by", Users.id, CASCADE)

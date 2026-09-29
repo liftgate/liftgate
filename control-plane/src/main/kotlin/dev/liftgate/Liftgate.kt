@@ -115,7 +115,7 @@ class App(val config: Config) : AutoCloseable {
     val podLogs = PodLogs(kube)
     val notificationChannels by lazy { NotificationChannels(db, secrets) }
     val notifier by lazy { Notifier(this) }
-    val invitations by lazy { Invitations(db, mailer, config.dashboardUrl) }
+    val invitations by lazy { Invitations(db, mailer, config.dashboardUrl, limits) }
     private val stopped = CountDownLatch(1)
     private var server: EmbeddedServer<*, *>? = null
 

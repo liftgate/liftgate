@@ -22,6 +22,12 @@ import dev.liftgate.deploy.Deployments
 import dev.liftgate.domain.Domain
 import dev.liftgate.domain.DomainKind
 import dev.liftgate.domain.Domains
+import dev.liftgate.notify.NotificationChannel
+import dev.liftgate.notify.NotificationChannel.Event
+import dev.liftgate.notify.NotificationChannel.Kind
+import dev.liftgate.notify.NotificationChannels
+import dev.liftgate.notify.NotificationChannels.Endpoint
+import dev.liftgate.notify.Notifier
 import dev.liftgate.org.AuditEntry
 import dev.liftgate.org.Invitations
 import dev.liftgate.org.Orgs
@@ -99,6 +105,10 @@ class AuditTest {
             "PUT /orgs/{slug}/sso",
             "DELETE /orgs/{slug}/sso",
             "POST /orgs/{slug}/sso/verify",
+            "POST /orgs/{slug}/notifications",
+            "PATCH /orgs/{slug}/notifications/{id}",
+            "DELETE /orgs/{slug}/notifications/{id}",
+            "POST /orgs/{slug}/notifications/{id}/test",
             "DELETE /projects/{id}",
             "POST /projects/{id}/environments",
             "POST /environments/{id}/services",
@@ -106,6 +116,7 @@ class AuditTest {
             "DELETE /services/{id}",
             "PUT /services/{id}/env",
             "POST /services/{id}/deploy",
+            "POST /services/{id}/redeploy",
             "POST /services/{id}/domains",
             "POST /deployments/{id}/rollback",
             "POST /domains/{id}/verify",
@@ -130,6 +141,7 @@ class AuditTest {
     private val build = Build(UUID.randomUUID(), service.id, sha, null, "main", BuildStatus.SUCCEEDED, null, null, null, null, Instant.now())
     private val deployment = Deployment(UUID.randomUUID(), service.id, build.id, DeploymentStatus.RUNNING, 1, null, Instant.now())
     private val domain = Domain(UUID.randomUUID(), service.id, "shop.acme.dev", DomainKind.CUSTOM, "token", null, "pending")
+    private val channel = NotificationChannel(UUID.randomUUID(), "ops", Kind.WEBHOOK, "ops.acme.dev", setOf(Event.BUILD_FAILED), Instant.now())
     private val sso = SsoSettings("https://idp.acme.dev", "https://idp.acme.dev/sso", "certificate", listOf("acme.dev"))
     private val app = mockk<App>().also {
         every { it.config } returns testConfig()
@@ -162,6 +174,7 @@ class AuditTest {
         every { it.deployments } returns mockk<Deployments> {
             coEvery { byId(deployment.id) } returns deployment
             coEvery { rollback(deployment.id) } returns deployment
+            coEvery { redeploy(service.id) } returns deployment
         }
         every { it.domains } returns mockk<Domains> {
             coEvery { addCustom(service.id, "shop.acme.dev") } returns domain
@@ -173,6 +186,16 @@ class AuditTest {
             coEvery { save(acme.id, any()) } returns sso
             coEvery { delete(acme.id) } just Runs
             coEvery { verifyDomains(acme.id) } returns sso
+        }
+        every { it.notificationChannels } returns mockk<NotificationChannels> {
+            coEvery { create(acme.id, "ops", Kind.WEBHOOK, "https://ops.acme.dev", setOf(Event.BUILD_FAILED)) } returns channel
+            coEvery { update(acme.id, channel.id, "ops", setOf(Event.BUILD_FAILED)) } returns channel
+            coEvery { delete(acme.id, channel.id) } just Runs
+            coEvery { endpoint(acme.id, channel.id) } returns Endpoint(Kind.WEBHOOK, "https://ops.acme.dev", null)
+        }
+        every { it.notifier } returns mockk<Notifier> {
+            coEvery { check("https://ops.acme.dev") } returns "https://ops.acme.dev"
+            coEvery { send(any(), any()) } returns null
         }
         every { it.github } returns mockk<GitHubApp> { coEvery { installation("ghu_token", "acme/web") } returns 42 }
         every { it.gitConnections } returns mockk<GitConnections> { coEvery { github(users.getValue("owner")) } returns ("ghu_token" to "dean") }
@@ -212,6 +235,10 @@ class AuditTest {
         "PUT /orgs/{slug}/sso" to Call("/orgs/acme/sso", json.encodeToString(SsoSettings.serializer(), sso), expected = acme("orgs", "acme")),
         "DELETE /orgs/{slug}/sso" to Call("/orgs/acme/sso", expected = acme("orgs", "acme")),
         "POST /orgs/{slug}/sso/verify" to Call("/orgs/acme/sso/verify", expected = acme("orgs", "acme")),
+        "POST /orgs/{slug}/notifications" to Call("/orgs/acme/notifications", """{"name":"ops","events":["build_failed"],"kind":"webhook","url":"https://ops.acme.dev"}""", expected = acme("orgs", "acme")),
+        "PATCH /orgs/{slug}/notifications/{id}" to Call("/orgs/acme/notifications/${channel.id}", """{"name":"ops","events":["build_failed"]}""", expected = acme("notifications", channel.id)),
+        "DELETE /orgs/{slug}/notifications/{id}" to Call("/orgs/acme/notifications/${channel.id}", expected = acme("notifications", channel.id)),
+        "POST /orgs/{slug}/notifications/{id}/test" to Call("/orgs/acme/notifications/${channel.id}/test", expected = acme("notifications", channel.id)),
         "DELETE /projects/{id}" to Call("/projects/${project.id}", expected = acme("projects", project.id)),
         "POST /projects/{id}/environments" to Call("/projects/${project.id}/environments", """{"slug":"staging","name":"Staging","branch":"dev"}""", expected = acme("projects", project.id)),
         "POST /environments/{id}/services" to Call("/environments/${environment.id}/services", """{"slug":"api","name":"API","kind":"worker"}""", expected = acme("environments", environment.id)),
@@ -219,6 +246,7 @@ class AuditTest {
         "DELETE /services/{id}" to Call("/services/${service.id}", expected = acme("services", service.id)),
         "PUT /services/{id}/env" to Call("/services/${service.id}/env", """[{"name":"DATABASE_URL","value":"postgres://secret-value","secret":true}]""", expected = acme("services", service.id)),
         "POST /services/{id}/deploy" to Call("/services/${service.id}/deploy", """{"ref":"$sha"}""", expected = acme("services", service.id)),
+        "POST /services/{id}/redeploy" to Call("/services/${service.id}/redeploy", expected = acme("services", service.id)),
         "POST /services/{id}/domains" to Call("/services/${service.id}/domains", """{"hostname":"shop.acme.dev"}""", expected = acme("services", service.id)),
         "POST /deployments/{id}/rollback" to Call("/deployments/${deployment.id}/rollback", expected = acme("deployments", deployment.id)),
         "POST /domains/{id}/verify" to Call("/domains/${domain.id}/verify", expected = acme("domains", domain.id)),

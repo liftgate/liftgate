@@ -16,6 +16,7 @@ import dev.liftgate.http.LiftgateException
 import dev.liftgate.http.conflict
 import dev.liftgate.http.forbidden
 import dev.liftgate.http.notFound
+import dev.liftgate.http.orgSuspended
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -42,7 +43,7 @@ private fun gone(): Nothing = throw LiftgateException(HttpStatusCode.Gone, "invi
  * @author Dean
  * @date 9/27/2026
  */
-class Invitations(private val db: Db, private val mailer: Mailer?, private val dashboardUrl: String) {
+class Invitations(private val db: Db, private val mailer: Mailer?, private val dashboardUrl: String, private val limits: Limits = Limits()) {
     suspend fun create(org: Organization, inviter: User, role: OrgRole, email: String?): CreatedInvitation {
         val token = randomToken()
         val expiresAt = now().plusDays(INVITATION_DAYS)
@@ -51,7 +52,6 @@ class Invitations(private val db: Db, private val mailer: Mailer?, private val d
             InvitationsTable.insert {
                 it[id] = UUID.randomUUID()
                 it[orgId] = org.id
-                it[InvitationsTable.email] = email
                 it[InvitationsTable.role] = role.sql
                 it[tokenHash] = ApiTokens.hash(token)
                 it[createdBy] = inviter.id
@@ -74,6 +74,8 @@ class Invitations(private val db: Db, private val mailer: Mailer?, private val d
     suspend fun accept(token: String, userId: UUID): Organization = db.tx {
         val invitation = open(token)
         val org = invitation.toOrganization()
+        if (org.suspendedAt != null) orgSuspended()
+        if (invitation.invitedRole() == OrgRole.OWNER) limits.ownedOrgs(userId)
         if (InvitationsTable.update({ (InvitationsTable.id eq invitation[InvitationsTable.id]) and InvitationsTable.acceptedAt.isNull() }) { it[acceptedAt] = now() } == 0) gone()
         val joined = Memberships.insertIgnore {
             it[orgId] = org.id

@@ -1,7 +1,6 @@
 create table invitations (
     id uuid primary key,
     org_id uuid not null references organizations (id) on delete cascade,
-    email text,
     role text not null check (role in ('owner', 'admin', 'member')),
     token_hash text not null unique,
     created_by uuid not null references users (id) on delete cascade,

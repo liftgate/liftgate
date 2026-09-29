@@ -181,6 +181,9 @@ class ResourcesTest {
         assertTrue(worker.exposed)
         assertFalse(worker.routable)
         assertEquals(listOf(Triple("http", 80, 9000), Triple("app", 9000, 9000)), Resources.service(worker).spec.ports.map { Triple(it.name, it.port, it.targetPort.intVal) })
+        val container = Resources.deployment(worker, null).spec.template.spec.containers.single()
+        assertEquals("9000", container.env.single { it.name == "PORT" }.value)
+        assertEquals(9000, container.readinessProbe.tcpSocket.port.intVal)
         assertFalse(testRelease(testService.copy(kind = ServiceKind.WORKER, port = null)).exposed)
         assertFalse(release.copy(org = testOrg.copy(suspendedAt = Instant.now())).exposed)
     }
@@ -319,6 +322,7 @@ class ResourcesTest {
     private fun assertRestricted(pod: PodSpec) {
         val container = pod.containers.single().securityContext
         assertEquals(true, pod.securityContext.runAsNonRoot)
+        assertEquals(1000L to 1000L, pod.securityContext.runAsUser to pod.securityContext.runAsGroup)
         assertEquals("RuntimeDefault", pod.securityContext.seccompProfile.type)
         assertEquals(false, pod.automountServiceAccountToken)
         assertEquals(false, container.allowPrivilegeEscalation)

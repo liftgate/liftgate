@@ -67,7 +67,8 @@ the release namespace with three kinds of listener:
   namespace.
 - `https-apps` on port 443 for `*.deployDomain`: tenant HTTPRoutes attach here. The
   listener reads TLS secret `gateway.wildcardSecret`; issue it with a DNS-01 `Certificate`
-  for your DNS provider (HTTP-01 cannot issue wildcards).
+  for your DNS provider (HTTP-01 cannot issue wildcards), for example with
+  [`infra/cert-manager/wildcard.yaml`](../../infra/cert-manager/wildcard.yaml).
 - one HTTPS listener per distinct host in `publicUrl` and `dashboardUrl`, each with a
   cert-manager `Certificate` from ClusterIssuer `gateway.issuer`.
 

@@ -1,0 +1,31 @@
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: letsencrypt-dns01
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: LETSENCRYPT_EMAIL
+    privateKeySecretRef:
+      name: letsencrypt-dns01-account-key
+    solvers:
+      - dns01:
+          rfc2136:
+            nameserver: DNS_SERVER
+            tsigKeyName: TSIG_KEY_NAME
+            tsigAlgorithm: HMACSHA256
+            tsigSecretSecretRef:
+              name: liftgate-rfc2136
+              key: secret
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: liftgate-wildcard
+spec:
+  secretName: liftgate-wildcard-tls
+  dnsNames:
+    - "*.DEPLOY_DOMAIN"
+  issuerRef:
+    kind: Issuer
+    name: letsencrypt-dns01

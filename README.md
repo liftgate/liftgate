@@ -67,13 +67,21 @@ The API speaks JSON under `/api/v1`, authenticated by the session cookie or `Aut
 
 Stack: Kotlin 2.4, Ktor 3.6, Exposed 1.5, Flyway, PostgreSQL 16, NATS JetStream, Hazelcast 5.7, fabric8 8.0; Next.js 16, React 19, Tailwind 4; Kubernetes with Cilium, Gateway API, cert-manager, CloudNativePG and gVisor.
 
+## Documentation
+
+- [Getting started](documentation/getting-started.md): from signing in to an app with a URL, then deploys, variables, rollbacks, logs, metrics, teams, notifications and API tokens.
+- [Runtime contract](documentation/runtime-contract.md): what a container gets and has to do, from `PORT` and health checks to resources and network access.
+- [Custom domains](documentation/custom-domains.md): serving a service on your own hostname.
+- [Plans and limits](documentation/plans-and-limits.md): what an organization may create and run.
+- [Self-hosting](documentation/self-hosting.md): an install on a fresh VM, with backups, upgrades and troubleshooting.
+
 ## Self-hosting
 
 ### Prerequisites
 
 - A Kubernetes cluster with the baseline under `infra/`. Install k3s and gVisor by hand following `infra/k3s/install.md`, then run `LIFTGATE_INSTALL_CILIUM=1 LETSENCRYPT_EMAIL=you@example.com sh infra/install.sh` from a checkout of this repository, which installs the Gateway API CRDs, Cilium, the gVisor RuntimeClass, cert-manager, CloudNativePG with its Barman Cloud plugin and Prometheus in order. It skips whatever is already installed and stops before changing anything on a cluster that runs another CNI. On a cluster that already has a Gateway API implementation, leave `LIFTGATE_INSTALL_CILIUM` unset and set `gateway.className`. NATS comes with the Liftgate chart.
-- A container registry that build jobs can push to and the nodes can pull from: set `registry`, and `build.registryCredentials` when it needs a login, or `registryAuth: token` for a per-build login on a multi-tenant install. The default `registry.liftgate.internal` does not exist.
-- A TLS secret named `liftgate-wildcard-tls` in the release namespace for `*.<deployDomain>`, issued with a DNS-01 `Certificate` for your DNS provider; the `https-apps` listener reads it.
+- A container registry that build jobs can push to and the nodes can pull from: set `registry`, and `build.registryCredentials` when it needs a login, or `registryAuth: token` for a per-build login on a multi-tenant install. The default `registry.liftgate.internal` does not exist. With Cilium, build jobs cannot reach a registry on a node or inside the cluster; [documentation/self-hosting.md](documentation/self-hosting.md#2-the-registry) runs one on a second machine.
+- A TLS secret named `liftgate-wildcard-tls` in the release namespace for `*.<deployDomain>`, issued with a DNS-01 `Certificate` for your DNS provider, such as [`infra/cert-manager/wildcard.yaml`](infra/cert-manager/wildcard.yaml); the `https-apps` listener reads it.
 - Helm (CI uses 4.3.0).
 - A wildcard DNS record for the app domain (`*.apps.example.net`) and a record for the control plane hostname (`liftgate.example.com`), both pointing at the gateway's address.
 - A GitHub App, described below.

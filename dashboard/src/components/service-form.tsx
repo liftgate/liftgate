@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 import type { BuildStrategy, Service, ServiceKind, ServiceSpec } from "@/lib/types";
 import { formValues, servesHttp } from "@/lib/util";
+import { DocsLink } from "./docs-link";
 import { NameSlugFields } from "./name-slug-fields";
 import { redeployRequested } from "./save-actions";
 import { Button } from "./ui/button";
@@ -128,7 +129,12 @@ export function ServiceForm({
           {kind !== "cron" && (
             <Field
               label="Port"
-              hint={servesHttp(kind) ? "Your app should listen on $PORT, which is 8080 unless set here" : "Optional. Lets other services in this environment reach the worker"}
+              hint={
+                <>
+                  {servesHttp(kind) ? "Your app should listen on $PORT, which is 8080 unless set here." : "Optional. Lets other services in this environment reach the worker."}{" "}
+                  <DocsLink page="runtime-contract">Runtime contract</DocsLink>
+                </>
+              }
               error={at("port")}
             >
               <Input name="port" type="number" min={1} max={65535} placeholder={servesHttp(kind) ? "8080" : undefined} value={port} onChange={(e) => setPort(e.target.value)} />

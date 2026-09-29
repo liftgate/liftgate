@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { useAction, useApi, usePolling } from "@/lib/hooks";
 import type { AuthProviders, Domain, Service } from "@/lib/types";
 import { formValues } from "@/lib/util";
+import { DocsLink } from "@/components/docs-link";
 import { Loaded } from "@/components/loaded";
 import { StatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -66,7 +67,14 @@ export function DomainsTab({ service, admin }: { service: Service; admin: boolea
           <Loaded query={domains} skeleton={<TableSkeleton rows={2} />}>
             {(list) =>
               list.length === 0 ? (
-                <EmptyState title="No domains yet" description={admin ? "Add a custom domain below." : "An admin of this organization adds custom domains."} />
+                <EmptyState
+                  title="No domains yet"
+                  description={
+                    <>
+                      {admin ? "Add a custom domain below." : "An admin of this organization adds custom domains."} <DocsLink page="custom-domains">How custom domains work</DocsLink>
+                    </>
+                  }
+                />
               ) : (
                 <Table columns={["Hostname", "Kind", "Verification", "Certificate", ""]}>
                   {list.map((domain) => (
@@ -168,7 +176,12 @@ export function DomainsTab({ service, admin }: { service: Service; admin: boolea
             ) : (
               <EmptyState
                 title="Custom domains are not enabled"
-                description="This installation serves web and static services on their platform hostname only. You can add your own domain here once custom domains are enabled."
+                description={
+                  <>
+                    This installation serves web and static services on their platform hostname only. You can add your own domain here once custom domains are enabled.{" "}
+                    <DocsLink page="custom-domains">How custom domains work</DocsLink>
+                  </>
+                }
               />
             )
           }

@@ -64,7 +64,7 @@ export function Projects({ org }: { org: string }) {
           </>
         }
       />
-      <Loaded query={projects} also={role} skeleton={<TableSkeleton />}>
+      <Loaded query={projects} also={[role]} skeleton={<TableSkeleton />}>
         {(list) =>
           list.length === 0 ? (
             <EmptyState

@@ -61,7 +61,7 @@ export function Members({ org }: { org: string }) {
         }
       />
       <FormError message={changeRole.error} />
-      <Loaded query={members} also={role} skeleton={<TableSkeleton />}>
+      <Loaded query={members} also={[role, me]} skeleton={<TableSkeleton />}>
         {(list) => (
           <Table columns={["Member", "Email", "Role", ""]}>
             {list.map((member) => {

@@ -72,7 +72,7 @@ export function Overview({ org, projectSlug }: { org: string; projectSlug: strin
           )
         }
       />
-      <Loaded query={tree} also={role} skeleton={<TableSkeleton />}>
+      <Loaded query={tree} also={[role]} skeleton={<TableSkeleton />}>
         {({ environments: list, services }) =>
           list.length === 0 ? (
             <EmptyState

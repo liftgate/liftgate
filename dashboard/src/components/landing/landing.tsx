@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Footer } from "@/components/footer";
 import { Nav } from "@/components/nav";
 import { buttonClasses } from "@/components/ui/button";
+import { ogImage } from "@/lib/landing";
 import { AppLink } from "./app-link";
 import { Closing } from "./closing";
 import { CloudOrYours } from "./cloud-or-yours";
@@ -32,7 +33,7 @@ export const landingMetadata: Metadata = {
     siteName: "Liftgate",
     title,
     description,
-    images: [{ url: "/og.jpg", width: 1200, height: 630, alt: "The Liftgate logo above the line Full-stack hosting. Open source." }],
+    images: [ogImage],
   },
   twitter: { card: "summary_large_image" },
 };

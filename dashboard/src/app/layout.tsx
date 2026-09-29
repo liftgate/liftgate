@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { ogImage } from "@/lib/landing";
 import "./globals.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
@@ -10,7 +11,7 @@ export const metadata: Metadata = {
   title: { default: "Liftgate", template: "%s · Liftgate" },
   description: "Deploy and manage applications on Liftgate.",
   robots: { index: false, follow: false },
-  openGraph: { images: [{ url: "/og.jpg", width: 1200, height: 630, alt: "The Liftgate logo above the line Full-stack hosting. Open source." }] },
+  openGraph: { images: [ogImage] },
 };
 
 export const viewport: Viewport = { themeColor: "#0d0b12", colorScheme: "dark" };

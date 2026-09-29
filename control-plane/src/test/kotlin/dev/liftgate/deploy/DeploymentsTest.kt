@@ -142,13 +142,7 @@ class DeploymentsTest {
 
     @Test
     fun `an update that only changes the ready replicas is published as unchanged`() = runBlocking {
-        val db = TestDatabase.clean()
-        val deployments = Deployments(db)
-        val projects = Projects(db)
-        val project = projects.create(Orgs(db).create("acme", "Acme", db.tx { insertUser("dean", null, null, null) }.id).id, "shop", "Shop", "acme/shop", 42)
-        val service = Services(db).create(projects.environments(project.id).single().id, ServiceSpec("api", "API", ServiceKind.WEB))
-        val builds = Builds(db)
-        val deployment = assertNotNull(builds.markSucceeded(builds.request(service.id, "aaa", null, "main").id, "registry/acme/shop-api:aaa"))
+        val deployment = release(seed(), "aaa")
         deployments.transition(deployment.id, DeploymentStatus.RUNNING, replicasReady = 1)
         deployments.transition(deployment.id, DeploymentStatus.RUNNING, replicasReady = 2)
         deployments.transition(deployment.id, DeploymentStatus.FAILED, error = "crash loop")
@@ -158,18 +152,11 @@ class DeploymentsTest {
 
     @Test
     fun `a pending or releasing deployment overtaken by a newer running one is published as superseded`() = runBlocking {
-        val db = TestDatabase.clean()
-        val deployments = Deployments(db)
-        val projects = Projects(db)
-        val project = projects.create(Orgs(db).create("acme", "Acme", db.tx { insertUser("dean", null, null, null) }.id).id, "shop", "Shop", "acme/shop", 42)
-        val service = Services(db).create(projects.environments(project.id).single().id, ServiceSpec("api", "API", ServiceKind.WEB))
-        val builds = Builds(db)
-        suspend fun release(sha: String) = assertNotNull(builds.markSucceeded(builds.request(service.id, sha, null, "main").id, "registry/acme/shop-api:$sha"))
-        val releasing = release("aaa")
+        val service = seed()
+        val releasing = release(service, "aaa")
         deployments.transition(releasing.id, DeploymentStatus.RELEASING)
-        val pending = release("bbb")
-        val newest = release("ccc")
-        deployments.transition(newest.id, DeploymentStatus.RUNNING, replicasReady = 1)
+        val pending = release(service, "bbb")
+        val newest = running(service, "ccc")
         val published = db.tx { Outbox.selectAll().where { Outbox.subject eq Subject.DEPLOYMENT_UPDATED.value }.map { it[Outbox.payload] } }
             .map { it.getValue("deploymentId").jsonPrimitive.content to it.getValue("status").jsonPrimitive.content }
         val expected = listOf("${releasing.id}" to "releasing", "${releasing.id}" to "superseded", "${pending.id}" to "superseded", "${newest.id}" to "running")

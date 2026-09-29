@@ -34,6 +34,7 @@ fun Route.apiRoutes(app: App) {
         notificationRoutes(app)
         githubRoutes(app)
         audit(app)
+        metricsRoutes(app)
     }
 }
 

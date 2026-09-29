@@ -89,8 +89,10 @@ promtool check rules infra/prometheus/rules.yaml
 ## gVisor and cAdvisor
 
 With gVisor, cAdvisor may not report per-container series for `runsc` pods
-([gVisor issue 13067](https://github.com/google/gvisor/issues/13067)). OrgCpuSaturated reads the
-pod-level series (`container=""`); metering reads the per-container ones (`container!=""`). On a
+([gVisor issue 13067](https://github.com/google/gvisor/issues/13067)). OrgCpuSaturated and the
+service metrics behind a service's Metrics tab read the pod-level series (`container=""`); metering
+reads the per-container ones (`container!=""`). The service metrics also read each pod's network
+series and find a service's pods through `kube_pod_labels{label_liftgate_dev_service_id}`. On a
 cluster whose tenant pods run under `runsc`, compare the tenant pod count with both:
 
 ```sh
@@ -100,9 +102,9 @@ q 'count(container_cpu_usage_seconds_total{namespace=~"env-.+", container="", po
 q 'count(container_cpu_usage_seconds_total{namespace=~"env-.+", container!="", container!="POD"})'
 ```
 
-If the per-container count is lower than the pod count, metering and the service metrics must
-use the pod-level series. If the pod-level count is lower too, OrgCpuSaturated cannot fire for
-those pods.
+If the per-container count is lower than the pod count, metering must use the pod-level series
+too. If the pod-level count is lower too, OrgCpuSaturated cannot fire for those pods and their
+Metrics tab has no CPU or memory chart.
 
 | Date | Cluster | Tenant pods | Pod-level series | Per-container series |
 |---|---|---|---|---|

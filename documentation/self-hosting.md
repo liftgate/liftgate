@@ -34,7 +34,7 @@ session cookie. The chart refuses to render such a pair, as Separate sites in th
   few small apps; it is a starting point, not a measured minimum. The kubelet settings reserve 1 CPU and
   2 GiB for the system, and a single build may use 2 CPUs, 4 GiB of memory and 20 GiB of disk.
 - A second machine for the container registry, with a private network between it and the VM that
-  carries only your own machines. Step 2 explains why the registry cannot run on the VM.
+  carries only machines you control and trust. Step 2 explains why the registry cannot run on the VM.
 - Two domains whose DNS you control, one for the dashboard and one for the apps. The apps' DNS must let
   cert-manager create TXT records, either through RFC 2136 dynamic updates or through one of the
   [DNS providers cert-manager supports](https://cert-manager.io/docs/configuration/acme/dns01/).
@@ -99,11 +99,12 @@ curl -s -o /dev/null -w '%{http_code}\n' -u "liftgate:$REGISTRY_PASSWORD" http:/
 
 The last command prints `200`. Note the password; the VM needs it in steps 3 and 7. The registry listens
 only on the private address and speaks plain HTTP, which is why the chart values in step 7 mark it
-insecure. Plain HTTP carries the password and every image in the clear, so this setup is only as safe as
-the private network: nothing but your own machines may be on it. Without such a network, serve the
-registry over HTTPS under a DNS name with a publicly trusted certificate, set `registry` to that name,
-and leave out `registryInsecure` and the `http://` endpoint in `registries.yaml`. Build jobs have no way
-to trust a private certificate authority.
+insecure. Plain HTTP carries the password and every image in the clear, so anyone who can read the
+private network's traffic gets both. Use this setup only on a network that carries nothing but machines
+you control and trust. Without such a network, serve the registry over HTTPS under a DNS name with a
+publicly trusted certificate, set `registry` to that name, and leave out `registryInsecure` and the
+`http://` endpoint in `registries.yaml`. Build jobs have no way to trust a private certificate
+authority.
 
 Deleting an image frees no disk until the registry's garbage collection runs. Run it while no build
 pushes, for example weekly from a timer:

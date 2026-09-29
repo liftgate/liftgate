@@ -5,6 +5,7 @@ import dev.liftgate.deploy.DeploymentStatus
 import dev.liftgate.http.LiftgateException
 import io.fabric8.kubernetes.api.model.apps.Deployment
 import io.fabric8.kubernetes.client.KubernetesClient
+import io.fabric8.kubernetes.client.KubernetesClientException
 import io.fabric8.kubernetes.client.informers.ResourceEventHandler
 import io.fabric8.kubernetes.client.informers.SharedIndexInformer
 import kotlinx.coroutines.channels.Channel
@@ -45,7 +46,7 @@ data class Rollout(val deploymentId: UUID, val status: DeploymentStatus, val rep
  * @author Dean
  * @date 9/17/2026
  */
-class DeploymentWatcher(private val app: App, private val kube: KubernetesClient) {
+class DeploymentWatcher(private val app: App, private val kube: KubernetesClient, private val reconciler: Reconciler = Reconciler(app, kube)) {
     private val log = LoggerFactory.getLogger(DeploymentWatcher::class.java)
     private val rollouts = Channel<Rollout>(Channel.UNLIMITED)
 
@@ -70,15 +71,20 @@ class DeploymentWatcher(private val app: App, private val kube: KubernetesClient
     private suspend fun record(rollout: Rollout) {
         while (true) {
             try {
-                return app.deployments.transition(rollout.deploymentId, rollout.status, rollout.replicasReady, rollout.error)
+                val fallback = if (rollout.status == DeploymentStatus.FAILED) app.deployments.fallback(rollout.deploymentId) else null
+                app.deployments.transition(rollout.deploymentId, rollout.status, rollout.replicasReady, rollout.error)
+                fallback?.let {
+                    reconciler.reapply(it.serviceId)
+                    app.deployments.transition(rollout.deploymentId, rollout.status, rollout.replicasReady, listOfNotNull(rollout.error, "reverted to ${it.id}").joinToString("; "))
+                }
+                return
             } catch (e: LiftgateException) {
                 return log.debug("ignored rollout of deployment {}: {}", rollout.deploymentId, e.message)
-            } catch (e: SQLException) {
-                log.warn("could not record rollout of deployment {}, retrying", rollout.deploymentId, e)
-                delay(recordRetry)
             } catch (e: Exception) {
                 currentCoroutineContext().ensureActive()
-                return log.warn("could not record rollout of deployment {}", rollout.deploymentId, e)
+                if (e !is SQLException && !(e is KubernetesClientException && e.retryable)) return log.warn("could not record rollout of deployment {}", rollout.deploymentId, e)
+                log.warn("could not record rollout of deployment {}, retrying", rollout.deploymentId, e)
+                delay(recordRetry)
             }
         }
     }

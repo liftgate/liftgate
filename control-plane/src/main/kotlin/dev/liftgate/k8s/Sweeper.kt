@@ -9,6 +9,7 @@ import dev.liftgate.db.Services
 import dev.liftgate.db.sql
 import dev.liftgate.deploy.BuildStatus
 import dev.liftgate.deploy.DeploymentStatus
+import dev.liftgate.deploy.live
 import dev.liftgate.events.LeaderElection
 import io.fabric8.kubernetes.api.model.HasMetadata
 import io.fabric8.kubernetes.client.KubernetesClient
@@ -21,12 +22,18 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.jetbrains.exposed.v1.core.SortOrder
+import org.jetbrains.exposed.v1.core.count
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.greater
+import org.jetbrains.exposed.v1.core.innerJoin
 import org.jetbrains.exposed.v1.jdbc.select
 import org.slf4j.LoggerFactory
 import java.util.UUID
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
+
+private const val KEPT_SECRETS = 5
 
 /**
  * @author Dean
@@ -41,6 +48,7 @@ class Sweeper(private val app: App, private val kube: KubernetesClient) {
             every(1.minutes, "redrive", ::redrive)
             every(1.minutes, "orphan removal", ::removeOrphans)
             every(5.minutes, "resync", ::resync)
+            every(5.minutes, "env secret pruning", ::pruneSecrets)
         }
     }
 
@@ -73,6 +81,26 @@ class Sweeper(private val app: App, private val kube: KubernetesClient) {
         }
         running.each("resync of service") { reconciler.reapply(it, live[it.toString()]) }
         reconciler.syncCustomDomains()
+    }
+
+    suspend fun pruneSecrets() {
+        val services = app.db.tx {
+            (Deployments innerJoin Services innerJoin Environments).select(Services.id, Environments.namespace)
+                .groupBy(Services.id, Environments.namespace)
+                .having { Deployments.id.count() greater KEPT_SECRETS.toLong() }
+                .map { it[Services.id] to it[Environments.namespace] }
+        }
+        services.each("pruning of the env secrets of") { (serviceId, namespace) ->
+            app.db.tx {
+                Services.select(Services.id).where { Services.id eq serviceId }.forUpdate().toList()
+                val kept = Deployments.select(Deployments.id, Deployments.status).where { Deployments.serviceId eq serviceId }
+                    .orderBy(Deployments.createdAt, SortOrder.DESC).toList()
+                    .filterIndexed { i, row -> i < KEPT_SECRETS || row[Deployments.status] in live }
+                    .map { it[Deployments.id].toString() }
+                kube.secrets().inNamespace(namespace).withLabel(SERVICE_ID_LABEL, serviceId.toString()).withLabel(DEPLOYMENT_LABEL)
+                    .withLabelNotIn(DEPLOYMENT_LABEL, *kept.toTypedArray()).delete()
+            }
+        }
     }
 
     private fun workloads(): List<HasMetadata> = kube.apps().deployments().inAnyNamespace().withLabel(MANAGED_LABEL, "true").list().items +

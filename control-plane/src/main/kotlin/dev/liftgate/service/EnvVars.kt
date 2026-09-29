@@ -6,11 +6,17 @@ import dev.liftgate.http.invalid
 import dev.liftgate.secret.SecretBox
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.jdbc.JdbcTransaction
 import org.jetbrains.exposed.v1.jdbc.batchInsert
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
+import java.util.Base64
 import java.util.UUID
+
+fun JdbcTransaction.sealedEnv(serviceId: UUID): Map<String, String> = EnvVarsTable.select(EnvVarsTable.name, EnvVarsTable.valueEncrypted)
+    .where { EnvVarsTable.serviceId eq serviceId }
+    .associate { it[EnvVarsTable.name] to Base64.getEncoder().encodeToString(it[EnvVarsTable.valueEncrypted]) }
 
 /**
  * @author Dean
@@ -23,6 +29,8 @@ class EnvVars(private val db: Db, private val secrets: SecretBox) {
             EnvVar(it[EnvVarsTable.name], if (secret && !reveal) null else secrets.open(it[EnvVarsTable.valueEncrypted]), secret)
         }
     }
+
+    fun open(sealed: Map<String, String>): List<EnvVar> = sealed.map { (name, value) -> EnvVar(name, secrets.open(Base64.getDecoder().decode(value))) }
 
     suspend fun replace(serviceId: UUID, vars: List<EnvVar>) {
         db.tx {

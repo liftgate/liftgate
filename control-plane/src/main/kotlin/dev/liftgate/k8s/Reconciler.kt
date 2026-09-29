@@ -44,7 +44,7 @@ class Reconciler(private val app: App, private val kube: KubernetesClient) {
         try {
             apply(release)
         } catch (e: KubernetesClientException) {
-            if (e.code !in 400..499 || e.code == 409 || e.code == 429) throw e
+            if (e.retryable) throw e
             log.warn("release of deployment {} failed", deployment.id, e)
             return app.deployments.transition(deployment.id, DeploymentStatus.FAILED, error = e.status?.message ?: e.message)
         }
@@ -54,13 +54,12 @@ class Reconciler(private val app: App, private val kube: KubernetesClient) {
     }
 
     suspend fun reroute(serviceId: UUID) {
-        app.deployments.current(serviceId)?.let { load(it) }?.let { withContext(Dispatchers.IO) { route(it) } }
+        applied(serviceId)?.let { load(it) }?.let { withContext(Dispatchers.IO) { route(it) } }
         syncCustomDomains()
     }
 
     suspend fun reapply(serviceId: UUID, live: HasMetadata? = null) {
-        val latest = app.deployments.forService(serviceId, limit = 1).singleOrNull() ?: return
-        val release = load(latest.takeIf { it.status == DeploymentStatus.RELEASING } ?: app.deployments.current(serviceId) ?: latest) ?: return
+        val release = applied(serviceId)?.let { load(it) } ?: return
         if (live != null && (live.stopped() || !release.suspended) &&
             (live.metadata.labels?.get(DEPLOYMENT_LABEL) == release.deployment.id.toString() || overtaken(release, live))
         ) return withContext(Dispatchers.IO) { environment(release).forEach { kube.resource(it).apply() } }
@@ -87,12 +86,17 @@ class Reconciler(private val app: App, private val kube: KubernetesClient) {
         return consumers.coroutineContext.job
     }
 
+    private suspend fun applied(serviceId: UUID): Deployment? {
+        val latest = app.deployments.forService(serviceId, limit = 1).singleOrNull() ?: return null
+        return latest.takeIf { it.status == DeploymentStatus.RELEASING } ?: app.deployments.current(serviceId) ?: latest
+    }
+
     private suspend fun load(deployment: Deployment): Release? {
         val scope = app.services.scope(deployment.serviceId) ?: return null
         val build = app.builds.byId(deployment.buildId) ?: return null
         return Release(
-            deployment, build, scope.service, scope.environment, scope.project, scope.org,
-            app.envVars.list(scope.service.id, reveal = true),
+            deployment, build, deployment.config?.service(scope.service.id, scope.service.environmentId) ?: scope.service, scope.environment, scope.project, scope.org,
+            deployment.env?.let(app.envVars::open) ?: app.envVars.list(scope.service.id, reveal = true),
             app.domains.forService(scope.service.id).filter { it.verifiedAt != null },
             app.config.plans.of(scope.org.plan),
         )

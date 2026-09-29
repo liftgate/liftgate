@@ -75,7 +75,10 @@ data class ServiceSpec(
     val memoryMb: Int = 512,
     val cronSchedule: String? = null,
     val startCommand: String? = null,
-)
+) {
+    fun service(id: UUID, environmentId: UUID) =
+        Service(id, environmentId, slug, name, kind, rootDir, buildStrategy, dockerfilePath, port, replicas, cpuMillis, memoryMb, cronSchedule, startCommand)
+}
 
 /**
  * @author Dean

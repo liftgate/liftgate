@@ -123,8 +123,9 @@ object Resources {
     }
 
     fun secret(r: Release): Secret = SecretBuilder()
-        .withMetadata(meta(r.secretName(), r.namespace, r.serviceLabels()))
+        .withMetadata(meta(r.secretName(), r.namespace, r.deploymentLabels()))
         .withType("Opaque")
+        .withImmutable(r.deployment.env != null)
         .withData<String, String>(r.envVars.associate { it.name to Base64.getEncoder().encodeToString(it.value.orEmpty().toByteArray()) })
         .build()
 
@@ -270,7 +271,7 @@ object Resources {
 
     private fun Release.port() = service.port ?: DEFAULT_WEB_PORT.takeIf { service.kind.servesHttp }
 
-    private fun Release.secretName() = "${service.slug}-env"
+    private fun Release.secretName() = if (deployment.env == null) "${service.slug}-env" else "${service.slug}-env-${deployment.id.toString().take(8)}"
 
     private fun Release.selectorLabels() = mapOf(SERVICE_LABEL to service.slug)
 

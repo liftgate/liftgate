@@ -3,6 +3,7 @@ package dev.liftgate.deploy
 import dev.liftgate.db.Builds as BuildsTable
 import dev.liftgate.db.Db
 import dev.liftgate.db.Deployments as DeploymentsTable
+import dev.liftgate.db.Services as ServicesTable
 import dev.liftgate.db.now
 import dev.liftgate.db.sql
 import dev.liftgate.db.toEnum
@@ -12,6 +13,9 @@ import dev.liftgate.events.requestedSince
 import dev.liftgate.http.LiftgateException
 import dev.liftgate.http.conflict
 import dev.liftgate.http.notFound
+import dev.liftgate.org.Limits
+import dev.liftgate.service.sealedEnv
+import dev.liftgate.service.toService
 import io.ktor.http.HttpStatusCode
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
@@ -21,10 +25,12 @@ import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.greater
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.less
 import org.jetbrains.exposed.v1.core.neq
 import org.jetbrains.exposed.v1.jdbc.JdbcTransaction
+import org.jetbrains.exposed.v1.jdbc.andWhere
 import org.jetbrains.exposed.v1.jdbc.insertReturning
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
@@ -50,14 +56,20 @@ fun ResultRow.toDeployment() = Deployment(
     this[DeploymentsTable.replicasReady],
     this[DeploymentsTable.error],
     this[DeploymentsTable.createdAt].toInstant(),
+    this[DeploymentsTable.config],
+    this[DeploymentsTable.env],
 )
 
-fun JdbcTransaction.createDeployment(serviceId: UUID, buildId: UUID): Deployment {
+fun JdbcTransaction.createDeployment(serviceId: UUID, buildId: UUID, snapshotOf: Deployment? = null): Deployment {
+    val spec = ServicesTable.selectAll().where { ServicesTable.id eq serviceId }.forUpdate().single().toService().spec()
+    val sealed = snapshotOf?.env ?: sealedEnv(serviceId)
     val deployment = DeploymentsTable.insertReturning {
         it[id] = UUID.randomUUID()
         it[DeploymentsTable.serviceId] = serviceId
         it[DeploymentsTable.buildId] = buildId
         it[status] = DeploymentStatus.PENDING.sql
+        it[config] = snapshotOf?.config ?: spec
+        it[env] = sealed
     }.single().toDeployment()
     requestRelease(deployment.id)
     return deployment
@@ -72,7 +84,7 @@ private fun JdbcTransaction.updated(id: UUID, status: DeploymentStatus, changed:
  * @author Dean
  * @date 9/17/2026
  */
-class Deployments(private val db: Db, private val metrics: MeterRegistry = SimpleMeterRegistry()) {
+class Deployments(private val db: Db, private val metrics: MeterRegistry = SimpleMeterRegistry(), private val limits: Limits = Limits()) {
     suspend fun byId(id: UUID): Deployment? = db.tx { find(id) }
 
     suspend fun forService(serviceId: UUID, limit: Int = 50): List<Deployment> = db.tx {
@@ -86,20 +98,32 @@ class Deployments(private val db: Db, private val metrics: MeterRegistry = Simpl
 
     suspend fun rollback(deploymentId: UUID): Deployment = db.tx {
         val target = find(deploymentId) ?: notFound("deployment")
-        if (running(target.serviceId).any { it[DeploymentsTable.buildId] == target.buildId }) conflict("that build is already running")
+        if (target.status == DeploymentStatus.RUNNING) conflict("that deployment is already running")
         if (BuildsTable.select(BuildsTable.imagePruned).where { BuildsTable.id eq target.buildId }.forUpdate().single()[BuildsTable.imagePruned]) {
             throw LiftgateException(HttpStatusCode.Conflict, "image_pruned", "the image of that build has been pruned; deploy its commit again")
         }
-        DeploymentsTable.update({ (DeploymentsTable.serviceId eq target.serviceId) and (DeploymentsTable.status eq DeploymentStatus.RUNNING.sql) }) {
-            it[status] = DeploymentStatus.ROLLED_BACK.sql
-        }
-        createDeployment(target.serviceId, target.buildId)
+        target.config?.let { limits.resize(target.serviceId, it) }
+        createDeployment(target.serviceId, target.buildId, snapshotOf = target)
+    }
+
+    suspend fun redeploy(serviceId: UUID): Deployment = db.tx {
+        ServicesTable.select(ServicesTable.id).where { ServicesTable.id eq serviceId }.forUpdate().toList()
+        val current = DeploymentsTable.select(DeploymentsTable.buildId)
+            .where { (DeploymentsTable.serviceId eq serviceId) and (DeploymentsTable.status inList live) }
+            .orderBy(DeploymentsTable.createdAt, SortOrder.DESC).limit(1).singleOrNull() ?: conflict("nothing is running; deploy a build first")
+        createDeployment(serviceId, current[DeploymentsTable.buildId])
+    }
+
+    suspend fun fallback(failedId: UUID): Deployment? = db.tx {
+        val failed = find(failedId)?.takeUnless { replaced(it) } ?: return@tx null
+        running(failed.serviceId).andWhere { DeploymentsTable.id neq failedId }.orderBy(DeploymentsTable.createdAt, SortOrder.DESC).limit(1).singleOrNull()?.toDeployment()?.takeIf { it.env != null }
     }
 
     suspend fun transition(id: UUID, to: DeploymentStatus, replicasReady: Int = 0, error: String? = null) {
         val createdAt = db.tx {
             val current = find(id, lock = true) ?: notFound("deployment")
             if (!current.status.allows(to)) conflict("deployment cannot move from ${current.status.sql} to ${to.sql}")
+            if (to == DeploymentStatus.FAILED && current.status == DeploymentStatus.RUNNING && replaced(current)) conflict("a running deployment with a newer one cannot fail")
             if (current.status == to && current.replicasReady == replicasReady && current.error == error) return@tx null
             DeploymentsTable.update({ DeploymentsTable.id eq id }) {
                 it[status] = to.sql
@@ -135,6 +159,10 @@ class Deployments(private val db: Db, private val metrics: MeterRegistry = Simpl
 
     private fun find(id: UUID, lock: Boolean = false) =
         DeploymentsTable.selectAll().where { DeploymentsTable.id eq id }.apply { if (lock) forUpdate() }.singleOrNull()?.toDeployment()
+
+    private fun replaced(deployment: Deployment) = !DeploymentsTable.select(DeploymentsTable.id).where {
+        (DeploymentsTable.serviceId eq deployment.serviceId) and (DeploymentsTable.createdAt greater deployment.createdAt.atOffset(ZoneOffset.UTC))
+    }.empty()
 
     private fun unreleasedBefore(cutoff: OffsetDateTime) = (DeploymentsTable.status inList unreleased) and (DeploymentsTable.createdAt less cutoff)
 

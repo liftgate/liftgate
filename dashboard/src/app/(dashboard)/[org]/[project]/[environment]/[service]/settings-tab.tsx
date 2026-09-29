@@ -1,9 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAction } from "@/lib/hooks";
 import type { Service, ServiceSpec } from "@/lib/types";
+import { SaveActions, saved } from "@/components/save-actions";
 import { ServiceForm } from "@/components/service-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -11,8 +13,11 @@ import { FormError } from "@/components/ui/input";
 
 export function SettingsTab({ service, projectHref, onChanged }: { service: Service; projectHref: string; onChanged: () => void }) {
   const router = useRouter();
-  const save = useAction(async (spec: ServiceSpec) => {
+  const [status, setStatus] = useState<string>();
+  const save = useAction(async (spec: ServiceSpec, andRedeploy: boolean) => {
+    setStatus(undefined);
     await api(`/services/${service.id}`, { method: "PATCH", body: spec });
+    setStatus(await saved(service.id, andRedeploy));
     onChanged();
   });
   const remove = useAction(async () => {
@@ -23,9 +28,15 @@ export function SettingsTab({ service, projectHref, onChanged }: { service: Serv
   return (
     <div className="flex flex-col gap-6">
       <Card>
-        <CardHeader title="Service settings" description="Changes apply on the next release." />
+        <CardHeader title="Service settings" description="Save keeps changes for the next deploy. Save and redeploy applies them now without a rebuild." />
         <div className="p-6">
-          <ServiceForm initial={service} pending={save.pending} error={save.error} submitLabel="Save changes" onSubmit={save.run} />
+          <ServiceForm
+            initial={service}
+            pending={save.pending}
+            error={save.error}
+            actions={<SaveActions pending={save.pending} status={status} />}
+            onSubmit={(spec, _, andRedeploy) => save.run(spec, andRedeploy)}
+          />
         </div>
       </Card>
       <Card>

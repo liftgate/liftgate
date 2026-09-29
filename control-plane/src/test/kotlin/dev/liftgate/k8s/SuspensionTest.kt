@@ -85,8 +85,8 @@ class SuspensionTest {
         val services = (listOf(ServiceSpec("api", "API", ServiceKind.WEB, replicas = 2), ServiceSpec("worker", "Worker", ServiceKind.WORKER, replicas = 3)) + extra)
             .map { Services(db).create(environment.id, it) }
         Domains(db, "liftgate.app").ensurePlatform(requireNotNull(Services(db).scope(services.first().id)))
-        services.forEach { deployments.transition(release(it).id, DeploymentStatus.RUNNING, replicasReady = it.replicas) }
         namespace = environment.namespace
+        services.forEach { deployments.transition(release(it).id, DeploymentStatus.RUNNING, replicasReady = it.replicas) }
         val namespaced = "namespaces/$namespace"
         val applied = listOf("/api/v1/$namespaced", "/api/v1/$namespaced/resourcequotas/liftgate") +
             listOf("default-deny", "allow-internal", "allow-egress").map { "/apis/networking.k8s.io/v1/$namespaced/networkpolicies/$it" }
@@ -98,13 +98,15 @@ class SuspensionTest {
                 "/apis/batch/v1/$namespaced/cronjobs/${it.slug}",
             )
         }
-        (applied + workloads + services.map { "/api/v1/$namespaced/secrets/${it.slug}-env" })
-            .forEach { path -> server.expect().patch().withPath("$path?fieldManager=liftgate&force=true").andReply(200) { record(it) }.always() }
+        (applied + workloads).forEach { path -> server.expect().patch().withPath("$path?fieldManager=liftgate&force=true").andReply(200) { record(it) }.always() }
         workloads.forEach { accept(it) }
         return org.id to services
     }
 
-    private suspend fun release(service: Service) = assertNotNull(builds.markSucceeded(builds.request(service.id, "abc123", null, "main").id, "registry/acme/shop-${service.slug}:abc123"))
+    private suspend fun release(service: Service, secret: Boolean = true) =
+        assertNotNull(builds.markSucceeded(builds.request(service.id, "abc123", null, "main").id, "registry/acme/shop-${service.slug}:abc123")).also {
+            if (secret) server.expect().patch().withPath("/api/v1/namespaces/$namespace/secrets/${service.slug}-env-${it.id.toString().take(8)}?fieldManager=liftgate&force=true").andReply(200) { request -> record(request) }.always()
+        }
 
     private fun accept(path: String) = server.expect().delete().withPath(path).andReply(200) { record(it).let { StatusBuilder().build() } }.always()
 
@@ -179,7 +181,7 @@ class SuspensionTest {
         val (orgId, services) = seed()
         val (secretless, rejected) = listOf("secretless" to ServiceKind.WEB, "rejected" to ServiceKind.WORKER)
             .map { (slug, kind) -> Services(db).create(services.first().environmentId, ServiceSpec(slug, slug, kind)) }
-        listOf(secretless, rejected).forEach { deployments.transition(release(it).id, DeploymentStatus.RUNNING) }
+        listOf(secretless, rejected).forEach { deployments.transition(release(it, secret = false).id, DeploymentStatus.RUNNING) }
         val namespaced = "namespaces/$namespace"
         server.expect().patch().withPath("/apis/apps/v1/$namespaced/deployments/secretless?fieldManager=liftgate&force=true").andReply(200) { record(it) }.always()
         listOf(routePath(namespaced, secretless), "/apis/apps/v1/$namespaced/deployments/rejected").forEach { accept(it) }

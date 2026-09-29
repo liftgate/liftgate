@@ -32,6 +32,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
+import io.fabric8.kubernetes.api.model.Service as KubeService
 import io.fabric8.kubernetes.api.model.apps.Deployment as KubeDeployment
 
 /**
@@ -242,6 +243,18 @@ class ReconcilerTest {
         acceptAll()
         Reconciler(app, client).reroute(testService.id)
         assertEquals(listOf(servicePath, routePath, certificatePath, gatewayPath), paths("PATCH"))
+    }
+
+    @Test
+    fun `reroute during a release routes to the port of the releasing deployment`() = runBlocking {
+        acceptAll()
+        val running = testDeployment.copy(status = DeploymentStatus.RUNNING, config = testService.spec())
+        val releasing = running.copy(id = UUID.randomUUID(), status = DeploymentStatus.RELEASING, createdAt = running.createdAt.plusSeconds(1), config = testService.copy(port = 8080).spec())
+        coEvery { deployments.forService(testService.id, 1) } returns listOf(releasing)
+        coEvery { deployments.current(testService.id) } returns running
+        Reconciler(app, client).reroute(testService.id)
+        val service = client.kubernetesSerialization.unmarshal(sent().single { it.path == servicePath + apply }.utf8Body, KubeService::class.java)
+        assertEquals(8080, service.spec.ports.single().targetPort.intVal)
     }
 
     @Test

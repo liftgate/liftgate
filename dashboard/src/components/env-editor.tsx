@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { useAction } from "@/lib/hooks";
 import type { EnvVar } from "@/lib/types";
 import { envPayload, keepsStoredValue, storedRows } from "@/lib/util";
+import { redeployRequested, SaveActions, saved } from "./save-actions";
 import { Button } from "./ui/button";
 import { Card, CardHeader } from "./ui/card";
 import { EmptyState } from "./ui/empty-state";
@@ -12,15 +13,16 @@ import { FormError, Input } from "./ui/input";
 
 export function EnvEditor({ serviceId, initial }: { serviceId: string; initial: EnvVar[] }) {
   const [rows, setRows] = useState(() => storedRows(initial));
-  const [saved, setSaved] = useState(false);
-  const save = useAction(async () => {
+  const [status, setStatus] = useState<string>();
+  const save = useAction(async (andRedeploy: boolean) => {
+    setStatus(undefined);
     const body = envPayload(rows);
     await api(`/services/${serviceId}/env`, { method: "PUT", body });
     setRows(storedRows(body));
-    setSaved(true);
+    setStatus(await saved(serviceId, andRedeploy));
   });
   const change = (next: EnvVar[]) => {
-    setSaved(false);
+    setStatus(undefined);
     setRows(next);
   };
   const update = (i: number, patch: Partial<EnvVar>) => change(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
@@ -31,14 +33,14 @@ export function EnvEditor({ serviceId, initial }: { serviceId: string; initial: 
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        save.run();
+        save.run(redeployRequested(e));
       }}
       className="flex flex-col gap-4"
     >
       <Card>
         <CardHeader
           title="Environment variables"
-          description="Applied to every container of this service on its next release. Secret values are write-only."
+          description="Injected into every container of this service. Save and redeploy applies them without a rebuild. Secret values are write-only."
           actions={addRow}
         />
         {rows.length === 0 ? (
@@ -84,13 +86,8 @@ export function EnvEditor({ serviceId, initial }: { serviceId: string; initial: 
           </div>
         )}
       </Card>
-      <div className="flex items-center gap-4">
-        <Button type="submit" variant="primary" pending={save.pending}>
-          Save changes
-        </Button>
-        {saved && <span className="text-sm text-graphite-400">Saved</span>}
-        <FormError message={save.error} />
-      </div>
+      <FormError message={save.error} />
+      <SaveActions pending={save.pending} status={status} />
     </form>
   );
 }

@@ -25,10 +25,7 @@ const charts: { key: "cpu" | "memory" | "networkRx" | "networkTx"; title: string
 export function MetricsTab({ service }: { service: Service }) {
   const [range, setRange] = useState<Range>("1h");
   const query = useApi<ServiceMetrics>(`/services/${service.id}/metrics?range=${range}`);
-  const [shown, setShown] = useState<ServiceMetrics>();
-  if (query.data && query.data !== shown) setShown(query.data);
   usePolling(!query.error, query.reload, 30_000);
-  const data = query.data ?? shown;
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -39,20 +36,20 @@ export function MetricsTab({ service }: { service: Service }) {
             </Button>
           ))}
         </div>
-        {data ? (
+        {query.data ? (
           <p className="text-sm text-graphite-400">
-            <span className="font-medium text-white">{data.restarts}</span> {data.restarts === 1 ? "restart" : "restarts"} across current instances
+            <span className="font-medium text-white">{query.data.restarts}</span> {query.data.restarts === 1 ? "restart" : "restarts"} across current instances
           </p>
         ) : (
           !query.error && <Skeleton className="h-5 w-48" />
         )}
       </div>
-      <Loaded query={{ ...query, data }} skeleton={<Charts />}>
+      <Loaded query={query} skeleton={<Charts />}>
         {(metrics) =>
           charts.every((c) => metrics[c.key].length === 0) ? (
             <EmptyState title={`No metrics in the last ${ranges[range]}`} description="Charts appear a few minutes after a deployment of this service starts running." />
           ) : (
-            <Charts metrics={metrics} stale={!query.data} />
+            <Charts metrics={metrics} />
           )
         }
       </Loaded>
@@ -60,9 +57,9 @@ export function MetricsTab({ service }: { service: Service }) {
   );
 }
 
-function Charts({ metrics, stale }: { metrics?: ServiceMetrics; stale?: boolean }) {
+function Charts({ metrics }: { metrics?: ServiceMetrics }) {
   return (
-    <div className={`grid gap-4 transition-opacity lg:grid-cols-2 ${stale ? "opacity-60" : ""}`}>
+    <div className="grid gap-4 lg:grid-cols-2">
       {charts.map((chart) => {
         const points = metrics?.[chart.key] ?? [];
         const latest = points.at(-1);

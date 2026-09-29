@@ -25,6 +25,7 @@ const toSpec = (v: Record<string, string>): ServiceSpec => ({
   memoryMb: Number(v.memoryMb),
   cronSchedule: v.cronSchedule || null,
   startCommand: v.startCommand || null,
+  healthCheckPath: v.healthCheckPath || null,
 });
 
 export function ServiceForm({
@@ -99,6 +100,9 @@ export function ServiceForm({
         </Field>
         <Field label="Start command" hint="Overrides the image entrypoint">
           <Input name="startCommand" defaultValue={initial?.startCommand ?? ""} className="font-mono" />
+        </Field>
+        <Field label="Health check path" hint="Probed over HTTP on the port; empty only checks that the port accepts connections">
+          <Input name="healthCheckPath" placeholder="/healthz" maxLength={256} defaultValue={initial?.healthCheckPath ?? ""} className="font-mono" />
         </Field>
       </div>
       <FormError message={error} />

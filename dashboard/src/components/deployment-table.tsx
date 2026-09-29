@@ -26,7 +26,10 @@ export function DeploymentTable({
           return (
             <Row key={deployment.id}>
               <Cell>
-                <StatusBadge status={deployment.status} />
+                <div className="flex gap-2">
+                  <StatusBadge status={deployment.status} />
+                  {deployment.status === "running" && deployment.health && deployment.health !== "healthy" && <StatusBadge status={deployment.health} />}
+                </div>
                 {deployment.error && <p className="mt-1 max-w-xs text-xs text-danger">{deployment.error}</p>}
               </Cell>
               <Cell mono>

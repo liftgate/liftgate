@@ -261,6 +261,7 @@ object Services : Table("services") {
     val cronSchedule = text("cron_schedule").nullable()
     val startCommand = text("start_command").nullable()
     val createdAt = createdAtColumn()
+    val healthCheckPath = text("health_check_path").nullable()
     override val primaryKey = PrimaryKey(id)
 
     init {
@@ -328,6 +329,7 @@ object Deployments : Table("deployments") {
     val createdAt = createdAtColumn()
     val config = jsonb("config", json, ServiceSpec.serializer()).nullable()
     val env = jsonb("env", json, MapSerializer(String.serializer(), String.serializer())).nullable()
+    val health = oneOf("health", "healthy", "degraded", "down").nullable()
     override val primaryKey = PrimaryKey(id)
 
     init {

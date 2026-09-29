@@ -507,6 +507,7 @@ A limit that is left out is unlimited, so `unlimited: {}` limits nothing.
 | `ephemeralMb` | Disk per container (default `2048`) |
 | `egressBandwidth` | `kubernetes.io/egress-bandwidth` of tenant pods, such as `20M`; needs the Cilium bandwidth manager |
 | `udp` | `false` closes UDP to the internet, leaving DNS to `kube-system` and traffic inside the environment (default `true`) |
+| `cronTimeoutSeconds` | Run time of one cron job before it is stopped and marked failed, so a hung run does not hold back later runs (default `3600`) |
 
 Creating or resizing past a limit answers `409 plan_limit` naming it, and nothing is written;
 changes that do not add to an organization that is already over a limit still pass. Each

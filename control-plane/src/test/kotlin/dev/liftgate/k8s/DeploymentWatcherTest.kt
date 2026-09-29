@@ -1,8 +1,10 @@
 package dev.liftgate.k8s
 
 import dev.liftgate.App
+import dev.liftgate.deploy.DeploymentHealth
 import dev.liftgate.deploy.DeploymentStatus
 import dev.liftgate.deploy.Deployments
+import dev.liftgate.http.conflict
 import io.fabric8.kubernetes.api.model.apps.Deployment
 import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder
 import io.fabric8.kubernetes.api.model.apps.DeploymentStatusBuilder
@@ -55,7 +57,7 @@ class DeploymentWatcherTest {
 
     @Test
     fun `a complete rollout is running`() =
-        assertEquals(Rollout(testDeployment.id, DeploymentStatus.RUNNING, 2), Rollout.of(rollout()))
+        assertEquals(Rollout(testDeployment.id, DeploymentStatus.RUNNING, 2, DeploymentHealth.HEALTHY), Rollout.of(rollout()))
 
     @Test
     fun `old pods, missing pods and unavailable pods keep it releasing`() {
@@ -63,6 +65,14 @@ class DeploymentWatcherTest {
             assertEquals(DeploymentStatus.RELEASING, Rollout.of(it)?.status)
         }
         assertEquals(1, Rollout.of(rollout(available = 1, ready = 1))?.replicasReady)
+    }
+
+    @Test
+    fun `health is healthy with every replica ready, degraded with some and down with none`() {
+        assertEquals(
+            listOf(DeploymentHealth.HEALTHY, DeploymentHealth.DEGRADED, DeploymentHealth.DOWN),
+            listOf(2, 1, 0).map { Rollout.of(rollout(available = it, ready = it))?.health },
+        )
     }
 
     @Test
@@ -74,7 +84,7 @@ class DeploymentWatcherTest {
 
     @Test
     fun `an exceeded progress deadline fails the deployment with the cluster message`() =
-        assertEquals(Rollout(testDeployment.id, DeploymentStatus.FAILED, 0, "api has timed out progressing"), Rollout.of(stalled()))
+        assertEquals(Rollout(testDeployment.id, DeploymentStatus.FAILED, 0, DeploymentHealth.DOWN, "api has timed out progressing"), Rollout.of(stalled()))
 
     private fun app(deployments: Deployments) = mockk<App> {
         every { this@mockk.scope } returns this@DeploymentWatcherTest.scope
@@ -87,6 +97,18 @@ class DeploymentWatcherTest {
         DeploymentWatcher(app(deployments), client).start().use {
             client.resource(rollout()).create()
             coVerify(timeout = 10_000) { deployments.transition(testDeployment.id, DeploymentStatus.RUNNING, 2, null) }
+            coVerify(timeout = 10_000) { deployments.observe(testDeployment.id, 2, DeploymentHealth.HEALTHY) }
+        }
+    }
+
+    @Test
+    fun `a running deployment whose pods stop being ready is recorded down without a lifecycle transition`() {
+        val deployments = mockk<Deployments>(relaxUnitFun = true) {
+            coEvery { transition(testDeployment.id, DeploymentStatus.RELEASING, 0, null) } answers { conflict("deployment cannot move from running to releasing") }
+        }
+        DeploymentWatcher(app(deployments), client).start().use {
+            client.resource(rollout(available = 0, ready = 0)).create()
+            coVerify(timeout = 10_000) { deployments.observe(testDeployment.id, 0, DeploymentHealth.DOWN) }
         }
     }
 
@@ -97,14 +119,15 @@ class DeploymentWatcherTest {
         val reconciler = mockk<Reconciler> { coEvery { reapply(testService.id) } throws KubernetesClientException("unavailable", 503, null) andThen Unit }
         client.resource(stalled()).create()
         DeploymentWatcher(app(deployments), client, reconciler).start().use {
-            coVerify(timeout = 15_000) { deployments.transition(testDeployment.id, DeploymentStatus.FAILED, 0, "api has timed out progressing; reverted to ${previous.id}") }
+            coVerify(timeout = 15_000) { deployments.reverted(testDeployment.id, previous.id) }
+            coVerify { deployments.transition(testDeployment.id, DeploymentStatus.FAILED, 0, "api has timed out progressing") }
             coVerify(exactly = 2) { reconciler.reapply(testService.id) }
         }
     }
 
     @Test
     fun `a rollout that could not be written while postgres was unreachable is recorded once it is back`() {
-        val deployments = mockk<Deployments> {
+        val deployments = mockk<Deployments>(relaxUnitFun = true) {
             coEvery { transition(testDeployment.id, DeploymentStatus.RUNNING, 2, null) } throws SQLException("connection refused") andThen Unit
         }
         DeploymentWatcher(app(deployments), client).start().use {

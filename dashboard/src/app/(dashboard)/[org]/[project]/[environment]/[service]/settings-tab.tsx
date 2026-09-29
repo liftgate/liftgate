@@ -9,6 +9,7 @@ import { SaveActions, saved } from "@/components/save-actions";
 import { ServiceForm } from "@/components/service-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
+import { CopyField } from "@/components/ui/copy-field";
 import { FormError } from "@/components/ui/input";
 
 export function SettingsTab({ service, projectHref, onChanged }: { service: Service; projectHref: string; onChanged: () => void }) {
@@ -29,7 +30,10 @@ export function SettingsTab({ service, projectHref, onChanged }: { service: Serv
     <div className="flex flex-col gap-6">
       <Card>
         <CardHeader title="Service settings" description="Save keeps changes for the next deploy. Save and redeploy applies them now without a rebuild." />
-        <div className="p-6">
+        <div className="flex flex-col gap-6 p-6">
+          {service.internalHost && (
+            <CopyField label="Private address" value={service.internalHost} hint="Services in this environment reach it on port 80 and on its own port" />
+          )}
           <ServiceForm
             initial={service}
             pending={save.pending}

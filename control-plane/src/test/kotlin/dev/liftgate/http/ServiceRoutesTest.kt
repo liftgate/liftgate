@@ -110,9 +110,9 @@ class ServiceRoutesTest {
         val spec = slot<ServiceSpec>()
         coEvery { services.update(service.id, capture(spec)) } answers { service.copy(replicas = 3, port = 8080) }
         application { liftgate(app) }
-        val response = client.patch("/api/v1/services/${service.id}") { jsonBody("""{"replicas":3,"port":8080}""") }
+        val response = client.patch("/api/v1/services/${service.id}") { jsonBody("""{"replicas":3,"port":8080,"healthCheckPath":"/healthz"}""") }
         assertEquals(HttpStatusCode.OK, response.status)
-        assertEquals(service.spec().copy(replicas = 3, port = 8080), spec.captured)
+        assertEquals(service.spec().copy(replicas = 3, port = 8080, healthCheckPath = "/healthz"), spec.captured)
     }
 
     @Test
@@ -122,6 +122,7 @@ class ServiceRoutesTest {
             """{"replicas":-1}""", """{"replicas":5000}""", """{"cpuMillis":64000}""", """{"memoryMb":1048576}""", """{"kind":"cron"}""", """{"port":70000}""",
             """{"slug":"Bad Slug"}""", """{"slug":"renamed"}""", """{"rootDir":"../.docker"}""", """{"rootDir":"a/../../b"}""", """{"rootDir":"$(id)"}""",
             """{"dockerfilePath":"../src/Dockerfile"}""", """{"dockerfilePath":"/etc/passwd"}""", """{"dockerfilePath":""}""",
+            """{"port":8080,"healthCheckPath":"healthz"}""", """{"port":8080,"healthCheckPath":""}""", """{"port":8080,"healthCheckPath":"/${"a".repeat(256)}"}""", """{"healthCheckPath":"/healthz"}""",
         ).forEach {
             assertEquals(HttpStatusCode.UnprocessableEntity, client.patch("/api/v1/services/${service.id}") { jsonBody(it) }.status, it)
         }

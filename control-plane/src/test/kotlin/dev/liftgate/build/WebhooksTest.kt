@@ -88,7 +88,7 @@ class WebhooksTest {
     }
 
     @Test
-    fun `a push builds only the services whose watch paths or root directory match a changed file, a forced push or one past the matching budget builds them all, and every push spends the webhook limit`() = testApplication {
+    fun `a push builds only the services whose watch paths or root directory match a changed file, a forced, over budget or file capped push builds them all, and every push spends the webhook limit`() = testApplication {
         val web = testService.copy(id = UUID.randomUUID(), slug = "web", rootDir = "/apps/web")
         val api = testService.copy(id = UUID.randomUUID(), slug = "api", rootDir = "/apps/api", watchPaths = listOf("apps/api/**", "packages/**"))
         every { app.services } returns mockk<Services> { coEvery { forEnvironment(testEnvironment.id) } returns listOf(web, api) }
@@ -96,7 +96,8 @@ class WebhooksTest {
         val commits = """[{"added":["apps/web/app/page.tsx"],"modified":["apps/web/package.json"],"removed":[]},{"added":[],"modified":[],"removed":["apps/web/old.css"]}]"""
         val flood = """[{"added":["docs/${"x".repeat(200_000)}"],"modified":[],"removed":[]}]"""
         val docs = """[{"added":["docs/intro.md"],"modified":[],"removed":[]}]"""
-        listOf(push(commits = commits), push(commits = commits, forced = true), push(commits = flood), push(commits = docs)).forEach { body ->
+        val capped = """[{"added":[],"modified":[${(1..3000).joinToString(",") { "\"docs/$it.md\"" }}],"removed":[]}]"""
+        listOf(push(commits = commits), push(commits = commits, forced = true), push(commits = flood), push(commits = docs), push(commits = capped)).forEach { body ->
             val response = client.post("/api/v1/webhooks/github") {
                 header("X-GitHub-Event", "push")
                 header("X-Hub-Signature-256", sign(body))
@@ -104,9 +105,9 @@ class WebhooksTest {
             }
             assertEquals(HttpStatusCode.NoContent, response.status)
         }
-        coVerify(exactly = 3) { builds.request(web.id, "abc123", "ship it", "main") }
-        coVerify(exactly = 2) { builds.request(api.id, "abc123", "ship it", "main") }
-        verify(exactly = 4) { cache.allow("rate:webhook:42", WEBHOOKS_PER_MINUTE, 1.minutes) }
+        coVerify(exactly = 4) { builds.request(web.id, "abc123", "ship it", "main") }
+        coVerify(exactly = 3) { builds.request(api.id, "abc123", "ship it", "main") }
+        verify(exactly = 5) { cache.allow("rate:webhook:42", WEBHOOKS_PER_MINUTE, 1.minutes) }
     }
 
     @Test

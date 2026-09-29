@@ -3,6 +3,7 @@ package dev.liftgate.metering
 import dev.liftgate.http.json
 import dev.liftgate.k8s.ORG_ID_LABEL
 import dev.liftgate.k8s.SERVICE_ID_LABEL
+import dev.liftgate.metering.Prometheus.Point
 import io.fabric8.kubernetes.api.model.PodBuilder
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
@@ -11,6 +12,7 @@ import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.Url
 import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.runBlocking
@@ -32,11 +34,18 @@ class PrometheusTest {
         ]}}
     """
 
-    private fun prometheus(status: HttpStatusCode, body: String, queries: MutableList<String?> = mutableListOf()) = Prometheus(
+    private val matrix = """
+        {"status":"success","data":{"resultType":"matrix","result":[
+          {"metric":{},"values":[[1789000000,"0.125"],[1789000012,"0.5"],[1789000036,"1e-3"]]}
+        ]}}
+    """
+
+    private fun prometheus(status: HttpStatusCode, body: String, queries: MutableList<String?> = mutableListOf(), path: String = "/api/v1/query", urls: MutableList<Url> = mutableListOf()) = Prometheus(
         "http://prometheus:9090",
         HttpClient(MockEngine { request ->
             queries += request.url.parameters["query"]
-            assertEquals("/api/v1/query", request.url.encodedPath)
+            urls += request.url
+            assertEquals(path, request.url.encodedPath)
             respond(body, status, headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString()))
         }) { install(ContentNegotiation) { json(json) } },
     )
@@ -64,6 +73,19 @@ class PrometheusTest {
     fun `query errors are raised with the prometheus message`() {
         val failing = prometheus(HttpStatusCode.BadRequest, """{"status":"error","errorType":"bad_data","error":"parse error"}""")
         assertEquals("prometheus query failed: parse error", assertFailsWith<IllegalStateException> { runBlocking { failing.query("sum(") } }.message)
+    }
+
+    @Test
+    fun `range queries send the window and step and parse every point of the matrix`() = runBlocking {
+        val urls = mutableListOf<Url>()
+        val result = prometheus(HttpStatusCode.OK, matrix, path = "/api/v1/query_range", urls = urls).range("sum(up)", 1789000000, 1789003588, 12)
+        assertEquals(mapOf(emptyMap<String, String>() to listOf(Point(1789000000, 0.125), Point(1789000012, 0.5), Point(1789000036, 0.001))), result)
+        assertEquals(mapOf("query" to "sum(up)", "start" to "1789000000", "end" to "1789003588", "step" to "12"), urls.single().parameters.entries().associate { it.key to it.value.single() })
+    }
+
+    @Test
+    fun `empty range results are an empty map`() = runBlocking {
+        assertEquals(emptyMap(), prometheus(HttpStatusCode.OK, """{"status":"success","data":{"resultType":"matrix","result":[]}}""", path = "/api/v1/query_range").range("up", 0, 60, 1))
     }
 
     @Test

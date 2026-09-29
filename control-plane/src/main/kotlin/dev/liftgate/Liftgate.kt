@@ -115,6 +115,7 @@ class App(val config: Config) : AutoCloseable {
     val registryTokens = RegistryTokens(db, services, config)
     val buildAdmission = BuildAdmission(db, config.plans)
     val podLogs = PodLogs(kube)
+    val prometheus = Prometheus(config.prometheusUrl, http)
     val notificationChannels by lazy { NotificationChannels(db, secrets) }
     val notifier by lazy { Notifier(this) }
     val invitations by lazy { Invitations(db, mailer, config.dashboardUrl, limits) }
@@ -150,7 +151,7 @@ class App(val config: Config) : AutoCloseable {
             Builder(this, kube).start()
             LeaderElection(config, kube, "liftgate-registry-janitor").start(scope) { coroutineScope { RegistryJanitor(this@App, kube).start(this) } }
         }
-        if (runs(Role.METER)) Meter(this, Prometheus(config.prometheusUrl, http)).start()
+        if (runs(Role.METER)) Meter(this, prometheus).start()
     }
 
     fun awaitShutdown() {

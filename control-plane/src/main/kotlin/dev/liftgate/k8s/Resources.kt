@@ -14,6 +14,7 @@ import io.fabric8.kubernetes.api.model.ContainerBuilder
 import io.fabric8.kubernetes.api.model.ContainerPortBuilder
 import io.fabric8.kubernetes.api.model.GenericKubernetesResource
 import io.fabric8.kubernetes.api.model.GenericKubernetesResourceBuilder
+import io.fabric8.kubernetes.api.model.HasMetadata
 import io.fabric8.kubernetes.api.model.IntOrString
 import io.fabric8.kubernetes.api.model.LabelSelector
 import io.fabric8.kubernetes.api.model.LabelSelectorBuilder
@@ -52,6 +53,7 @@ import io.fabric8.kubernetes.api.model.rbac.RoleBinding
 import io.fabric8.kubernetes.api.model.rbac.RoleBindingBuilder
 import io.fabric8.kubernetes.client.dsl.base.ResourceDefinitionContext
 import java.util.Base64
+import java.util.UUID
 import kotlin.math.roundToInt
 import io.fabric8.kubernetes.api.model.EnvVar as KubeEnvVar
 import io.fabric8.kubernetes.api.model.Service as KubeService
@@ -62,6 +64,7 @@ const val SERVICE_LABEL = "liftgate.dev/service"
 const val SERVICE_ID_LABEL = "liftgate.dev/service-id"
 const val ORG_ID_LABEL = "liftgate.dev/org-id"
 const val DEPLOYMENT_LABEL = "liftgate.dev/deployment"
+val HasMetadata.deploymentId get() = metadata.labels?.get(DEPLOYMENT_LABEL)?.let { runCatching { UUID.fromString(it) }.getOrNull() }
 val certificateContext: ResourceDefinitionContext = ResourceDefinitionContext.Builder()
     .withGroup("cert-manager.io").withVersion("v1").withKind("Certificate").withPlural("certificates").withNamespaced(true)
     .build()

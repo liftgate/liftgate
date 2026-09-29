@@ -27,6 +27,7 @@ import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.greater
 import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.core.inSubQuery
 import org.jetbrains.exposed.v1.core.less
 import org.jetbrains.exposed.v1.core.neq
 import org.jetbrains.exposed.v1.jdbc.JdbcTransaction
@@ -120,10 +121,10 @@ class Deployments(private val db: Db, private val metrics: MeterRegistry = Simpl
         running(failed.serviceId).andWhere { DeploymentsTable.id neq failedId }.orderBy(DeploymentsTable.createdAt, SortOrder.DESC).limit(1).singleOrNull()?.toDeployment()?.takeIf { it.env != null }
     }
 
-    suspend fun transition(id: UUID, to: DeploymentStatus, replicasReady: Int = 0, error: String? = null, from: Set<DeploymentStatus> = DeploymentStatus.entries.toSet()) {
+    suspend fun transition(id: UUID, to: DeploymentStatus, replicasReady: Int = 0, error: String? = null, unreleasedOnly: Boolean = false) {
         val createdAt = db.tx {
             val current = find(id, lock = true) ?: notFound("deployment")
-            if (current.status !in from || !current.status.allows(to)) conflict("deployment cannot move from ${current.status.sql} to ${to.sql}")
+            if (unreleasedOnly && current.status.sql !in unreleased || !current.status.allows(to)) conflict("deployment cannot move from ${current.status.sql} to ${to.sql}")
             if (to == DeploymentStatus.FAILED && current.status == DeploymentStatus.RUNNING && replaced(current)) conflict("a running deployment with a newer one cannot fail")
             if (current.status == to && (to == DeploymentStatus.FAILED || current.replicasReady == replicasReady && current.error == error)) return@tx null
             DeploymentsTable.update({ DeploymentsTable.id eq id }) {
@@ -139,9 +140,20 @@ class Deployments(private val db: Db, private val metrics: MeterRegistry = Simpl
         released(to, createdAt)
     }
 
+    suspend fun reverted(id: UUID, to: UUID) {
+        val note = "reverted to $to"
+        db.tx {
+            val current = find(id, lock = true) ?: notFound("deployment")
+            if (current.error?.endsWith(note) == true) return@tx
+            DeploymentsTable.update({ DeploymentsTable.id eq id }) { it[error] = listOfNotNull(current.error, note).joinToString("; ") }
+            updated(id, current.status, changed = false)
+        }
+    }
+
     suspend fun observe(id: UUID, replicasReady: Int, health: DeploymentHealth) {
         db.tx {
-            DeploymentsTable.update({ (DeploymentsTable.id eq id) and (DeploymentsTable.status eq DeploymentStatus.RUNNING.sql) }) {
+            val service = DeploymentsTable.select(DeploymentsTable.serviceId).where { DeploymentsTable.id eq id }
+            DeploymentsTable.update({ (DeploymentsTable.serviceId inSubQuery service) and (DeploymentsTable.status eq DeploymentStatus.RUNNING.sql) }) {
                 it[DeploymentsTable.replicasReady] = replicasReady
                 it[DeploymentsTable.health] = health.sql
             }

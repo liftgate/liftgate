@@ -40,6 +40,7 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.update
 import java.util.Base64
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -273,20 +274,31 @@ class DeploymentsTest {
     }
 
     @Test
-    fun `observing a running deployment records its readiness and health, and a failure keeps its first cause`() = runBlocking {
+    fun `health goes to the running deployment even while the workload is still labelled with a failed release`() = runBlocking {
         val service = seed()
-        val running = running(service, "aaa")
-        assertFailsWith<LiftgateException> { deployments.transition(running.id, DeploymentStatus.FAILED, from = setOf(DeploymentStatus.PENDING, DeploymentStatus.RELEASING)) }
-        deployments.observe(running.id, 0, DeploymentHealth.DOWN)
-        assertEquals(Triple(DeploymentStatus.RUNNING, 0, DeploymentHealth.DOWN), deployments.byId(running.id)?.let { Triple(it.status, it.replicasReady, it.health) })
+        val first = running(service, "aaa")
+        val second = release(service, "bbb")
+        deployments.transition(second.id, DeploymentStatus.RELEASING)
+        deployments.transition(second.id, DeploymentStatus.FAILED, error = "CrashLoopBackOff, exit code 1", unreleasedOnly = true)
+        suspend fun state(id: UUID) = deployments.byId(id)?.let { Triple(it.status, it.replicasReady, it.health) }
 
-        val releasing = release(service, "bbb")
-        deployments.transition(releasing.id, DeploymentStatus.RELEASING, replicasReady = 1)
-        deployments.observe(releasing.id, 2, DeploymentHealth.HEALTHY)
-        assertEquals(Triple(DeploymentStatus.RELEASING, 1, null), deployments.byId(releasing.id)?.let { Triple(it.status, it.replicasReady, it.health) })
+        deployments.observe(second.id, 1, DeploymentHealth.HEALTHY)
+        assertEquals(Triple(DeploymentStatus.RUNNING, 1, DeploymentHealth.HEALTHY), state(first.id))
+        deployments.observe(second.id, 0, DeploymentHealth.DOWN)
 
-        deployments.transition(releasing.id, DeploymentStatus.FAILED, error = "CrashLoopBackOff, exit code 1")
-        deployments.transition(releasing.id, DeploymentStatus.FAILED, error = "api has timed out progressing")
-        assertEquals("CrashLoopBackOff, exit code 1", deployments.byId(releasing.id)?.error)
+        assertEquals(Triple(DeploymentStatus.RUNNING, 0, DeploymentHealth.DOWN), state(first.id))
+        assertEquals(Triple(DeploymentStatus.FAILED, 0, null), state(second.id))
+    }
+
+    @Test
+    fun `a crash fails only an unreleased deployment, which keeps its first cause and notes a revert once`() = runBlocking {
+        val service = seed()
+        val first = running(service, "aaa")
+        conflict { deployments.transition(first.id, DeploymentStatus.FAILED, error = "CrashLoopBackOff, exit code 1", unreleasedOnly = true) }
+        val second = release(service, "bbb")
+        deployments.transition(second.id, DeploymentStatus.FAILED, error = "CrashLoopBackOff, exit code 1", unreleasedOnly = true)
+        deployments.transition(second.id, DeploymentStatus.FAILED, error = "api has timed out progressing")
+        repeat(2) { deployments.reverted(second.id, first.id) }
+        assertEquals("CrashLoopBackOff, exit code 1; reverted to ${first.id}", deployments.byId(second.id)?.error)
     }
 }

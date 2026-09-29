@@ -28,7 +28,7 @@ private val recordRetry = 5.seconds
 data class Rollout(val deploymentId: UUID, val status: DeploymentStatus, val replicasReady: Int, val health: DeploymentHealth, val error: String? = null) {
     companion object {
         fun of(deployment: Deployment): Rollout? {
-            val id = deployment.metadata.labels?.get(DEPLOYMENT_LABEL)?.let { runCatching { UUID.fromString(it) }.getOrNull() } ?: return null
+            val id = deployment.deploymentId ?: return null
             val status = deployment.status?.takeIf { (it.observedGeneration ?: 0) >= (deployment.metadata.generation ?: 0) } ?: return null
             val desired = deployment.spec.replicas ?: 1
             val ready = status.readyReplicas ?: 0
@@ -93,7 +93,7 @@ class DeploymentWatcher(private val app: App, private val kube: KubernetesClient
         app.deployments.transition(rollout.deploymentId, rollout.status, rollout.replicasReady, rollout.error)
         fallback?.let {
             reconciler.reapply(it.serviceId)
-            app.deployments.transition(rollout.deploymentId, rollout.status, rollout.replicasReady, listOfNotNull(rollout.error, "reverted to ${it.id}").joinToString("; "))
+            app.deployments.reverted(rollout.deploymentId, it.id)
         }
     } catch (e: LiftgateException) {
         log.debug("ignored rollout of deployment {}: {}", rollout.deploymentId, e.message)

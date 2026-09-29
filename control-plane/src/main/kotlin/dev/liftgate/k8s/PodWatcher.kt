@@ -19,7 +19,6 @@ import kotlin.time.Duration.Companion.seconds
 
 private const val MAX_RESTARTS = 3
 private val stuck = setOf("CrashLoopBackOff", "ImagePullBackOff", "ErrImagePull", "CreateContainerConfigError")
-private val unreleased = setOf(DeploymentStatus.PENDING, DeploymentStatus.RELEASING)
 private val failRetry = 5.seconds
 private val SQLException.retryable get() = generateSequence<Throwable>(this) { it.cause }.any { it is SQLTransientException || it is SQLException && it.sqlState.orEmpty().startsWith("08") }
 
@@ -46,14 +45,14 @@ class PodWatcher(private val app: App, private val kube: KubernetesClient) {
     }
 
     private fun observe(pod: Pod) {
-        val id = pod.metadata.labels?.get(DEPLOYMENT_LABEL)?.let { runCatching { UUID.fromString(it) }.getOrNull() } ?: return
+        val id = pod.deploymentId ?: return
         failure(pod)?.let { failures.trySend(id to it) }
     }
 
     private suspend fun fail(id: UUID, error: String) {
         while (true) {
             try {
-                return app.deployments.transition(id, DeploymentStatus.FAILED, error = error, from = unreleased)
+                return app.deployments.transition(id, DeploymentStatus.FAILED, error = error, unreleasedOnly = true)
             } catch (e: LiftgateException) {
                 return log.debug("ignored failure of deployment {}: {}", id, e.message)
             } catch (e: SQLException) {

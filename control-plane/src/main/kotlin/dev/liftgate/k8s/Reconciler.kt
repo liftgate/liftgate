@@ -104,8 +104,7 @@ class Reconciler(private val app: App, private val kube: KubernetesClient) {
 
     private suspend fun overtaken(r: Release, live: HasMetadata? = null): Boolean {
         val workload: HasMetadata = if (r.service.kind == ServiceKind.CRON) Resources.cronJob(r, null) else Resources.deployment(r, null)
-        val id = (live ?: withContext(Dispatchers.IO) { kube.resource(workload).get() })?.metadata?.labels?.get(DEPLOYMENT_LABEL)
-            ?.let { runCatching { UUID.fromString(it) }.getOrNull() }?.takeIf { it != r.deployment.id } ?: return false
+        val id = (live ?: withContext(Dispatchers.IO) { kube.resource(workload).get() })?.deploymentId?.takeIf { it != r.deployment.id } ?: return false
         return app.deployments.byId(id)?.createdAt?.isAfter(r.deployment.createdAt) == true
     }
 

@@ -34,7 +34,6 @@ class PodWatcherTest {
 
     private val scope = CoroutineScope(Dispatchers.Default)
     private val release = testRelease()
-    private val unreleased = setOf(DeploymentStatus.PENDING, DeploymentStatus.RELEASING)
 
     private fun pod(status: ContainerStatus, deployment: UUID = testDeployment.id): Pod =
         PodBuilder().withNewMetadata().withName("api-$deployment").withNamespace(release.namespace).addToLabels(MANAGED_LABEL, "true").addToLabels(DEPLOYMENT_LABEL, deployment.toString()).endMetadata()
@@ -94,18 +93,18 @@ class PodWatcherTest {
         val deployments = mockk<Deployments>(relaxUnitFun = true)
         client.resource(pod(crashing())).create()
         PodWatcher(app(deployments), client).start().use {
-            coVerify(timeout = 10_000) { deployments.transition(testDeployment.id, DeploymentStatus.FAILED, 0, "CrashLoopBackOff, exit code 1", unreleased) }
+            coVerify(timeout = 10_000) { deployments.transition(testDeployment.id, DeploymentStatus.FAILED, 0, "CrashLoopBackOff, exit code 1", unreleasedOnly = true) }
         }
     }
 
     @Test
     fun `a failure that could not be written while postgres was unreachable is written once it is back`() {
         val deployments = mockk<Deployments> {
-            coEvery { transition(testDeployment.id, DeploymentStatus.FAILED, 0, "CrashLoopBackOff, exit code 1", unreleased) } throws SQLTransientConnectionException("connection refused") andThen Unit
+            coEvery { transition(testDeployment.id, DeploymentStatus.FAILED, 0, "CrashLoopBackOff, exit code 1", unreleasedOnly = true) } throws SQLTransientConnectionException("connection refused") andThen Unit
         }
         client.resource(pod(crashing())).create()
         PodWatcher(app(deployments), client).start().use {
-            coVerify(timeout = 15_000, exactly = 2) { deployments.transition(testDeployment.id, DeploymentStatus.FAILED, 0, "CrashLoopBackOff, exit code 1", unreleased) }
+            coVerify(timeout = 15_000, exactly = 2) { deployments.transition(testDeployment.id, DeploymentStatus.FAILED, 0, "CrashLoopBackOff, exit code 1", unreleasedOnly = true) }
         }
     }
 
@@ -113,13 +112,13 @@ class PodWatcherTest {
     fun `a failure postgres rejects is dropped instead of holding up other deployments`() {
         val other = UUID.randomUUID()
         val deployments = mockk<Deployments>(relaxUnitFun = true) {
-            coEvery { transition(testDeployment.id, DeploymentStatus.FAILED, 0, any(), unreleased) } throws SQLException("invalid byte sequence for encoding \"UTF8\": 0x00", "22021")
+            coEvery { transition(testDeployment.id, DeploymentStatus.FAILED, 0, any(), unreleasedOnly = true) } throws SQLException("invalid byte sequence for encoding \"UTF8\": 0x00", "22021")
         }
         client.resource(pod(crashing())).create()
         PodWatcher(app(deployments), client).start().use {
-            coVerify(timeout = 10_000) { deployments.transition(testDeployment.id, DeploymentStatus.FAILED, 0, "CrashLoopBackOff, exit code 1", unreleased) }
+            coVerify(timeout = 10_000) { deployments.transition(testDeployment.id, DeploymentStatus.FAILED, 0, "CrashLoopBackOff, exit code 1", unreleasedOnly = true) }
             client.resource(pod(crashing(), other)).create()
-            coVerify(timeout = 10_000) { deployments.transition(other, DeploymentStatus.FAILED, 0, "CrashLoopBackOff, exit code 1", unreleased) }
+            coVerify(timeout = 10_000) { deployments.transition(other, DeploymentStatus.FAILED, 0, "CrashLoopBackOff, exit code 1", unreleasedOnly = true) }
         }
     }
 }

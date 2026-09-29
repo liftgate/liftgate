@@ -119,7 +119,8 @@ class DeploymentWatcherTest {
         val reconciler = mockk<Reconciler> { coEvery { reapply(testService.id) } throws KubernetesClientException("unavailable", 503, null) andThen Unit }
         client.resource(stalled()).create()
         DeploymentWatcher(app(deployments), client, reconciler).start().use {
-            coVerify(timeout = 15_000) { deployments.transition(testDeployment.id, DeploymentStatus.FAILED, 0, "api has timed out progressing; reverted to ${previous.id}") }
+            coVerify(timeout = 15_000) { deployments.reverted(testDeployment.id, previous.id) }
+            coVerify { deployments.transition(testDeployment.id, DeploymentStatus.FAILED, 0, "api has timed out progressing") }
             coVerify(exactly = 2) { reconciler.reapply(testService.id) }
         }
     }

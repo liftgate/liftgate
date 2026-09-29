@@ -7,7 +7,7 @@ import type { Service, ServiceMetrics } from "@/lib/types";
 import { LineChart } from "@/components/line-chart";
 import { Loaded } from "@/components/loaded";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Card, CardHeader } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -62,38 +62,40 @@ export function MetricsTab({ service }: { service: Service }) {
 
 function Charts({ metrics, stale }: { metrics?: ServiceMetrics; stale?: boolean }) {
   return (
-    <div className={`grid gap-4 transition-opacity md:grid-cols-2 ${stale ? "opacity-60" : ""}`}>
+    <div className={`grid gap-4 transition-opacity lg:grid-cols-2 ${stale ? "opacity-60" : ""}`}>
       {charts.map((chart) => {
         const points = metrics?.[chart.key] ?? [];
         const latest = points.at(-1);
         return (
-          <Card key={chart.key} className="flex flex-col gap-4 p-4">
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <h2 className="text-sm font-medium">{chart.title}</h2>
-                <p className="mt-1 text-xs text-graphite-400">{chart.description}</p>
-              </div>
-              {metrics ? (
-                <p className={`text-sm font-medium ${latest ? "text-white" : "text-graphite-400"}`}>{latest ? formatMetric(latest.value, chart.measure) : "No data"}</p>
+          <Card key={chart.key}>
+            <CardHeader
+              title={chart.title}
+              description={chart.description}
+              actions={
+                metrics ? (
+                  <p className={`text-sm font-medium ${latest ? "text-white" : "text-graphite-400"}`}>{latest ? formatMetric(latest.value, chart.measure) : "No data"}</p>
+                ) : (
+                  <Skeleton className="h-5 w-16" />
+                )
+              }
+            />
+            <div className="p-6">
+              {!metrics ? (
+                <Skeleton className="h-38" />
+              ) : latest ? (
+                <LineChart
+                  label={chart.title}
+                  points={points}
+                  start={metrics.start}
+                  end={metrics.end}
+                  step={metrics.step}
+                  measure={chart.measure}
+                  limit={chart.key === "memory" ? metrics.memoryLimitBytes : undefined}
+                />
               ) : (
-                <Skeleton className="h-5 w-16" />
+                <p className="flex h-38 items-center justify-center text-sm text-graphite-400">No data in this period</p>
               )}
             </div>
-            {!metrics ? (
-              <Skeleton className="h-38" />
-            ) : latest ? (
-              <LineChart
-                label={chart.title}
-                points={points}
-                start={metrics.start}
-                end={metrics.end}
-                step={metrics.step}
-                measure={chart.measure}
-                limit={chart.key === "memory" ? metrics.memoryLimitBytes : undefined}
-              />
-            ) : (
-              <p className="flex h-38 items-center justify-center text-sm text-graphite-400">No data in this period</p>
-            )}
           </Card>
         );
       })}

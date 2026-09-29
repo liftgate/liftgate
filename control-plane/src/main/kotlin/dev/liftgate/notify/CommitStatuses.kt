@@ -43,7 +43,8 @@ class CommitStatuses(private val app: App) {
             val build = builds.firstOrNull { it.id == deployment?.buildId } ?: builds.first()
             val scope = app.services.scope(build.serviceId) ?: return
             val (state, description) = state(build, deployment)
-            val status = GitHubApp.CommitStatus(state, scope.buildUrl(app.config.dashboardUrl, build.id), description.take(MAX_DESCRIPTION), "liftgate/${scope.service.slug}")
+            val context = listOfNotNull("liftgate", scope.environment.slug.takeUnless { it == "production" }, scope.service.slug).joinToString("/")
+            val status = GitHubApp.CommitStatus(state, scope.buildUrl(app.config.dashboardUrl, build.id), description.take(MAX_DESCRIPTION), context)
             if (status == posted) return
             try {
                 val project = scope.project

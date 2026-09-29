@@ -54,7 +54,7 @@ class NotifierTest {
     private val channelId = UUID.randomUUID()
     private val channels = mockk<NotificationChannels>()
     private val app = mockk<App> {
-        every { config } returns testConfig(mapOf("LIFTGATE_NOTIFICATION_DENIED_CIDRS" to "1.2.3.4/32"))
+        every { config } returns testConfig(mapOf("LIFTGATE_DENIED_EGRESS_CIDRS" to "1.2.3.4/32"))
         every { notificationChannels } returns channels
     }
     private val buildId = UUID.fromString("00000000-0000-0000-0000-000000000001")

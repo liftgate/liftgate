@@ -71,7 +71,7 @@ class Notifier(
     engine: HttpClientEngine? = null,
 ) {
     private val log = LoggerFactory.getLogger(Notifier::class.java)
-    private val blocked = (Resources.privateRanges + unroutable).map { IpSubnetFilterRule(it, IpFilterRuleType.REJECT) } + app.config.notificationDeniedCidrs
+    private val blocked = (Resources.privateRanges + unroutable + app.config.deniedEgressCidrs).map { IpSubnetFilterRule(it, IpFilterRuleType.REJECT) }
     private val client = HttpClient(engine ?: CIO.create { dnsResolver = ::resolve }) {
         followRedirects = false
         install(UserAgent) { agent = "liftgate" }

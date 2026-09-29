@@ -55,6 +55,7 @@ class CommitStatusesTest {
     private var onStatus = {}
     private var permission = "write"
     private var project = testProject
+    private var environment = testEnvironment
     private val github = GitHubApp(
         GitHubConfig("1", TestKeys.privateKeyPem),
         HttpClient(MockEngine { request ->
@@ -82,7 +83,7 @@ class CommitStatusesTest {
             coEvery { forService(testService.id) } answers { newer }
         }
         every { this@mockk.deployments } returns mockk<Deployments> { coEvery { forService(testService.id) } answers { this@CommitStatusesTest.deployments } }
-        every { services } returns mockk<Services> { coEvery { scope(testService.id) } answers { ServiceScope(testService, testEnvironment, this@CommitStatusesTest.project, testOrg) } }
+        every { services } returns mockk<Services> { coEvery { scope(testService.id) } answers { ServiceScope(testService, environment, this@CommitStatusesTest.project, testOrg) } }
     }
 
     private fun sent(index: Int) = json.parseToJsonElement((requests[index].body as TextContent).text)
@@ -106,6 +107,14 @@ class CommitStatusesTest {
             ),
             sent(1),
         )
+    }
+
+    @Test
+    fun `services with one slug in two environments post one commit under their own contexts`() = runBlocking {
+        CommitStatuses(app).post(testBuild.id)
+        environment = testEnvironment.copy(id = UUID.randomUUID(), slug = "staging")
+        CommitStatuses(app).post(testBuild.id)
+        assertEquals(listOf("liftgate/api", "liftgate/staging/api"), listOf(1, 3).map { sent(it).jsonObject.getValue("context").jsonPrimitive.content })
     }
 
     @Test

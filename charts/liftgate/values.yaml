@@ -23,7 +23,6 @@ controlPlane:
   upstreamOverwritesClientIpHeader: false
   trustedProxyCidrs: []
   databasePoolSize: 0
-  notificationDeniedCidrs: []
 
 dashboard:
   image: ghcr.io/liftgate/dashboard

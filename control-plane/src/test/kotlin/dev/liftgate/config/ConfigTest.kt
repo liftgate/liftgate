@@ -90,11 +90,9 @@ class ConfigTest {
     @Test
     fun `only the roles that open sealed values need the master key`() {
         val keyless = minimalEnv - "LIFTGATE_SECRETS_MASTER_KEY"
-        mapOf("builder" to github, "meter" to emptyMap(), "migrate" to emptyMap()).forEach { (role, extra) ->
-            assertNull(Config.fromEnv(keyless + extra + ("LIFTGATE_ROLE" to role)).secretsMasterKey)
-        }
-        listOf("api", "all").forEach { role ->
-            val error = assertFailsWith<IllegalStateException> { Config.fromEnv(keyless + ("LIFTGATE_ROLE" to role)) }
+        listOf("meter", "migrate").forEach { role -> assertNull(Config.fromEnv(keyless + ("LIFTGATE_ROLE" to role)).secretsMasterKey) }
+        listOf("api", "all", "builder").forEach { role ->
+            val error = assertFailsWith<IllegalStateException> { Config.fromEnv(keyless + github + ("LIFTGATE_ROLE" to role)) }
             assertTrue("LIFTGATE_SECRETS_MASTER_KEY" in error.message.orEmpty())
         }
     }

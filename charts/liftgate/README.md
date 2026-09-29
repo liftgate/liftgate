@@ -551,7 +551,7 @@ The `ha` profile gives each role its own ServiceAccount and Secret:
 |---|---|---|
 | `api` | Role in the release namespace: leases, endpoints, endpoint slices; in each managed namespace, a RoleBinding to ClusterRole `<fullname>-log-reader` (pods and their logs) that the reconciler creates | master key, GitHub App key and webhook secret, OAuth client secrets, SMTP URL, registry signing key and pull password |
 | `reconciler` | ClusterRole `<fullname>`, the release namespace Role, and `bind` on ClusterRole `<fullname>-log-reader` | master key |
-| `builder` | Role `<fullname>-builder` in `build.namespace` (jobs, secrets, pods and their logs), the release namespace Role | GitHub App key |
+| `builder` | Role `<fullname>-builder` in `build.namespace` (jobs, secrets, pods and their logs), the release namespace Role | master key, GitHub App key |
 | `meter` | ClusterRole `<fullname>-meter` (list pods), the release namespace Role | none |
 
 The `single` profile binds all of them to one ServiceAccount. Database credentials reach every

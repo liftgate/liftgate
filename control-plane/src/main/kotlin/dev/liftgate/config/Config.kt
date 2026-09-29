@@ -127,7 +127,7 @@ data class Config(
             val dashboardUrl = text("DASHBOARD_URL", "http://localhost:3000")
             val gitlabUrl = text("GITLAB_URL", GITLAB_COM).trimEnd('/')
             check(gitlabUrl.startsWith("https://")) { "LIFTGATE_GITLAB_URL must start with https://, because GitLab access tokens are sent to it" }
-            val encodedKey = if (role in setOf(Role.API, Role.RECONCILER, Role.ALL)) required("SECRETS_MASTER_KEY") else optional("SECRETS_MASTER_KEY")
+            val encodedKey = if (role in setOf(Role.API, Role.RECONCILER, Role.BUILDER, Role.ALL)) required("SECRETS_MASTER_KEY") else optional("SECRETS_MASTER_KEY")
             val masterKey = encodedKey?.let { key ->
                 runCatching { Base64.getDecoder().decode(key) }.getOrNull()?.takeIf { it.size == 32 } ?: error("LIFTGATE_SECRETS_MASTER_KEY must be the base64 of 32 random bytes")
             }

@@ -91,6 +91,9 @@ jobs:
           jq -e '(map(select(.kind == "Secret")) | INDEX(.metadata.name)) as $secrets
             | [.[] | select(.kind == "Deployment" and .metadata.labels["liftgate.dev/role"] == "meter") | .spec.template.spec.containers[0].envFrom[].secretRef.name // empty | $secrets[.].stringData // {} | keys[]]
             | index("LIFTGATE_SECRETS_MASTER_KEY") == null and index("LIFTGATE_GITHUB_APP_PRIVATE_KEY") == null' rendered.json
+          jq -e '(map(select(.kind == "Secret")) | INDEX(.metadata.name)) as $secrets
+            | [.[] | select(.kind == "Deployment" and .metadata.labels["liftgate.dev/role"] == "builder") | .spec.template.spec.containers[0].envFrom[].secretRef.name // empty | $secrets[.].stringData // {} | has("LIFTGATE_SECRETS_MASTER_KEY")]
+            | all' rendered.json
           jq -e '.[] | select(.kind == "HTTPRoute" and .metadata.name == "liftgate-control-plane") | .spec.rules[0].matches == [{path: {type: "PathPrefix", value: "/api"}}]' rendered.json
 
   rules:

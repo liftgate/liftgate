@@ -73,9 +73,9 @@ function Charts({ metrics, stale }: { metrics?: ServiceMetrics; stale?: boolean 
               description={chart.description}
               actions={
                 metrics ? (
-                  <p className={`text-sm font-medium ${latest ? "text-white" : "text-graphite-400"}`}>{latest ? formatMetric(latest.value, chart.measure) : "No data"}</p>
+                  <p className={`text-sm font-medium md:min-w-20 md:text-right ${latest ? "text-white" : "text-graphite-400"}`}>{latest ? formatMetric(latest.value, chart.measure) : "No data"}</p>
                 ) : (
-                  <Skeleton className="h-5 w-16" />
+                  <Skeleton className="h-5 w-20" />
                 )
               }
             />

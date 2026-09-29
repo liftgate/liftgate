@@ -264,7 +264,7 @@ class ReconcilerTest {
         coEvery { deployments.current(testService.id) } returns running
         Reconciler(app, client).reroute(testService.id)
         val service = client.kubernetesSerialization.unmarshal(sent().single { it.path == servicePath + apply }.utf8Body, KubeService::class.java)
-        assertEquals(8080, service.spec.ports.single().targetPort.intVal)
+        assertEquals(8080, service.spec.ports.single { it.name == "http" }.targetPort.intVal)
     }
 
     @Test

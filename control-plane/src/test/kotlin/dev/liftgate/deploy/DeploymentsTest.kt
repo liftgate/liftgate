@@ -222,7 +222,7 @@ class DeploymentsTest {
         val secretPath = "/api/v1/$namespaced/secrets/api-env-${rollback.id.toString().take(8)}"
         val deploymentPath = "/apis/apps/v1/$namespaced/deployments/api"
         val applied = ConcurrentHashMap<String, String>()
-        (listOf("/api/v1/$namespaced", "/api/v1/$namespaced/resourcequotas/liftgate", secretPath, deploymentPath) +
+        (listOf("/api/v1/$namespaced", "/api/v1/$namespaced/resourcequotas/liftgate", "/api/v1/$namespaced/services/api", secretPath, deploymentPath) +
             listOf("default-deny", "allow-internal", "allow-egress").map { "/apis/networking.k8s.io/v1/$namespaced/networkpolicies/$it" })
             .forEach { path -> server.expect().patch().withPath("$path?fieldManager=liftgate&force=true").andReply(200) { it.utf8Body.also { body -> applied[path] = body } }.always() }
 

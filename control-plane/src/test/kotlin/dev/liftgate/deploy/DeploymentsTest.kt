@@ -271,4 +271,22 @@ class DeploymentsTest {
         db.tx { DeploymentsTable.update({ DeploymentsTable.id eq legacy.id }) { it[config] = null; it[env] = null } }
         assertNull(deployments.fallback(release(service, "bbb").id))
     }
+
+    @Test
+    fun `observing a running deployment records its readiness and health, and a failure keeps its first cause`() = runBlocking {
+        val service = seed()
+        val running = running(service, "aaa")
+        assertFailsWith<LiftgateException> { deployments.transition(running.id, DeploymentStatus.FAILED, from = setOf(DeploymentStatus.PENDING, DeploymentStatus.RELEASING)) }
+        deployments.observe(running.id, 0, DeploymentHealth.DOWN)
+        assertEquals(Triple(DeploymentStatus.RUNNING, 0, DeploymentHealth.DOWN), deployments.byId(running.id)?.let { Triple(it.status, it.replicasReady, it.health) })
+
+        val releasing = release(service, "bbb")
+        deployments.transition(releasing.id, DeploymentStatus.RELEASING, replicasReady = 1)
+        deployments.observe(releasing.id, 2, DeploymentHealth.HEALTHY)
+        assertEquals(Triple(DeploymentStatus.RELEASING, 1, null), deployments.byId(releasing.id)?.let { Triple(it.status, it.replicasReady, it.health) })
+
+        deployments.transition(releasing.id, DeploymentStatus.FAILED, error = "CrashLoopBackOff, exit code 1")
+        deployments.transition(releasing.id, DeploymentStatus.FAILED, error = "api has timed out progressing")
+        assertEquals("CrashLoopBackOff, exit code 1", deployments.byId(releasing.id)?.error)
+    }
 }

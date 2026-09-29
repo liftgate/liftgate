@@ -65,24 +65,40 @@ class ResourcesTest {
         assertEquals(2, deployment.spec.replicas)
         assertEquals(5, deployment.spec.revisionHistoryLimit)
         assertEquals(600, deployment.spec.progressDeadlineSeconds)
+        assertEquals(10, deployment.spec.minReadySeconds)
         assertEquals("RollingUpdate", deployment.spec.strategy.type)
+        assertEquals(1 to 0, deployment.spec.strategy.rollingUpdate.maxSurge.intVal to deployment.spec.strategy.rollingUpdate.maxUnavailable.intVal)
         assertEquals(mapOf("liftgate.dev/service" to "api"), deployment.spec.selector.matchLabels)
         assertEquals(deploymentLabels, deployment.spec.template.metadata.labels)
         assertRestricted(deployment.spec.template.spec)
         assertEquals("gvisor", deployment.spec.template.spec.runtimeClassName)
         assertEquals("Always", deployment.spec.template.spec.restartPolicy)
+        assertEquals(30L, deployment.spec.template.spec.terminationGracePeriodSeconds)
 
         val container = deployment.spec.template.spec.containers.single()
         assertEquals(testBuild.imageRef, container.image)
         assertEquals("api-env", container.envFrom.single().secretRef.name)
         assertEquals("3000", container.env.single { it.name == "PORT" }.value)
         assertEquals(3000, container.ports.single().containerPort)
-        assertEquals("/", container.readinessProbe.httpGet.path)
-        assertEquals(3000, container.readinessProbe.httpGet.port.intVal)
-        assertNull(container.readinessProbe.tcpSocket)
+        assertEquals(3000, container.readinessProbe.tcpSocket.port.intVal)
+        assertEquals(2 to 3, container.readinessProbe.periodSeconds to container.readinessProbe.failureThreshold)
+        assertNull(container.readinessProbe.httpGet)
+        assertNull(container.startupProbe)
+        assertNull(container.livenessProbe)
+        assertEquals(5L, container.lifecycle.preStop.sleep.seconds)
         assertEquals(mapOf("cpu" to Quantity("250m"), "memory" to Quantity("256Mi"), "ephemeral-storage" to Quantity("2Gi")), container.resources.requests)
         assertEquals(container.resources.requests, container.resources.limits)
         assertTrue(container.command.isNullOrEmpty())
+    }
+
+    @Test
+    fun `a health check path gets readiness, startup and liveness http probes on it`() {
+        val container = Resources.deployment(testRelease(testService.copy(healthCheckPath = "/healthz")), null).spec.template.spec.containers.single()
+        listOf(container.readinessProbe to (2 to 3), container.startupProbe to (5 to 60), container.livenessProbe to (10 to 6)).forEach { (probe, timing) ->
+            assertEquals("/healthz" to 3000, probe.httpGet.path to probe.httpGet.port.intVal)
+            assertNull(probe.tcpSocket)
+            assertEquals(timing, probe.periodSeconds to probe.failureThreshold)
+        }
     }
 
     @Test
@@ -117,6 +133,13 @@ class ResourcesTest {
         assertEquals("OnFailure", pod.spec.restartPolicy)
         assertEquals("gvisor", pod.spec.runtimeClassName)
         assertRestricted(pod.spec)
+        assertEquals(300L to 3600L, cron.spec.startingDeadlineSeconds to cron.spec.jobTemplate.spec.activeDeadlineSeconds)
+    }
+
+    @Test
+    fun `a cron run is killed at the plan's timeout`() {
+        val cron = testRelease(testService.copy(kind = ServiceKind.CRON, port = null, cronSchedule = "* * * * *")).copy(plan = Plan(cronTimeoutSeconds = 20))
+        assertEquals(20L, Resources.cronJob(cron, null).spec.jobTemplate.spec.activeDeadlineSeconds)
     }
 
     @Test
@@ -138,11 +161,9 @@ class ResourcesTest {
     @Test
     fun `service and route expose the web port on every verified hostname`() {
         val service = Resources.service(release)
-        val port = service.spec.ports.single()
         assertEquals("ClusterIP", service.spec.type)
         assertEquals(mapOf("liftgate.dev/service" to "api"), service.spec.selector)
-        assertEquals(80, port.port)
-        assertEquals(3000, port.targetPort.intVal)
+        assertEquals(listOf(80 to 3000, 3000 to 3000), service.spec.ports.map { it.port to it.targetPort.intVal })
 
         val route = Resources.httpRoute(release, "liftgate-system", "liftgate")
         val parent = route.spec.parentRefs.single()
@@ -152,6 +173,16 @@ class ResourcesTest {
         assertEquals(listOf("liftgate-system", "liftgate", "Gateway"), listOf(parent.namespace, parent.name, parent.kind))
         assertEquals(listOf("api-shop-acme.liftgate.app", "api.acme.dev"), route.spec.hostnames)
         assertEquals("api" to 80, backend.name to backend.port)
+    }
+
+    @Test
+    fun `a worker with a port gets a private service on port 80 and its own port but no route`() {
+        val worker = testRelease(testService.copy(kind = ServiceKind.WORKER, port = 9000))
+        assertTrue(worker.exposed)
+        assertFalse(worker.routable)
+        assertEquals(listOf(Triple("http", 80, 9000), Triple("app", 9000, 9000)), Resources.service(worker).spec.ports.map { Triple(it.name, it.port, it.targetPort.intVal) })
+        assertFalse(testRelease(testService.copy(kind = ServiceKind.WORKER, port = null)).exposed)
+        assertFalse(release.copy(org = testOrg.copy(suspendedAt = Instant.now())).exposed)
     }
 
     @Test
@@ -166,7 +197,7 @@ class ResourcesTest {
     fun `static service without a port gets PORT 8080, a service and a route`() {
         val static = testRelease(testService.copy(kind = ServiceKind.STATIC, port = null))
         assertEquals("8080", Resources.deployment(static, null).spec.template.spec.containers.single().env.single { it.name == "PORT" }.value)
-        assertEquals(8080, Resources.service(static).spec.ports.single().targetPort.intVal)
+        assertEquals(listOf(80 to 8080, 8080 to 8080), Resources.service(static).spec.ports.map { it.port to it.targetPort.intVal })
         assertEquals(listOf("api-shop-acme.liftgate.app", "api.acme.dev"), Resources.httpRoute(static, "liftgate-system", "liftgate").spec.hostnames)
     }
 

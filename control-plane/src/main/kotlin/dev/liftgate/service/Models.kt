@@ -53,8 +53,12 @@ data class Service(
     val memoryMb: Int,
     val cronSchedule: String?,
     val startCommand: String?,
+    val healthCheckPath: String? = null,
+    val internalHost: String? = null,
 ) {
-    fun spec() = ServiceSpec(slug, name, kind, rootDir, buildStrategy, dockerfilePath, port, replicas, cpuMillis, memoryMb, cronSchedule, startCommand)
+    val listens get() = port != null || kind.servesHttp
+
+    fun spec() = ServiceSpec(slug, name, kind, rootDir, buildStrategy, dockerfilePath, port, replicas, cpuMillis, memoryMb, cronSchedule, startCommand, healthCheckPath)
 }
 
 /**
@@ -75,9 +79,10 @@ data class ServiceSpec(
     val memoryMb: Int = 512,
     val cronSchedule: String? = null,
     val startCommand: String? = null,
+    val healthCheckPath: String? = null,
 ) {
     fun service(id: UUID, environmentId: UUID) =
-        Service(id, environmentId, slug, name, kind, rootDir, buildStrategy, dockerfilePath, port, replicas, cpuMillis, memoryMb, cronSchedule, startCommand)
+        Service(id, environmentId, slug, name, kind, rootDir, buildStrategy, dockerfilePath, port, replicas, cpuMillis, memoryMb, cronSchedule, startCommand, healthCheckPath)
 }
 
 /**

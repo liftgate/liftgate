@@ -25,6 +25,8 @@ const service = (id: string, kind: ServiceKind, rootDir: string, cpuMillis: numb
   memoryMb,
   cronSchedule,
   startCommand,
+  healthCheckPath: null,
+  internalHost: null,
 });
 
 export const services: Service[] = [
@@ -93,6 +95,7 @@ export function demo(now = Date.now()) {
     replicasReady: 1,
     error: null,
     createdAt: ago(seconds),
+    health: null,
   });
   return {
     builds: [

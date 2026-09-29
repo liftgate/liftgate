@@ -82,4 +82,16 @@ data class Deployment(
     val createdAt: Instant,
     @Transient val config: ServiceSpec? = null,
     @Transient val env: Map<String, String>? = null,
+    val health: DeploymentHealth? = null,
 )
+
+/**
+ * @author Dean
+ * @date 9/27/2026
+ */
+@Serializable
+enum class DeploymentHealth {
+    @SerialName("healthy") HEALTHY,
+    @SerialName("degraded") DEGRADED,
+    @SerialName("down") DOWN,
+}

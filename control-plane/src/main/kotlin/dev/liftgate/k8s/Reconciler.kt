@@ -151,8 +151,8 @@ class Reconciler(private val app: App, private val kube: KubernetesClient) {
         .filter { job -> job.status?.conditions.orEmpty().none { it.status == "True" && it.type in setOf("Complete", "Failed") } }
         .forEach { kube.resource(it).delete() }
 
-    private fun route(r: Release) = listOf(Resources.service(r), Resources.httpRoute(r, app.config.gatewayNamespace, app.config.gatewayName))
-        .forEach { if (r.routable) kube.resource(it).apply() else kube.resource(it).delete() }
+    private fun route(r: Release) = listOf(Resources.service(r) to r.exposed, Resources.httpRoute(r, app.config.gatewayNamespace, app.config.gatewayName) to r.routable)
+        .forEach { (resource, wanted) -> if (wanted) kube.resource(resource).apply() else kube.resource(resource).delete() }
 
     suspend fun syncCustomDomains() {
         val config = app.config

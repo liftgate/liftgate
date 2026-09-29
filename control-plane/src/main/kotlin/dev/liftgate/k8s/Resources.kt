@@ -9,7 +9,6 @@ import dev.liftgate.project.Environment
 import dev.liftgate.project.Project
 import dev.liftgate.service.EnvVar
 import dev.liftgate.service.Service
-import dev.liftgate.service.ServiceKind
 import io.fabric8.kubernetes.api.model.Container
 import io.fabric8.kubernetes.api.model.ContainerBuilder
 import io.fabric8.kubernetes.api.model.ContainerPortBuilder
@@ -86,6 +85,7 @@ data class Release(
     val hostnames get() = domains.map { it.hostname }
     val suspended get() = org.suspendedAt != null
     val routable get() = !suspended && service.kind.servesHttp && domains.isNotEmpty()
+    val exposed get() = !suspended && service.listens
 }
 
 /**
@@ -99,6 +99,10 @@ object Resources {
     private const val TENANT_UID = 1000L
     private const val MAX_PORT = 65535
     private const val ROLLOUT_HEADROOM = 2
+    private const val PRE_STOP_SECONDS = 5L
+    private const val MIN_READY_SECONDS = 10
+    private const val GRACE_SECONDS = 30L
+    private const val CRON_START_DEADLINE_SECONDS = 300L
     val privateRanges = listOf("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "169.254.0.0/16")
     private val tcpWithoutSmtp = listOf(1 to 24, 26 to 464, 466 to 586, 588 to 2524, 2526 to MAX_PORT)
 
@@ -135,8 +139,9 @@ object Resources {
         .withReplicas(if (r.suspended) 0 else r.service.replicas)
         .withRevisionHistoryLimit(5)
         .withProgressDeadlineSeconds(600)
+        .withMinReadySeconds(MIN_READY_SECONDS)
         .withSelector(r.selector())
-        .withNewStrategy().withType("RollingUpdate").endStrategy()
+        .withNewStrategy().withType("RollingUpdate").withNewRollingUpdate().withMaxSurge(IntOrString(1)).withMaxUnavailable(IntOrString(0)).endRollingUpdate().endStrategy()
         .withTemplate(podTemplate(r, runtimeClass, nodeSelector, tolerations, "Always"))
         .endSpec()
         .build()
@@ -147,10 +152,12 @@ object Resources {
         .withSchedule(r.service.cronSchedule)
         .withSuspend(r.suspended)
         .withConcurrencyPolicy("Forbid")
+        .withStartingDeadlineSeconds(CRON_START_DEADLINE_SECONDS)
         .withSuccessfulJobsHistoryLimit(3)
         .withFailedJobsHistoryLimit(3)
         .withNewJobTemplate().withNewSpec()
         .withBackoffLimit(2)
+        .withActiveDeadlineSeconds(r.plan.cronTimeoutSeconds.toLong())
         .withTemplate(podTemplate(r, runtimeClass, nodeSelector, tolerations, "OnFailure"))
         .endSpec().endJobTemplate()
         .endSpec()
@@ -162,6 +169,7 @@ object Resources {
         .withType("ClusterIP")
         .withSelector<String, String>(r.selectorLabels())
         .addNewPort().withName("http").withProtocol("TCP").withPort(SERVICE_PORT).withTargetPort(IntOrString(r.port())).endPort()
+        .apply { r.port()?.takeIf { it != SERVICE_PORT }?.let { addNewPort().withName("app").withProtocol("TCP").withPort(it).withTargetPort(IntOrString(it)).endPort() } }
         .endSpec()
         .build()
 
@@ -234,6 +242,7 @@ object Resources {
         .withNodeSelector<String, String>(nodeSelector)
         .withTolerations(tolerations)
         .withRestartPolicy(restartPolicy)
+        .withTerminationGracePeriodSeconds(GRACE_SECONDS)
         .withAutomountServiceAccountToken(false)
         .withEnableServiceLinks(false)
         .withNewSecurityContext()
@@ -254,7 +263,10 @@ object Resources {
             .addNewEnvFrom().withNewSecretRef().withName(r.secretName()).endSecretRef().endEnvFrom()
             .withEnv(listOfNotNull(r.port()?.let { KubeEnvVar("PORT", it.toString(), null) }))
             .withPorts(listOfNotNull(r.port()?.let { ContainerPortBuilder().withName("http").withContainerPort(it).build() }))
-            .withReadinessProbe(r.readinessProbe())
+            .withReadinessProbe(r.probe(2, 3, r.service.healthCheckPath))
+            .withStartupProbe(r.service.healthCheckPath?.let { r.probe(5, 60, it) })
+            .withLivenessProbe(r.service.healthCheckPath?.let { r.probe(10, 6, it) })
+            .withNewLifecycle().withNewPreStop().withNewSleep(PRE_STOP_SECONDS).endPreStop().endLifecycle()
             .withResources(ResourceRequirementsBuilder().withRequests<String, Quantity>(requests).withLimits<String, Quantity>(limits).build())
             .withNewSecurityContext()
             .withAllowPrivilegeEscalation(false)
@@ -263,9 +275,9 @@ object Resources {
             .build()
     }
 
-    private fun Release.readinessProbe(): Probe? = port()?.let {
-        val probe = ProbeBuilder().withPeriodSeconds(5).withFailureThreshold(6)
-        if (service.kind == ServiceKind.WEB && service.port != null) probe.withNewHttpGet().withPath("/").withPort(IntOrString(it)).endHttpGet().build()
+    private fun Release.probe(period: Int, failures: Int, path: String?): Probe? = port()?.let {
+        val probe = ProbeBuilder().withPeriodSeconds(period).withFailureThreshold(failures)
+        if (path != null) probe.withNewHttpGet().withPath(path).withPort(IntOrString(it)).endHttpGet().build()
         else probe.withNewTcpSocket().withPort(IntOrString(it)).endTcpSocket().build()
     }
 

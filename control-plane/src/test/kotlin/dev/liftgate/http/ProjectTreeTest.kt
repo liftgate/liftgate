@@ -76,4 +76,20 @@ class ProjectTreeTest {
         assertEquals(HttpStatusCode.NotFound, client.get("/api/v1/orgs/acme/projects/shop/tree") { cookie(SESSION_COOKIE, "outsider") }.status)
         assertEquals(HttpStatusCode.NotFound, client.get("/api/v1/orgs/acme/projects/missing/tree") { cookie(SESSION_COOKIE, "member") }.status)
     }
+
+    @Test
+    fun `services that listen on a port carry their private address`() = runBlocking {
+        val shop = projects.create(orgs.create("acme", "Acme", member.id).id, "shop", "Shop", "acme/shop", 42)
+        val environment = projects.environments(shop.id).single()
+        val created = listOf(
+            services.create(environment.id, ServiceSpec("web", "Web", ServiceKind.WEB)),
+            services.create(environment.id, ServiceSpec("cache", "Cache", ServiceKind.WORKER, port = 6379)),
+            services.create(environment.id, ServiceSpec("jobs", "Jobs", ServiceKind.WORKER)),
+        )
+        val hosts = mapOf("web" to "web.${environment.namespace}.svc.cluster.local", "cache" to "cache.${environment.namespace}.svc.cluster.local", "jobs" to null)
+        assertEquals(hosts, created.associate { it.slug to it.internalHost })
+        assertEquals(hosts, services.forEnvironment(environment.id).associate { it.slug to it.internalHost })
+        assertEquals(hosts, services.tree("acme", "shop", member.id)?.services?.associate { it.slug to it.internalHost })
+        assertEquals(hosts.getValue("cache"), services.update(created[1].id, created[1].spec().copy(replicas = 2)).internalHost)
+    }
 }

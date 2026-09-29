@@ -35,3 +35,7 @@ allowUnsandboxedTenants: true
 
 deniedEgressCidrs:
   - 1.0.0.1/32
+
+plans:
+  rollout:
+    cronTimeoutSeconds: 20

@@ -47,9 +47,10 @@ export type ServiceSpec = {
   memoryMb: number;
   cronSchedule: string | null;
   startCommand: string | null;
+  healthCheckPath: string | null;
 };
 
-export type Service = ServiceSpec & { id: string; environmentId: string };
+export type Service = ServiceSpec & { id: string; environmentId: string; internalHost: string | null };
 
 export type EnvVar = { name: string; value: string | null; secret: boolean };
 
@@ -72,6 +73,8 @@ export type Build = {
 
 export type DeploymentStatus = "pending" | "releasing" | "running" | "failed" | "superseded" | "rolled_back";
 
+export type DeploymentHealth = "healthy" | "degraded" | "down";
+
 export type Deployment = {
   id: string;
   serviceId: string;
@@ -80,6 +83,7 @@ export type Deployment = {
   replicasReady: number;
   error: string | null;
   createdAt: string;
+  health: DeploymentHealth | null;
 };
 
 export type DomainKind = "platform" | "custom";

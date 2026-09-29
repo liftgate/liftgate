@@ -29,7 +29,7 @@ import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.updateReturning
 import java.util.UUID
 
-fun ResultRow.toService() = Service(
+fun ResultRow.toService(namespace: String? = getOrNull(Environments.namespace)) = Service(
     this[ServicesTable.id],
     this[ServicesTable.environmentId],
     this[ServicesTable.slug],
@@ -44,7 +44,8 @@ fun ResultRow.toService() = Service(
     this[ServicesTable.memoryMb],
     this[ServicesTable.cronSchedule],
     this[ServicesTable.startCommand],
-)
+    this[ServicesTable.healthCheckPath],
+).run { copy(internalHost = namespace?.takeIf { listens }?.let { "$slug.$it.svc.cluster.local" }) }
 
 fun orgServiceIds(orgId: UUID) = (ServicesTable innerJoin Environments innerJoin Projects).select(ServicesTable.id).where { Projects.orgId eq orgId }
 
@@ -59,7 +60,7 @@ class Services(private val db: Db, private val limits: Limits = Limits()) {
             it[id] = UUID.randomUUID()
             it[ServicesTable.environmentId] = environmentId
             it.set(spec)
-        }.single().toService()
+        }.single().toService(namespace(environmentId))
     }
 
     suspend fun scope(id: UUID): ServiceScope? = db.tx {
@@ -82,12 +83,12 @@ class Services(private val db: Db, private val limits: Limits = Limits()) {
     }
 
     suspend fun forEnvironment(environmentId: UUID): List<Service> = db.tx {
-        ServicesTable.selectAll().where { ServicesTable.environmentId eq environmentId }.orderBy(ServicesTable.slug).map { it.toService() }
+        (ServicesTable innerJoin Environments).selectAll().where { ServicesTable.environmentId eq environmentId }.orderBy(ServicesTable.slug).map { it.toService() }
     }
 
     suspend fun update(id: UUID, spec: ServiceSpec): Service = db.tx {
         limits.resize(id, spec)
-        ServicesTable.updateReturning(ServicesTable.columns, { ServicesTable.id eq id }) { it.set(spec) }.single().toService()
+        ServicesTable.updateReturning(ServicesTable.columns, { ServicesTable.id eq id }) { it.set(spec) }.single().let { it.toService(namespace(it[ServicesTable.environmentId])) }
     }
 
     suspend fun delete(id: UUID) {
@@ -114,5 +115,8 @@ class Services(private val db: Db, private val limits: Limits = Limits()) {
         this[ServicesTable.memoryMb] = spec.memoryMb
         this[ServicesTable.cronSchedule] = spec.cronSchedule
         this[ServicesTable.startCommand] = spec.startCommand
+        this[ServicesTable.healthCheckPath] = spec.healthCheckPath
     }
+
+    private fun namespace(environmentId: UUID) = Environments.select(Environments.namespace).where { Environments.id eq environmentId }.single()[Environments.namespace]
 }

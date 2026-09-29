@@ -239,6 +239,16 @@ class ReconcilerTest {
     }
 
     @Test
+    fun `a worker with a port keeps a private service and gets no route`() = runBlocking {
+        acceptAll()
+        serve(testService.copy(kind = ServiceKind.WORKER, port = 9000))
+        Reconciler(app, client).release(testDeployment.id)
+        val sent = sent()
+        assertTrue(sent.any { it.method == "PATCH" && it.path == servicePath + apply })
+        assertEquals(listOf(routePath, cronJobPath), sent.filter { it.method == "DELETE" }.map { it.path })
+    }
+
+    @Test
     fun `reroute applies routing and custom domains and never the workload`() = runBlocking {
         acceptAll()
         Reconciler(app, client).reroute(testService.id)

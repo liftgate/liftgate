@@ -35,6 +35,7 @@ import dev.liftgate.http.httpServer
 import dev.liftgate.http.json
 import dev.liftgate.k8s.DeploymentWatcher
 import dev.liftgate.k8s.PodLogs
+import dev.liftgate.k8s.PodWatcher
 import dev.liftgate.k8s.Reconciler
 import dev.liftgate.k8s.Suspension
 import dev.liftgate.k8s.Sweeper
@@ -137,6 +138,7 @@ class App(val config: Config) : AutoCloseable {
             DeploymentWatcher(this, kube).start()
             Suspension(this, kube).start()
             Sweeper(this, kube).start()
+            PodWatcher(this, kube).start()
         }
         if (runs(Role.BUILDER)) {
             Builder(this, kube).start()

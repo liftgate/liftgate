@@ -58,6 +58,7 @@ fun ResultRow.toDeployment() = Deployment(
     this[DeploymentsTable.createdAt].toInstant(),
     this[DeploymentsTable.config],
     this[DeploymentsTable.env],
+    this[DeploymentsTable.health]?.toEnum<DeploymentHealth>(),
 )
 
 fun JdbcTransaction.createDeployment(serviceId: UUID, buildId: UUID, snapshotOf: Deployment? = null): Deployment {
@@ -119,12 +120,12 @@ class Deployments(private val db: Db, private val metrics: MeterRegistry = Simpl
         running(failed.serviceId).andWhere { DeploymentsTable.id neq failedId }.orderBy(DeploymentsTable.createdAt, SortOrder.DESC).limit(1).singleOrNull()?.toDeployment()?.takeIf { it.env != null }
     }
 
-    suspend fun transition(id: UUID, to: DeploymentStatus, replicasReady: Int = 0, error: String? = null) {
+    suspend fun transition(id: UUID, to: DeploymentStatus, replicasReady: Int = 0, error: String? = null, from: Set<DeploymentStatus> = DeploymentStatus.entries.toSet()) {
         val createdAt = db.tx {
             val current = find(id, lock = true) ?: notFound("deployment")
-            if (!current.status.allows(to)) conflict("deployment cannot move from ${current.status.sql} to ${to.sql}")
+            if (current.status !in from || !current.status.allows(to)) conflict("deployment cannot move from ${current.status.sql} to ${to.sql}")
             if (to == DeploymentStatus.FAILED && current.status == DeploymentStatus.RUNNING && replaced(current)) conflict("a running deployment with a newer one cannot fail")
-            if (current.status == to && current.replicasReady == replicasReady && current.error == error) return@tx null
+            if (current.status == to && (to == DeploymentStatus.FAILED || current.replicasReady == replicasReady && current.error == error)) return@tx null
             DeploymentsTable.update({ DeploymentsTable.id eq id }) {
                 it[status] = to.sql
                 it[DeploymentsTable.replicasReady] = replicasReady
@@ -136,6 +137,15 @@ class Deployments(private val db: Db, private val metrics: MeterRegistry = Simpl
             current.createdAt.takeIf { current.status.sql in unreleased && to in outcomes }
         } ?: return
         released(to, createdAt)
+    }
+
+    suspend fun observe(id: UUID, replicasReady: Int, health: DeploymentHealth) {
+        db.tx {
+            DeploymentsTable.update({ (DeploymentsTable.id eq id) and (DeploymentsTable.status eq DeploymentStatus.RUNNING.sql) }) {
+                it[DeploymentsTable.replicasReady] = replicasReady
+                it[DeploymentsTable.health] = health.sql
+            }
+        }
     }
 
     suspend fun redrive() {

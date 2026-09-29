@@ -3,7 +3,7 @@ package dev.liftgate.http
 import dev.liftgate.App
 import dev.liftgate.auth.OrgRole
 import dev.liftgate.deploy.Build
-import dev.liftgate.service.ServiceScope
+import dev.liftgate.project.Project
 import io.ktor.client.plugins.ResponseException
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
@@ -32,7 +32,7 @@ fun Route.deployRoutes(app: App) {
             call.limit(app, "deploy", DEPLOYS_PER_MINUTE, scope.service.id.toString())
             val ref = call.receive<DeployRequest>().ref ?: scope.environment.branch
             if (!refPattern.matches(ref)) invalid("ref must be a commit sha or branch name")
-            val (sha, message) = if (shaPattern.matches(ref)) ref to null else app.branchHead(scope, ref)
+            val (sha, message) = if (shaPattern.matches(ref)) ref to null else app.branchHead(scope.project, ref)
             call.respond(HttpStatusCode.Created, app.builds.request(scope.service.id, sha, message, scope.environment.branch))
         }
         post("/redeploy") {
@@ -51,12 +51,12 @@ fun Route.deployRoutes(app: App) {
     }
 }
 
-private suspend fun App.branchHead(scope: ServiceScope, ref: String): Pair<String, String?> {
+suspend fun App.branchHead(project: Project, ref: String): Pair<String, String?> {
     val github = github ?: throw LiftgateException(HttpStatusCode.UnprocessableEntity, "ref_required", "ref must be a full commit sha")
     return try {
-        github.branchHead(scope.project.installationId, scope.project.repoFullName, ref)
+        github.branchHead(project.installationId, project.repoFullName, ref)
     } catch (e: ResponseException) {
-        invalid("GitHub could not resolve $ref of ${scope.project.repoFullName}")
+        invalid("GitHub could not resolve $ref of ${project.repoFullName}")
     }
 }
 

@@ -36,7 +36,7 @@ export function Nav({ actions }: { actions?: ReactNode }) {
             Liftgate
           </Link>
           {crumbs.map((crumb) => (
-            <span key={crumb.href} className="flex items-center gap-2">
+            <span key={crumb.href} className="flex min-w-0 items-center gap-2">
               <span className="text-graphite-600">/</span>
               <Link href={crumb.href} className="truncate text-graphite-200 hover:text-white">
                 {crumb.label}

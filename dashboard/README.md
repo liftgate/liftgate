@@ -10,14 +10,14 @@ The web UI for the Liftgate control plane: Next.js 16 (App Router), React 19, Ty
 | `/login/sso` | SAML sign-in: finds the organization by email domain |
 | `/account` | Profile, sign-in methods, passkeys, git connections |
 | `/` | The landing page with `LIFTGATE_LANDING=true`, otherwise a redirect to `/dashboard` |
-| `/dashboard` | Redirects to the first organization, or creates one |
-| `/[org]` | Projects |
+| `/dashboard` | Redirects to the first organization, or creates one; `?installed=1`, the GitHub App's setup URL, opens the new project dialog |
+| `/[org]` | Projects; `?new=project` opens the new project dialog with the repository picker |
 | `/[org]/settings/sso` | SAML connection, owners only |
 | `/[org]/settings/members` | Members and roles: owners change roles and remove, admins invite, anyone leaves |
 | `/[org]/settings/audit` | The organization's audit log, admins only |
 | `/account/invitations/[token]` | Accept an invitation to an organization |
-| `/[org]/[project]` | Environments and their services |
-| `/[org]/[project]/[environment]/[service]` | Deployments, builds with live logs, environment variables, domains, settings |
+| `/[org]/[project]` | Environments and their services; `?new=service` opens the configure and deploy step |
+| `/[org]/[project]/[environment]/[service]` | Deployments, runtime logs, builds with live logs, environment variables, domains, settings; `?tab=` picks the tab and `?tab=builds&build=<id>` opens that build's log |
 | `/[org]/[project]/[service]` | Redirects to the service in the production environment |
 
 ## Development

@@ -11,7 +11,7 @@ export function CardHeader({ title, description, actions }: { title: ReactNode; 
         <h2 className="text-base font-medium">{title}</h2>
         {description && <p className="mt-1 text-sm text-graphite-400">{description}</p>}
       </div>
-      {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+      {actions && <div className="flex shrink-0 items-center gap-2 max-md:self-stretch">{actions}</div>}
     </div>
   );
 }

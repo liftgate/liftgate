@@ -1,4 +1,5 @@
 import type { Build, Deployment, Environment, EnvVar, Service, ServiceKind } from "@/lib/types";
+import { servesHttp } from "@/lib/util";
 
 export const environment: Environment = {
   id: "env",
@@ -9,34 +10,6 @@ export const environment: Environment = {
   branch: "main",
   namespace: "env-7c1e04b9a2d3",
 };
-
-const service = (id: string, kind: ServiceKind, rootDir: string, cpuMillis: number, memoryMb: number, cronSchedule: string | null = null, startCommand: string | null = null): Service => ({
-  id,
-  slug: id,
-  name: id,
-  environmentId: "env",
-  kind,
-  rootDir,
-  buildStrategy: "auto",
-  dockerfilePath: "Dockerfile",
-  port: null,
-  replicas: 1,
-  cpuMillis,
-  memoryMb,
-  cronSchedule,
-  startCommand,
-  healthCheckPath: null,
-  internalHost: null,
-  watchPaths: [],
-});
-
-export const services: Service[] = [
-  service("web", "web", "/apps/web", 300, 256),
-  service("api", "web", "/apps/api", 300, 256),
-  service("worker", "worker", "/apps/api", 200, 256, null, "pnpm worker"),
-  service("digest", "cron", "/apps/api", 100, 128, "0 6 * * *", "pnpm digest"),
-  service("docs", "static", "/apps/docs", 100, 128),
-];
 
 export const envVars: EnvVar[] = [
   { name: "API_URL", value: "http://api", secret: false },
@@ -74,6 +47,27 @@ export const buildLog = [
 
 export function demo(now = Date.now()) {
   const ago = (seconds: number) => new Date(now - seconds * 1000).toISOString();
+  const service = (id: string, kind: ServiceKind, rootDir: string, cpuMillis: number, memoryMb: number, cronSchedule: string | null = null, startCommand: string | null = null): Service => ({
+    id,
+    slug: id,
+    name: id,
+    environmentId: "env",
+    kind,
+    rootDir,
+    buildStrategy: "auto",
+    dockerfilePath: "Dockerfile",
+    port: null,
+    replicas: 1,
+    cpuMillis,
+    memoryMb,
+    cronSchedule,
+    startCommand,
+    healthCheckPath: null,
+    internalHost: null,
+    watchPaths: [],
+    url: servesHttp(kind) ? `https://${id}-hello-dean.liftgate.app` : null,
+    current: { deploymentId: id, status: "running", replicasReady: 1, commitSha: "4f2c9e1b7d03a58c6e21f94b0d7a3c85e1f6b209", createdAt: ago(10) },
+  });
   const build = (id: string, status: Build["status"], commitSha: string, commitMessage: string, branch: string, seconds: number): Build => ({
     id,
     serviceId: "web",
@@ -99,6 +93,13 @@ export function demo(now = Date.now()) {
     health: null,
   });
   return {
+    services: [
+      service("web", "web", "/apps/web", 300, 256),
+      service("api", "web", "/apps/api", 300, 256),
+      service("worker", "worker", "/apps/api", 200, 256, null, "pnpm worker"),
+      service("digest", "cron", "/apps/api", 100, 128, "0 6 * * *", "pnpm digest"),
+      service("docs", "static", "/apps/docs", 100, 128),
+    ],
     builds: [
       build("b1", "running", "4f2c9e1b7d03a58c6e21f94b0d7a3c85e1f6b209", "Show order history on the account page", "main", 40),
       build("b2", "succeeded", "b81d3a07e4c95f2d18a6b3e70c4d59f2a8e1b637", "Cache product images", "main", 3 * 3600),

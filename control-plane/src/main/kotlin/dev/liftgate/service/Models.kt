@@ -1,7 +1,9 @@
-@file:UseSerializers(UuidSerializer::class)
+@file:UseSerializers(UuidSerializer::class, InstantSerializer::class)
 
 package dev.liftgate.service
 
+import dev.liftgate.deploy.DeploymentStatus
+import dev.liftgate.http.InstantSerializer
 import dev.liftgate.http.UuidSerializer
 import dev.liftgate.org.Organization
 import dev.liftgate.project.Environment
@@ -9,6 +11,7 @@ import dev.liftgate.project.Project
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
+import java.time.Instant
 import java.util.UUID
 
 /**
@@ -56,10 +59,15 @@ data class Service(
     val healthCheckPath: String? = null,
     val watchPaths: List<String> = emptyList(),
     val internalHost: String? = null,
+    val url: String? = null,
+    val current: Current? = null,
 ) {
     val listens get() = port != null || kind.servesHttp
 
     fun spec() = ServiceSpec(slug, name, kind, rootDir, buildStrategy, dockerfilePath, port, replicas, cpuMillis, memoryMb, cronSchedule, startCommand, healthCheckPath, watchPaths)
+
+    @Serializable
+    data class Current(val deploymentId: UUID, val status: DeploymentStatus, val replicasReady: Int, val commitSha: String, val createdAt: Instant)
 }
 
 /**

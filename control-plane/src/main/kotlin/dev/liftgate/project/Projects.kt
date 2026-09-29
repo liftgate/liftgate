@@ -56,7 +56,7 @@ fun JdbcTransaction.enqueueTeardown(where: () -> Op<Boolean>) = (Environments in
  * @date 9/17/2026
  */
 class Projects(private val db: Db, private val limits: Limits = Limits()) {
-    suspend fun create(orgId: UUID, slug: String, name: String, repoFullName: String, installationId: Long, importedByLogin: String? = null): Project = db.tx {
+    suspend fun create(orgId: UUID, slug: String, name: String, repoFullName: String, installationId: Long, importedByLogin: String? = null, defaultBranch: String = "main"): Project = db.tx {
         limits.project(orgId)
         GitHubInstallations.insertIgnore {
             it[id] = installationId
@@ -69,6 +69,7 @@ class Projects(private val db: Db, private val limits: Limits = Limits()) {
             it[ProjectsTable.slug] = slug
             it[ProjectsTable.name] = name
             it[ProjectsTable.repoFullName] = repoFullName
+            it[ProjectsTable.repoDefaultBranch] = defaultBranch
             it[ProjectsTable.installationId] = installationId
             it[ProjectsTable.importedByLogin] = importedByLogin
         }.single().toProject()

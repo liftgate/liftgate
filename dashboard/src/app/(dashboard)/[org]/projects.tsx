@@ -5,29 +5,28 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { useAction, useApi, useRole } from "@/lib/hooks";
-import type { GitConnection, Project, Usage } from "@/lib/types";
+import type { GitHubRepository, Project, Usage } from "@/lib/types";
 import { formValues } from "@/lib/util";
 import { Loaded } from "@/components/loaded";
 import { NameSlugFields } from "@/components/name-slug-fields";
 import { PageHeader } from "@/components/page-header";
-import { ProviderLink } from "@/components/provider";
+import { RepoPicker } from "@/components/repo-picker";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Field, FormError, Input } from "@/components/ui/input";
+import { FormError } from "@/components/ui/input";
 import { Skeleton, TableSkeleton } from "@/components/ui/skeleton";
 import { Cell, Row, Table } from "@/components/ui/table";
 
-export function Projects({ org }: { org: string }) {
+export function Projects({ org, opening }: { org: string; opening: boolean }) {
   const router = useRouter();
   const { query: role, admin } = useRole(org);
-  const [creating, setCreating] = useState(false);
-  const [githubLost, setGithubLost] = useState(false);
+  const [creating, setCreating] = useState(opening);
+  const [repo, setRepo] = useState<GitHubRepository>();
+  const [picker, setPicker] = useState(0);
   const projects = useApi<Project[]>(`/orgs/${org}/projects`);
-  const connections = useApi<GitConnection[]>(creating && "/me/connections");
-  const needsGithub = githubLost || connections.data?.every((c) => c.provider !== "github");
   const create = useAction(async (form: HTMLFormElement) => {
     const v = formValues(form);
     try {
@@ -35,15 +34,18 @@ export function Projects({ org }: { org: string }) {
         method: "POST",
         body: { slug: v.slug, name: v.name, repoFullName: v.repoFullName },
       });
-      router.push(`/${org}/${project.slug}`);
+      router.push(`/${org}/${project.slug}?new=service`);
     } catch (e) {
       if (!(e instanceof ApiError && e.code === "github_not_connected")) throw e;
-      setGithubLost(true);
+      setRepo(undefined);
+      setPicker((n) => n + 1);
     }
   });
+  const at = (field: string) => (create.field === field ? create.error : undefined);
   const close = () => {
     setCreating(false);
-    setGithubLost(false);
+    setRepo(undefined);
+    if (opening) window.history.replaceState(null, "", `/${org}`);
   };
   const newProject = admin && (
     <Button variant="primary" onClick={() => setCreating(true)}>
@@ -90,7 +92,7 @@ export function Projects({ org }: { org: string }) {
         }
       </Loaded>
       <UsageCard org={org} />
-      <Dialog open={creating} title="New project" onClose={close}>
+      <Dialog open={admin && creating} title="New project" onClose={close}>
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -98,28 +100,12 @@ export function Projects({ org }: { org: string }) {
           }}
           className="flex flex-col gap-4"
         >
-          <NameSlugFields />
-          {needsGithub ? (
-            <EmptyState
-              title="Connect GitHub to import a repository"
-              description="Liftgate reads your repositories through your GitHub connection."
-              action={
-                <ProviderLink provider="github" intent="connect" next={`/${org}`}>
-                  Connect GitHub
-                </ProviderLink>
-              }
-            />
-          ) : connections.loading ? (
-            <Skeleton className="h-16" />
-          ) : (
-            <Field label="GitHub repository" hint="owner/name, with the GitHub App installed and push access on your account">
-              <Input name="repoFullName" required pattern="[^\/\s]+\/[^\/\s]+" placeholder="acme/web" className="font-mono" />
-            </Field>
-          )}
-          <FormError message={create.error} />
+          <RepoPicker key={picker} next={`/${org}?new=project`} value={repo?.fullName} error={at("repoFullName")} onChange={setRepo} />
+          {repo && <NameSlugFields key={repo.fullName} prefill={repo.fullName.split("/")[1]} errorAt={at} />}
+          <FormError message={create.field ? undefined : create.error} />
           <div className="flex justify-end gap-2">
             <Button onClick={close}>Cancel</Button>
-            <Button type="submit" variant="primary" pending={create.pending} disabled={needsGithub || connections.loading}>
+            <Button type="submit" variant="primary" pending={create.pending} disabled={!repo}>
               Create project
             </Button>
           </div>

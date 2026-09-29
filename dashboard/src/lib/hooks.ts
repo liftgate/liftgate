@@ -33,17 +33,17 @@ export function useApi<T>(key: string | null | undefined | false, load?: () => P
 
 export function useAction<A extends unknown[]>(fn: (...args: A) => Promise<void>) {
   const [pending, start] = useTransition();
-  const [error, setError] = useState<string>();
+  const [failure, setFailure] = useState<{ error: string; field?: string }>();
   const run = (...args: A) =>
     start(async () => {
-      setError(undefined);
+      setFailure(undefined);
       try {
         await fn(...args);
       } catch (e) {
-        setError(describe(e));
+        setFailure({ error: describe(e), field: e instanceof ApiError ? e.field : undefined });
       }
     });
-  return { pending, error, run };
+  return { pending, error: failure?.error, field: failure?.field, run };
 }
 
 export function useCopy() {

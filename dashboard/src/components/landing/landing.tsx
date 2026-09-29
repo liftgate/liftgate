@@ -44,7 +44,7 @@ const footerLinks = [
 ];
 
 export function Landing({ signedIn }: { signedIn: boolean }) {
-  const { builds, deployments } = demo();
+  const { services, builds, deployments } = demo();
   return (
     <>
       <a href="#main" className={buttonClasses("secondary", "fixed top-3 left-6 z-20 -translate-y-16 focus:translate-y-0")}>
@@ -80,7 +80,7 @@ export function Landing({ signedIn }: { signedIn: boolean }) {
         <Hero signedIn={signedIn} />
         <Stacks />
         <HowItWorks builds={builds} deployments={deployments} />
-        <OneProject />
+        <OneProject services={services} />
         <CloudOrYours signedIn={signedIn} />
         <Security />
         <SelfHost />

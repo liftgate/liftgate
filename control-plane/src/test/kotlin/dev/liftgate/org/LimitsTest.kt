@@ -99,7 +99,7 @@ class LimitsTest {
         val web = services.create(production, spec("web"))
         services.create(production, spec("api"))
         assertEquals(
-            "the free plan's cpuMillis limit is 1000 across the organization, and this change needs 1100",
+            "the free plan's CPU limit is 1000m across the organization, and this change needs 1100m",
             refused { services.update(web.id, spec("web", cpuMillis = 600)) },
         )
         assertEquals(500, services.scope(web.id)?.service?.cpuMillis)
@@ -111,7 +111,7 @@ class LimitsTest {
         assertEquals(1000, services.update(web.id, spec("web", replicas = 1, cpuMillis = 1000)).cpuMillis)
         assertEquals("renamed", services.update(web.id, spec("web", cpuMillis = 1000).copy(name = "renamed")).name)
         assertEquals(
-            "the free plan's cpuMillis limit is 1000 across the organization, and this change needs 2500",
+            "the free plan's CPU limit is 1000m across the organization, and this change needs 2500m",
             refused { services.update(web.id, spec("web", replicas = 2, cpuMillis = 1000)) },
         )
     }
@@ -120,10 +120,10 @@ class LimitsTest {
     fun `a cron service counts as one pod whatever its replicas`() = runBlocking {
         val production = production("acme")
         val cron = spec("job", replicas = 0, cpuMillis = 2000).copy(kind = ServiceKind.CRON, cronSchedule = "* * * * *")
-        assertEquals("the free plan's cpuMillis limit is 1000 across the organization, and this change needs 2000", refused { services.create(production, cron) })
+        assertEquals("the free plan's CPU limit is 1000m across the organization, and this change needs 2000m", refused { services.create(production, cron) })
         assertEquals(0L, rows(ServicesTable))
         val job = services.create(production, cron.copy(cpuMillis = 500))
-        assertEquals("the free plan's cpuMillis limit is 1000 across the organization, and this change needs 1500", refused { services.update(job.id, cron.copy(cpuMillis = 1500)) })
+        assertEquals("the free plan's CPU limit is 1000m across the organization, and this change needs 1500m", refused { services.update(job.id, cron.copy(cpuMillis = 1500)) })
         assertEquals(500, services.scope(job.id)?.service?.cpuMillis)
     }
 

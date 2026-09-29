@@ -41,13 +41,14 @@ data class AuthProviders(
     val email: Boolean,
     val sso: Boolean,
     val customDomains: Boolean,
+    val deployDomain: String,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val termsUrl: String? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val privacyUrl: String? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val aupUrl: String? = null,
 )
 
 fun App.authProviders() =
-    AuthProviders(oauth.providers.keys.toList(), passkey = true, email = emailCodes != null, sso = true, customDomains = config.customDomainsEnabled, config.termsUrl, config.privacyUrl, config.aupUrl)
+    AuthProviders(oauth.providers.keys.toList(), passkey = true, email = emailCodes != null, sso = true, customDomains = config.customDomainsEnabled, config.deployDomain, config.termsUrl, config.privacyUrl, config.aupUrl)
 
 fun safeNext(next: String?): String? = next?.takeIf { it.startsWith("/") && !it.startsWith("//") && '\\' !in it }
 

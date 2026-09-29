@@ -9,7 +9,7 @@ import { Card, CardHeader } from "@/components/ui/card";
 import { ErrorState } from "@/components/ui/empty-state";
 import { PageSkeleton } from "@/components/ui/skeleton";
 
-export function OrgChooser() {
+export function OrgChooser({ installed }: { installed: boolean }) {
   const me = useApi<User>("/me");
   const orgs = useApi<Organization[]>("/orgs");
   const failed = me.error ?? orgs.error;
@@ -24,7 +24,7 @@ export function OrgChooser() {
         />
       </Card>
     );
-  if (orgs.data[0]) redirect(`/${orgs.data[0].slug}`);
+  if (orgs.data[0]) redirect(`/${orgs.data[0].slug}${installed ? "?new=project" : ""}`);
   return (
     <Card className="mx-auto mt-16 w-full max-w-lg">
       <CardHeader title="Create your organization" description="Projects and members belong to an organization." />

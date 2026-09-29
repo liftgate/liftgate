@@ -110,16 +110,16 @@ inline fun <reified T : XMLObject> saml(name: QName) = XMLObjectSupport.buildXML
 
 fun certificate(text: String): X509Certificate = runCatching {
     CertificateFactory.getInstance("X.509").generateCertificate(Base64.getMimeDecoder().decode(text.replace(pemArmor, "")).inputStream()) as X509Certificate
-}.getOrElse { invalid("idpCertificate must be a PEM encoded X.509 certificate") }
+}.getOrElse { invalid("the signing certificate must be a PEM encoded X.509 certificate", "idpCertificate") }
 
 fun SsoSettings.validated(): SsoSettings {
     val url = runCatching { URI(idpSsoUrl.trim()) }.getOrNull()?.takeIf { it.scheme == "https" && !it.host.isNullOrEmpty() }
-        ?: invalid("idpSsoUrl must be an https URL")
+        ?: invalid("the SSO URL must be an https URL", "idpSsoUrl")
     val domains = emailDomains.map { it.trim().lowercase().removePrefix("@") }.distinct()
-    if (domains.isEmpty() || !domains.all(domainPattern::matches)) invalid("emailDomains must list domains such as acme.com")
-    if (defaultRole == OrgRole.OWNER) invalid("defaultRole must be member or admin")
+    if (domains.isEmpty() || !domains.all(domainPattern::matches)) invalid("list email domains such as acme.com", "emailDomains")
+    if (defaultRole == OrgRole.OWNER) invalid("the default role must be member or admin", "defaultRole")
     val pem = Base64.getMimeEncoder(64, "\n".toByteArray()).encodeToString(certificate(idpCertificate).encoded)
-    return SsoSettings(idpEntityId.trim().ifEmpty { invalid("idpEntityId is required") }, url.toString(), "-----BEGIN CERTIFICATE-----\n$pem\n-----END CERTIFICATE-----", domains, defaultRole)
+    return SsoSettings(idpEntityId.trim().ifEmpty { invalid("the IdP entity ID is required", "idpEntityId") }, url.toString(), "-----BEGIN CERTIFICATE-----\n$pem\n-----END CERTIFICATE-----", domains, defaultRole)
 }
 
 /**

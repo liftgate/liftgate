@@ -166,8 +166,8 @@ fun Route.orgRoutes(app: App) {
 }
 
 fun requireSlug(slug: String, reserved: Set<String> = emptySet()) {
-    if (!slugPattern.matches(slug)) invalid("slug must be 2 to 40 lowercase letters, digits or hyphens")
-    if (slug in reserved) invalid("$slug is reserved, choose another slug")
+    if (!slugPattern.matches(slug)) invalid("slug must be 2 to 40 lowercase letters, digits or hyphens", "slug")
+    if (slug in reserved) invalid("$slug is reserved, choose another slug", "slug")
 }
 
 fun requireName(name: String) = name.trim().takeIf { it.length in 1..100 } ?: invalid("name must be 1 to 100 characters")

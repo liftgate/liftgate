@@ -117,12 +117,13 @@ Generate `masterKey` with `openssl rand -base64 32`. `registry` is where build j
 Liftgate signs users in and reads repositories through one GitHub App. Create it under Settings, Developer settings, GitHub Apps, with:
 
 - Callback URL: `<publicUrl>/api/v1/auth/github/callback`
+- Setup URL: `<dashboardUrl>/dashboard?installed=1`, with Redirect on update checked and Request user authorization during installation left unchecked, so an install started from the dashboard returns to the new project dialog
 - Webhook URL: `<publicUrl>/api/v1/webhooks/github`, with a webhook secret
 - Repository permissions: Commit statuses read and write, Contents read-only, Metadata read-only
 - Account permissions: Email addresses read-only
 - Subscribe to events: Push
 
-Generate a private key, then install the app on the account or organisation whose repositories you want to deploy. The App ID, client ID, client secret, webhook secret and private key go into the chart's `github` values, or into `control-plane/.env` for local development. A new project asks only for the repository name: Liftgate looks up the installation itself and accepts the repository only when the signed-in GitHub account can push to it.
+Generate a private key, then install the app on the account or organisation whose repositories you want to deploy. The App ID, client ID, client secret, webhook secret and private key go into the chart's `github` values, or into `control-plane/.env` for local development. A new project lists the repositories where the App is installed and the signed-in GitHub account can push, with a link to install the App on another account; Liftgate looks up the installation itself and checks the push access again when the project is created.
 
 ### Other sign-in methods
 

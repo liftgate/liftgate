@@ -10,7 +10,8 @@ Gateway controller (Cilium by default), cert-manager with Gateway API support an
 `prometheusUrl`. Build jobs push to `registry`; nodes must be able to pull from it.
 
 You also need a GitHub App (webhook URL `<publicUrl>/api/v1/webhooks/github`, OAuth callback
-`<publicUrl>/api/v1/auth/github/callback`) and a random `secrets.masterKey`:
+`<publicUrl>/api/v1/auth/github/callback`, setup URL `<dashboardUrl>/dashboard?installed=1` with
+Redirect on update checked) and a random `secrets.masterKey`:
 
 ```sh
 MASTER_KEY=$(openssl rand -base64 32)

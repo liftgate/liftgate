@@ -59,7 +59,7 @@ export type ServiceSpec = {
   watchPaths: string[];
 };
 
-export type Service = ServiceSpec & { id: string; environmentId: string; internalHost: string | null };
+export type Service = ServiceSpec & { id: string; environmentId: string; internalHost: string | null; url: string | null; current: CurrentDeployment | null };
 
 export type EnvVar = { name: string; value: string | null; secret: boolean };
 
@@ -117,6 +117,7 @@ export type AuthProviders = {
   email: boolean;
   sso: boolean;
   customDomains: boolean;
+  deployDomain: string;
   termsUrl?: string;
   privacyUrl?: string;
   aupUrl?: string;
@@ -213,3 +214,9 @@ export type AuditEntry = {
   details: Record<string, string>;
   createdAt: string;
 };
+
+export type CurrentDeployment = { deploymentId: string; status: DeploymentStatus; replicasReady: number; commitSha: string; createdAt: string };
+
+export type GitHubRepository = { fullName: string; defaultBranch: string; private: boolean };
+
+export type ImportableRepositories = { repositories: GitHubRepository[]; installUrl: string };

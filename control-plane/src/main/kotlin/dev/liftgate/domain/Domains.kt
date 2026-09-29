@@ -121,8 +121,8 @@ class Domains(
 
     suspend fun refreshEdge() {
         val edge = edge ?: return
-        val hostnames = edge.hostnames().associateBy { it.id }
         val domains = db.tx { DomainsTable.selectAll().where { DomainsTable.edgeId.isNotNull() }.map { it.toDomain() } }
+        val hostnames = edge.hostnames().associateBy { it.id }
         val changed = domains.map { it to (hostnames[it.edgeId]?.certificate ?: CertificateState("failed", "Cloudflare has no custom hostname for ${it.hostname}")) }
             .filter { (domain, state) -> state != CertificateState(domain.certificateStatus, domain.certificateMessage) }
         if (changed.isNotEmpty()) db.tx { changed.forEach { (domain, state) -> setCertificate(domain.hostname, state) } }

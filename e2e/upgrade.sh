@@ -18,7 +18,7 @@ sql() {
   kubectl -n "$NAMESPACE" exec -i liftgate-postgres-1 -c postgres -- psql --username postgres --dbname liftgate --set ON_ERROR_STOP=1 --tuples-only --no-align "$@"
 }
 running() {
-  test "$(sql --command "select status from deployments where id = '00000000-0000-4000-8000-000000000008'")" = running
+  test "$(sql --command "select status from deployments where id = '${1:-00000000-0000-4000-8000-000000000008}'")" = running
 }
 
 echo "==> install $tag"
@@ -60,6 +60,18 @@ running
 test "$(sql --command 'select version from flyway_schema_history where success order by installed_rank desc limit 1')" = \
   "$(ls control-plane/src/main/resources/db/migration | sed -n 's/^V\([0-9]*\)__.*/\1/p' | sort -n | tail -1)"
 sh e2e/checks/10-gateway.sh
+
+echo "==> NATS down for 30 s"
+kubectl -n "$NAMESPACE" scale statefulset/liftgate-nats --replicas=0
+kubectl -n "$NAMESPACE" wait --for=delete pod/liftgate-nats-0 --timeout=2m
+sleep 30
+kubectl -n "$NAMESPACE" scale statefulset/liftgate-nats --replicas=1
+kubectl -n "$NAMESPACE" rollout status statefulset/liftgate-nats --timeout=5m
+release="$(cat /proc/sys/kernel/random/uuid)"
+sql --command "insert into deployments (id, service_id, build_id, status) values ('$release', '00000000-0000-4000-8000-000000000005', '00000000-0000-4000-8000-000000000007', 'pending');
+  insert into outbox (subject, payload) values ('liftgate.release.requested', '{\"deploymentId\": \"$release\"}')"
+for attempt in $(seq 60); do running "$release" && break; sleep 5; done
+running "$release"
 
 awk '{ print $2 }' "$codes" | sort | uniq -c
 test -s "$codes"

@@ -47,3 +47,13 @@ helm rollback liftgate -n liftgate-system --wait
 
 If it grew, do not stop at `helm rollback`: after it, restore the database to the time recorded
 in step 1 by following [Restore](cnpg/README.md#restore) with the previous release's chart.
+
+## Upgrading from v0.2.0-alpha.2 or older
+
+v0.2.0-alpha.3 moved build images from `<org>/<project>-<service>` to
+`<org>/<project>/<environment>/<service>`. For that release only, a build that was already running
+when it was installed could still push to the old name, and the registry janitor kept the image
+it pushed. Later releases do neither, so upgrading straight from v0.2.0-alpha.2 or older skips that
+transition: a build running during the upgrade may fail to push with `registryAuth: token`, or lose
+its image to the janitor before it deploys. Retry such builds after the upgrade, or upgrade to
+v0.2.0-alpha.3 first.

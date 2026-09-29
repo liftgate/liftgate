@@ -15,6 +15,7 @@ export function SettingsTab({ service, projectHref, onChanged }: { service: Serv
   const router = useRouter();
   const [status, setStatus] = useState<string>();
   const save = useAction(async (spec: ServiceSpec, andRedeploy: boolean) => {
+    setStatus(undefined);
     await api(`/services/${service.id}`, { method: "PATCH", body: spec });
     setStatus(await saved(service.id, andRedeploy));
     onChanged();

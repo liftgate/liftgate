@@ -15,6 +15,7 @@ export function EnvEditor({ serviceId, initial }: { serviceId: string; initial: 
   const [rows, setRows] = useState(() => storedRows(initial));
   const [status, setStatus] = useState<string>();
   const save = useAction(async (andRedeploy: boolean) => {
+    setStatus(undefined);
     const body = envPayload(rows);
     await api(`/services/${serviceId}/env`, { method: "PUT", body });
     setRows(storedRows(body));

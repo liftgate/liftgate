@@ -2,6 +2,7 @@ package dev.liftgate.org
 
 import dev.liftgate.App
 import dev.liftgate.TestDatabase
+import dev.liftgate.admin.Admin
 import dev.liftgate.auth.Access
 import dev.liftgate.auth.ApiTokens
 import dev.liftgate.auth.Mailer
@@ -77,9 +78,9 @@ class InvitationsTest {
     private val owner = user("owner")
     private val acme = runBlocking { orgs.create("acme", "Acme", owner) }
 
-    private fun user(login: String, role: OrgRole? = null): UUID = runBlocking {
+    private fun user(login: String, role: OrgRole? = null, status: UserStatus = UserStatus.ACTIVE): UUID = runBlocking {
         db.tx {
-            insertUser(login, null, null, null).id.also { id ->
+            insertUser(login, null, null, null, status).id.also { id ->
                 role?.let {
                     Memberships.insert {
                         it[orgId] = acme.id
@@ -208,6 +209,22 @@ class InvitationsTest {
         val newbie = user("newbie")
         assertEquals(HttpStatusCode.OK, client.accept("newbie", invitation).status)
         assertEquals(OrgRole.OWNER, orgs.role(acme.id, newbie))
+    }
+
+    @Test
+    fun `a pending user gets account_pending accepting a member or an owner invitation and joins once approved`() = testApplication {
+        application { liftgate(app) }
+        val asMember = client.invite("owner", "member").invitation()
+        val asOwner = client.invite("owner", "owner").invitation()
+        val newbie = user("newbie", status = UserStatus.PENDING)
+        assertEquals(HttpStatusCode.Forbidden to "account_pending", client.accept("newbie", asMember).error())
+        assertEquals(HttpStatusCode.Forbidden to "account_pending", client.accept("newbie", asOwner).error())
+        assertNull(orgs.role(acme.id, newbie))
+        Admin(db).run(listOf("approve", newbie.toString()))
+        assertEquals(HttpStatusCode.OK, client.accept("newbie", asOwner).status)
+        assertEquals(OrgRole.OWNER, orgs.role(acme.id, newbie))
+        user("other")
+        assertEquals(HttpStatusCode.OK, client.accept("other", asMember).status)
     }
 
     @Test

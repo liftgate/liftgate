@@ -156,7 +156,9 @@ fun Route.orgRoutes(app: App) {
     route("/invitations/{token}") {
         get { call.respond(app.invitations.preview(call.parameters["token"]!!)) }
         post("/accept") {
-            val org = app.invitations.accept(call.parameters["token"]!!, call.sessionUser.id)
+            val user = call.sessionUser
+            if (user.status == UserStatus.PENDING) accountPending()
+            val org = app.invitations.accept(call.parameters["token"]!!, user.id)
             call.auditOrg(org.id)
             call.respond(org)
         }

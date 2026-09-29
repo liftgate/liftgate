@@ -18,6 +18,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.time.Instant
 
@@ -34,11 +35,11 @@ class GitHubApp(private val config: GitHubConfig, private val client: HttpClient
         JWT.create().withIssuer(config.appId).withIssuedAt(it.minusSeconds(60)).withExpiresAt(it.plusSeconds(540)).sign(Algorithm.RSA256(null, key))
     }
 
-    suspend fun installationToken(installationId: Long, repository: String): String =
+    suspend fun installationToken(installationId: Long, repository: String, permissions: Map<String, String> = mapOf("contents" to "read", "metadata" to "read")): String =
         client.post("$API/app/installations/$installationId/access_tokens") {
             github(appJwt())
             contentType(ContentType.Application.Json)
-            setBody(TokenRequest(listOf(repository), mapOf("contents" to "read", "metadata" to "read")))
+            setBody(TokenRequest(listOf(repository), permissions))
         }.body<AccessToken>().token
 
     suspend fun branchHead(installationId: Long, repoFullName: String, branch: String): Pair<String, String?> =
@@ -58,12 +59,23 @@ class GitHubApp(private val config: GitHubConfig, private val client: HttpClient
         null
     }
 
+    suspend fun postStatus(installationToken: String, repoFullName: String, sha: String, status: CommitStatus) {
+        client.post("$API/repos/$repoFullName/statuses/$sha") {
+            github(installationToken)
+            contentType(ContentType.Application.Json)
+            setBody(status)
+        }
+    }
+
     private fun HttpRequestBuilder.github(token: String) {
         expectSuccess = true
         bearerAuth(token)
         header(HttpHeaders.Accept, "application/vnd.github+json")
         header("X-GitHub-Api-Version", "2022-11-28")
     }
+
+    @Serializable
+    data class CommitStatus(val state: String, @SerialName("target_url") val targetUrl: String, val description: String, val context: String)
 
     @Serializable
     private data class TokenRequest(val repositories: List<String>, val permissions: Map<String, String>)

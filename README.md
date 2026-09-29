@@ -118,7 +118,7 @@ Liftgate signs users in and reads repositories through one GitHub App. Create it
 
 - Callback URL: `<publicUrl>/api/v1/auth/github/callback`
 - Webhook URL: `<publicUrl>/api/v1/webhooks/github`, with a webhook secret
-- Repository permissions: Contents read-only, Metadata read-only
+- Repository permissions: Commit statuses read and write, Contents read-only, Metadata read-only
 - Account permissions: Email addresses read-only
 - Subscribe to events: Push
 

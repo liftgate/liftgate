@@ -1,6 +1,7 @@
 package dev.liftgate.k8s
 
 import dev.liftgate.App
+import dev.liftgate.build.BUILD_CONSUMER
 import dev.liftgate.build.BUILD_LABEL
 import dev.liftgate.db.Deployments
 import dev.liftgate.db.Environments
@@ -9,7 +10,6 @@ import dev.liftgate.db.sql
 import dev.liftgate.deploy.BuildStatus
 import dev.liftgate.deploy.DeploymentStatus
 import dev.liftgate.events.LeaderElection
-import dev.liftgate.events.Subject
 import io.fabric8.kubernetes.api.model.HasMetadata
 import io.fabric8.kubernetes.client.KubernetesClient
 import kotlinx.coroutines.CoroutineScope
@@ -47,7 +47,7 @@ class Sweeper(private val app: App, private val kube: KubernetesClient) {
     suspend fun redrive() {
         app.deployments.redrive()
         app.builds.timeOut(BuildStatus.RUNNING)
-        if (app.nats.backlog(Subject.BUILD_REQUESTED) > 0) return
+        if (app.nats.backlog(BUILD_CONSUMER) > 0) return
         app.builds.timeOut(BuildStatus.QUEUED)
         val jobs = withContext(Dispatchers.IO) { kube.batch().v1().jobs().inNamespace(app.config.buildNamespace).withLabel(BUILD_LABEL).list().items }
         app.builds.requeue(jobs.mapNotNull { it.metadata.labels[BUILD_LABEL] }.toSet())

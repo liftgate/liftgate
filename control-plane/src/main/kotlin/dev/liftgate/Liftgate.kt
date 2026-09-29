@@ -40,6 +40,9 @@ import dev.liftgate.k8s.Suspension
 import dev.liftgate.k8s.Sweeper
 import dev.liftgate.metering.Meter
 import dev.liftgate.metering.Prometheus
+import dev.liftgate.notify.CommitStatuses
+import dev.liftgate.notify.NotificationChannels
+import dev.liftgate.notify.Notifier
 import dev.liftgate.org.Limits
 import dev.liftgate.org.Orgs
 import dev.liftgate.project.Projects
@@ -107,6 +110,8 @@ class App(val config: Config) : AutoCloseable {
     val registryTokens = RegistryTokens(db, services, config)
     val buildAdmission = BuildAdmission(db, config.plans)
     val podLogs = PodLogs(kube)
+    val notificationChannels by lazy { NotificationChannels(db, secrets) }
+    val notifier by lazy { Notifier(this) }
     private val stopped = CountDownLatch(1)
     private var server: EmbeddedServer<*, *>? = null
 
@@ -124,6 +129,8 @@ class App(val config: Config) : AutoCloseable {
             val backlog = Backlog(db, metrics)
             LeaderElection(config, kube, "liftgate-outbox-relay").start(scope) { coroutineScope { relay.start(this); Housekeeping(db).start(this); backlog.start(this) } }
             nats.consume(Subject.USER_UPDATED, "api-user-updated", scope) { sessions.evict(it.uuid("userId")) }
+            CommitStatuses(this).start()
+            notifier.start()
         }
         if (runs(Role.RECONCILER)) {
             Reconciler(this, kube).start()

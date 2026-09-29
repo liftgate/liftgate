@@ -81,7 +81,9 @@ data class ServiceSpec(
  * @author Dean
  * @date 9/17/2026
  */
-data class ServiceScope(val service: Service, val environment: Environment, val project: Project, val org: Organization)
+data class ServiceScope(val service: Service, val environment: Environment, val project: Project, val org: Organization) {
+    fun buildUrl(dashboardUrl: String, buildId: UUID) = "$dashboardUrl/${org.slug}/${project.slug}/${environment.slug}/${service.slug}?tab=builds&build=$buildId"
+}
 
 /**
  * @author Dean

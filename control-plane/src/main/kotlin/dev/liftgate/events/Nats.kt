@@ -109,8 +109,8 @@ class Nats(private val config: Config, private val metrics: MeterRegistry, priva
         }
     }
 
-    fun backlog(subject: Subject): Long = connection.jetStreamManagement().getConsumers(STREAM)
-        .filter { it.consumerConfiguration.filterSubject == subject.value }
+    fun backlog(durable: String): Long = connection.jetStreamManagement().getConsumers(STREAM)
+        .filter { it.name == durable }
         .sumOf { it.numPending + it.numAckPending }
 
     override fun close() = connection.close()

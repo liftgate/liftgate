@@ -27,6 +27,7 @@ private const val WAIT_MINUTES = 35L
 private const val CONCURRENT_BUILDS = 4
 private const val POD_WAIT_MINUTES = 10L
 private val logDrain = 10.seconds
+const val BUILD_CONSUMER = "builder-build-requested"
 
 /**
  * @author Dean
@@ -73,7 +74,7 @@ class Builder(private val app: App, private val kube: KubernetesClient) {
         app.nats.logs.end(buildId, failure)
     }
 
-    fun start(): Job = app.nats.consume(Subject.BUILD_REQUESTED, "builder-build-requested", app.scope, Duration.ofSeconds(60), CONCURRENT_BUILDS) { build(it.uuid("buildId")) }
+    fun start(): Job = app.nats.consume(Subject.BUILD_REQUESTED, BUILD_CONSUMER, app.scope, Duration.ofSeconds(60), CONCURRENT_BUILDS) { build(it.uuid("buildId")) }
 
     private suspend fun fail(buildId: UUID, reason: String) {
         app.builds.markFailed(buildId, reason)

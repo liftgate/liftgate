@@ -58,10 +58,10 @@ fun ResultRow.toBuild() = Build(
 class Builds(private val db: Db) {
     suspend fun request(serviceId: UUID, commitSha: String, commitMessage: String?, branch: String): Build = db.tx {
         Services.select(Services.id).where { Services.id eq serviceId }.forUpdate().toList()
-        BuildsTable.update({ (BuildsTable.serviceId eq serviceId) and (BuildsTable.branch eq branch) and (BuildsTable.status eq BuildStatus.QUEUED.sql) }) {
+        BuildsTable.updateReturning(listOf(BuildsTable.id), { (BuildsTable.serviceId eq serviceId) and (BuildsTable.branch eq branch) and (BuildsTable.status eq BuildStatus.QUEUED.sql) }) {
             it[status] = BuildStatus.CANCELLED.sql
             it[finishedAt] = now()
-        }
+        }.toList().forEach { completed(it[BuildsTable.id], BuildStatus.CANCELLED) }
         val build = BuildsTable.insertReturning {
             it[id] = UUID.randomUUID()
             it[BuildsTable.serviceId] = serviceId

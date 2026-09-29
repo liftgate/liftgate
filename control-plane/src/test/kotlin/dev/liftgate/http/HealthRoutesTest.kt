@@ -31,7 +31,6 @@ class HealthRoutesTest {
     private val polls = mutableMapOf<String, Instant>()
     private val nats = mockk<Nats> {
         every { lastPolls } returns polls
-        every { connected } returns true
     }
     private val app = mockk<App>().also {
         every { it.db } returns db
@@ -75,15 +74,12 @@ class HealthRoutesTest {
     }
 
     @Test
-    fun `readyz fails while stopping, without nats, or without hazelcast where the api runs`() = testApplication {
+    fun `readyz fails while stopping or without hazelcast where the api runs`() = testApplication {
         application { liftgate(app) }
         suspend fun status() = client.get("/readyz").status
         every { app.stopping } returns true
         assertEquals(HttpStatusCode.ServiceUnavailable, status())
         every { app.stopping } returns false
-        every { nats.connected } returns false
-        assertEquals(HttpStatusCode.ServiceUnavailable, status())
-        every { nats.connected } returns true
         val cache = mockk<Cache> { every { running } returns false }
         every { app.runs(Role.API) } returns true
         every { app.cache } returns cache

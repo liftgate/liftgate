@@ -3,13 +3,16 @@ package dev.liftgate.k8s
 import dev.liftgate.App
 import dev.liftgate.deploy.Deployment
 import dev.liftgate.deploy.DeploymentStatus
+import dev.liftgate.domain.DomainKind
 import dev.liftgate.events.Subject
 import dev.liftgate.events.uuid
 import dev.liftgate.service.ServiceKind
+import io.fabric8.kubernetes.api.model.GenericKubernetesResource
 import io.fabric8.kubernetes.api.model.HasMetadata
 import io.fabric8.kubernetes.api.model.batch.v1.CronJob
 import io.fabric8.kubernetes.api.model.gatewayapi.v1.Gateway
 import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPRoute
+import io.fabric8.kubernetes.api.model.gatewayapi.v1.Listener
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.KubernetesClientException
 import kotlinx.coroutines.CoroutineScope
@@ -50,7 +53,9 @@ class Reconciler(private val app: App, private val kube: KubernetesClient) {
         }
         if (converge(deployment)) return app.deployments.transition(deployment.id, DeploymentStatus.SUPERSEDED)
         if (release.service.kind == ServiceKind.CRON) app.deployments.transition(deployment.id, DeploymentStatus.RUNNING)
-        runCatching { syncCustomDomains() }.onFailure { currentCoroutineContext().ensureActive(); log.warn("custom domains could not be synced", it) }
+        if (release.domains.any { it.kind == DomainKind.CUSTOM }) {
+            runCatching { syncCustomDomains() }.onFailure { currentCoroutineContext().ensureActive(); log.warn("custom domains could not be synced", it) }
+        }
     }
 
     suspend fun reroute(serviceId: UUID) {
@@ -155,15 +160,21 @@ class Reconciler(private val app: App, private val kube: KubernetesClient) {
 
     suspend fun syncCustomDomains() {
         val config = app.config
-        val domains = app.domains.verifiedCustom()
+        val domains = if (config.cloudflare == null) app.domains.verifiedCustom() else emptyList()
         withContext(Dispatchers.IO) {
-            kube.resources(Gateway::class.java).inNamespace(config.gatewayNamespace).withName(config.gatewayName).get() ?: return@withContext
+            val gateway = kube.resources(Gateway::class.java).inNamespace(config.gatewayNamespace).withName(config.gatewayName).get() ?: return@withContext
             val certificates = kube.genericKubernetesResources(certificateContext).inNamespace(config.gatewayNamespace)
-            domains.forEach { certificates.resource(Resources.certificate(it, config.gatewayNamespace, config.certIssuer)).apply() }
-            kube.resource(Resources.gatewayListeners(domains, config.gatewayNamespace, config.gatewayName)).apply()
-            certificates.withLabel(MANAGED_LABEL, "true").list().items
-                .filter { certificate -> domains.none { it.hostname == certificate.metadata.name } }
-                .forEach { certificates.resource(it).delete() }
+            val live = certificates.withLabel(MANAGED_LABEL, "true").list().items.associateBy { it.metadata.name }
+            domains.map { Resources.certificate(it, config.gatewayNamespace, config.certIssuer) }
+                .filter { wanted -> live[wanted.metadata.name]?.spec.orEmpty().filterKeys { it in wanted.spec.keys } != wanted.spec }
+                .forEach { certificates.resource(it).apply() }
+            val listeners = Resources.gatewayListeners(domains, config.gatewayNamespace, config.gatewayName)
+            if (listeners.spec.listeners.domainListeners() != gateway.spec?.listeners.orEmpty().domainListeners()) kube.resource(listeners).apply()
+            live.values.filter { certificate -> domains.none { it.hostname == certificate.metadata.name } }.forEach { certificates.resource(it).delete() }
         }
     }
+
+    private val GenericKubernetesResource.spec get() = get<Map<String, Any?>>("spec").orEmpty()
+
+    private fun List<Listener>.domainListeners() = filter { it.name.startsWith(DOMAIN_LISTENER) }.map { it.name to it.hostname }.toSet()
 }

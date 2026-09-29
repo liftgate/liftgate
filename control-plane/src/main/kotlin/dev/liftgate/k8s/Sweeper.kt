@@ -32,6 +32,7 @@ import org.slf4j.LoggerFactory
 import java.util.UUID
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
 private const val KEPT_SECRETS = 5
 
@@ -49,6 +50,7 @@ class Sweeper(private val app: App, private val kube: KubernetesClient) {
             every(1.minutes, "orphan removal", ::removeOrphans)
             every(5.minutes, "resync", ::resync)
             every(5.minutes, "env secret pruning", ::pruneSecrets)
+            every(30.seconds, "custom domain sync", reconciler::syncCustomDomains)
         }
     }
 
@@ -80,7 +82,6 @@ class Sweeper(private val app: App, private val kube: KubernetesClient) {
             Deployments.select(Deployments.serviceId).where { Deployments.status eq DeploymentStatus.RUNNING.sql }.withDistinct().map { it[Deployments.serviceId] }
         }
         running.each("resync of service") { reconciler.reapply(it, live[it.toString()]) }
-        reconciler.syncCustomDomains()
     }
 
     suspend fun pruneSecrets() {

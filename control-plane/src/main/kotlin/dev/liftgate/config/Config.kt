@@ -12,6 +12,7 @@ import kotlinx.serialization.json.Json
 import java.util.Base64
 
 private const val GITLAB_COM = "https://gitlab.com"
+private const val CLOUDFLARE_INCLUDED_HOSTNAMES = 100
 
 /**
  * @author Dean
@@ -101,6 +102,7 @@ data class Config(
     val logReaderRole: String?,
     val logReaderAccount: String,
     val deniedEgressCidrs: List<String>,
+    val cloudflare: CloudflareConfig?,
 ) {
     companion object {
         private val taint = Regex("""([\w./-]+)(?:=([\w.-]*))?(?::(NoSchedule|PreferNoSchedule|NoExecute))?""")
@@ -158,6 +160,13 @@ data class Config(
             }
             val publicUrl = text("PUBLIC_URL", "http://localhost:8080")
             val httpPort = text("HTTP_PORT", "8080").toInt()
+            val deployDomain = text("DEPLOY_DOMAIN", "liftgate.app").takeIf { it.length <= DomainNames.MAX_DEPLOY_DOMAIN }
+                ?: error("LIFTGATE_DEPLOY_DOMAIN must be at most ${DomainNames.MAX_DEPLOY_DOMAIN} characters, so generated hostnames stay within 253")
+            val cloudflareToken = optional("CLOUDFLARE_API_TOKEN")
+            check(cloudflareToken == null || optional("CLOUDFLARE_ZONE_ID") != null) { "LIFTGATE_CLOUDFLARE_API_TOKEN needs LIFTGATE_CLOUDFLARE_ZONE_ID" }
+            val cloudflare = optional("CLOUDFLARE_ZONE_ID")?.takeIf { role in setOf(Role.API, Role.RECONCILER, Role.ALL) }?.let {
+                CloudflareConfig(it, cloudflareToken ?: error("LIFTGATE_CLOUDFLARE_ZONE_ID needs LIFTGATE_CLOUDFLARE_API_TOKEN"), text("CLOUDFLARE_CNAME_TARGET", "cname.$deployDomain"))
+            }
 
             return Config(
                 role = role,
@@ -172,8 +181,7 @@ data class Config(
                 publicUrl = publicUrl,
                 dashboardUrl = dashboardUrl,
                 trustedProxies = text("TRUSTED_PROXIES", "0").toIntOrNull()?.takeIf { it >= 0 } ?: error("LIFTGATE_TRUSTED_PROXIES must be a number of proxy hops"),
-                deployDomain = text("DEPLOY_DOMAIN", "liftgate.app").takeIf { it.length <= DomainNames.MAX_DEPLOY_DOMAIN }
-                    ?: error("LIFTGATE_DEPLOY_DOMAIN must be at most ${DomainNames.MAX_DEPLOY_DOMAIN} characters, so generated hostnames stay within 253"),
+                deployDomain = deployDomain,
                 github = github,
                 google = oauthClient("GOOGLE"),
                 gitlab = oauthClient("GITLAB"),
@@ -218,7 +226,8 @@ data class Config(
                         ?: builtInPlans.all,
                     text("DEFAULT_PLAN", builtInPlans.default),
                 ),
-                customDomainsMax = optional("CUSTOM_DOMAINS_MAX")?.let { it.toIntOrNull()?.takeIf { max -> max >= 0 } ?: error("LIFTGATE_CUSTOM_DOMAINS_MAX must be a number") },
+                customDomainsMax = optional("CUSTOM_DOMAINS_MAX")?.let { it.toIntOrNull()?.takeIf { max -> max >= 0 } ?: error("LIFTGATE_CUSTOM_DOMAINS_MAX must be a number") }
+                    ?: CLOUDFLARE_INCLUDED_HOSTNAMES.takeIf { cloudflare != null },
                 githubWebhookSecret = if (serving && github != null) required("GITHUB_WEBHOOK_SECRET") else null,
                 githubClient = oauthClient("GITHUB"),
                 certIssuer = text("CERT_ISSUER", "letsencrypt"),
@@ -231,6 +240,7 @@ data class Config(
                 deniedEgressCidrs = optional("DENIED_EGRESS_CIDRS")?.split(',')?.map(String::trim)?.onEach {
                     if (':' in it || runCatching { IpSubnetFilterRule(it, IpFilterRuleType.REJECT) }.isFailure) error("LIFTGATE_DENIED_EGRESS_CIDRS must be IPv4 CIDRs such as 203.0.113.7/32")
                 }.orEmpty(),
+                cloudflare = cloudflare,
             )
         }
     }

@@ -76,6 +76,21 @@ class ConfigTest {
     }
 
     @Test
+    fun `edge mode needs a zone and a token, reaches only the api and reconciler, and caps custom domains at 100`() {
+        val edge = mapOf("LIFTGATE_CLOUDFLARE_ZONE_ID" to "zone", "LIFTGATE_CLOUDFLARE_API_TOKEN" to "token")
+        assertNull(Config.fromEnv(minimalEnv).cloudflare)
+        val reconciler = Config.fromEnv(minimalEnv + edge)
+        assertEquals(CloudflareConfig("zone", "token", "cname.liftgate.app"), reconciler.cloudflare)
+        assertEquals(100, reconciler.customDomainsMax)
+        val api = Config.fromEnv(minimalEnv + edge + mapOf("LIFTGATE_ROLE" to "api", "LIFTGATE_CLOUDFLARE_CNAME_TARGET" to "customers.example.net", "LIFTGATE_CUSTOM_DOMAINS_MAX" to "50"))
+        assertEquals("customers.example.net" to 50, api.cloudflare?.cnameTarget to api.customDomainsMax)
+        assertNull(Config.fromEnv(minimalEnv + ("LIFTGATE_ROLE" to "meter") + ("LIFTGATE_CLOUDFLARE_ZONE_ID" to "zone")).cloudflare)
+        listOf(edge - "LIFTGATE_CLOUDFLARE_API_TOKEN" to "LIFTGATE_CLOUDFLARE_API_TOKEN", edge - "LIFTGATE_CLOUDFLARE_ZONE_ID" to "LIFTGATE_CLOUDFLARE_ZONE_ID").forEach { (env, name) ->
+            assertTrue(name in assertFailsWith<IllegalStateException> { Config.fromEnv(minimalEnv + env) }.message.orEmpty(), env.toString())
+        }
+    }
+
+    @Test
     fun `missing master key names the variable`() {
         val error = assertFailsWith<IllegalStateException> { Config.fromEnv(minimalEnv - "LIFTGATE_SECRETS_MASTER_KEY") }
         assertTrue("LIFTGATE_SECRETS_MASTER_KEY" in error.message.orEmpty())

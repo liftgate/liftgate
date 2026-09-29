@@ -84,13 +84,13 @@ class ReconcilerTest {
 
     private fun accept(path: String, resource: HasMetadata) = server.expect().patch().withPath(path + apply).andReturn(200, resource).always()
 
-    private fun acceptAll(staleCertificate: String? = null) {
+    private fun acceptAll(staleCertificate: String? = null, inPlace: Boolean = false) {
+        val live = listOfNotNull(custom.takeIf { inPlace })
         val certificates = GenericKubernetesResourceList().apply {
-            items = listOfNotNull(staleCertificate).map { Resources.certificate(custom.copy(hostname = it), "liftgate-system", "letsencrypt") }
+            items = (live + listOfNotNull(staleCertificate).map { custom.copy(hostname = it) }).map { Resources.certificate(it, "liftgate-system", "letsencrypt") }
         }
-        val gateway = Resources.gatewayListeners(listOf(custom), "liftgate-system", "liftgate")
-        server.expect().get().withPath(gatewayPath).andReturn(200, gateway).always()
-        accept(gatewayPath, gateway)
+        server.expect().get().withPath(gatewayPath).andReturn(200, Resources.gatewayListeners(live, "liftgate-system", "liftgate")).always()
+        accept(gatewayPath, Resources.gatewayListeners(listOf(custom), "liftgate-system", "liftgate"))
         accept(namespacePath, Resources.namespace(release))
         accept(quotaPath, Resources.resourceQuota(release))
         accept(secretPath, Resources.secret(release))
@@ -227,6 +227,41 @@ class ReconcilerTest {
         acceptAll(staleCertificate = "old.acme.dev")
         Reconciler(app, client).release(testDeployment.id)
         assertEquals(listOf(cronJobPath, "$certificatesPath/old.acme.dev"), paths("DELETE"))
+    }
+
+    @Test
+    fun `listeners and certificates already in place are read with one list and not applied again`() = runBlocking {
+        acceptAll(inPlace = true)
+        Reconciler(app, client).release(testDeployment.id)
+        val sent = sent()
+        assertTrue(sent.none { it.method == "PATCH" && (it.path.startsWith(gatewayPath) || it.path.startsWith(certificatesPath)) })
+        assertEquals(1, sent.count { it.method == "GET" && it.path.startsWith(certificatesPath) })
+    }
+
+    @Test
+    fun `a listener a helm upgrade dropped is applied again`() = runBlocking {
+        acceptAll()
+        Reconciler(app, client).syncCustomDomains()
+        assertEquals(listOf(certificatePath, gatewayPath), paths("PATCH"))
+    }
+
+    @Test
+    fun `a release without custom domains leaves the gateway and certificates alone`() = runBlocking {
+        acceptAll()
+        coEvery { app.domains.forService(testService.id) } returns release.domains.filter { it.kind == DomainKind.PLATFORM }
+        Reconciler(app, client).release(testDeployment.id)
+        assertTrue(sent().none { it.path.startsWith(gatewayPath) || it.path.startsWith(certificatesPath) })
+    }
+
+    @Test
+    fun `edge mode creates no listener or certificate`() = runBlocking {
+        every { app.config } returns testConfig(mapOf("LIFTGATE_CLOUDFLARE_ZONE_ID" to "zone", "LIFTGATE_CLOUDFLARE_API_TOKEN" to "token"))
+        acceptAll()
+        Reconciler(app, client).release(testDeployment.id)
+        Reconciler(app, client).reroute(testService.id)
+        val patched = paths("PATCH")
+        assertTrue(patched.none { it == gatewayPath || it.startsWith(certificatesPath) })
+        assertEquals(2, patched.count { it == routePath })
     }
 
     @Test

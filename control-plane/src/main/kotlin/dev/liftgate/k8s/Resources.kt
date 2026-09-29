@@ -64,6 +64,7 @@ const val SERVICE_LABEL = "liftgate.dev/service"
 const val SERVICE_ID_LABEL = "liftgate.dev/service-id"
 const val ORG_ID_LABEL = "liftgate.dev/org-id"
 const val DEPLOYMENT_LABEL = "liftgate.dev/deployment"
+const val DOMAIN_LISTENER = "domain-"
 val HasMetadata.deploymentId get() = metadata.labels?.get(DEPLOYMENT_LABEL)?.let { runCatching { UUID.fromString(it) }.getOrNull() }
 val certificateContext: ResourceDefinitionContext = ResourceDefinitionContext.Builder()
     .withGroup("cert-manager.io").withVersion("v1").withKind("Certificate").withPlural("certificates").withNamespaced(true)
@@ -227,7 +228,7 @@ object Resources {
         .build()
 
     private fun listener(domain: Domain): Listener = ListenerBuilder()
-        .withName("domain-${domain.id}")
+        .withName("$DOMAIN_LISTENER${domain.id}")
         .withHostname(domain.hostname)
         .withPort(HTTPS_PORT)
         .withProtocol("HTTPS")

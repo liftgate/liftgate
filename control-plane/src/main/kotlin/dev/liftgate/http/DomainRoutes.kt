@@ -7,6 +7,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
+import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
@@ -28,6 +29,9 @@ fun Route.domainRoutes(app: App) {
             val service = call.service(app, OrgRole.ADMIN).service
             call.respond(HttpStatusCode.Created, app.domains.addCustom(service.id, call.receive<AddDomain>().hostname))
         }
+    }
+    get("/domains/allowed") {
+        if (app.domains.allowed(call.request.queryParameters["domain"].orEmpty())) call.respondText("ok") else notFound("domain")
     }
     route("/domains/{id}") {
         post("/verify") { call.respond(app.domains.verify(call.domain(app).id)) }

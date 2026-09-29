@@ -16,9 +16,11 @@ const val WRITES_PER_MINUTE = 120
 const val DEPLOYS_PER_MINUTE = 10
 const val WEBHOOKS_PER_MINUTE = 60
 const val INVITATIONS_PER_MINUTE = 10
+const val DOMAIN_CHECKS_PER_MINUTE = 60
 
 fun Route.rateLimits(app: App) {
     route("/auth") { rateLimit(app, "auth", AUTH_PER_MINUTE) }
+    route("/domains/allowed") { rateLimit(app, "domain-checks", DOMAIN_CHECKS_PER_MINUTE) { clientIp(app.config) } }
     orgScopedPaths.forEach {
         route(it) { rateLimit(app, "writes", WRITES_PER_MINUTE) { if (request.httpMethod in safeMethods) null else caller(app) } }
     }

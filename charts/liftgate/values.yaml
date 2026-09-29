@@ -157,6 +157,10 @@ legal:
 customDomains:
   enabled: true
   max: null
+  cloudflare:
+    zoneId: ""
+    apiToken: ""
+    gatewayServerName: ""
 
 allowSharedSite: false
 

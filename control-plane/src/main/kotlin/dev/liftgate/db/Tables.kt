@@ -351,6 +351,8 @@ object Domains : Table("domains") {
     val verifiedAt = timestampWithTimeZone("verified_at").nullable()
     val certificateStatus = text("certificate_status").default("pending")
     val createdAt = createdAtColumn()
+    val edgeId = text("edge_id").nullable()
+    val certificateMessage = text("certificate_message").nullable()
     override val primaryKey = PrimaryKey(id)
 
     init {

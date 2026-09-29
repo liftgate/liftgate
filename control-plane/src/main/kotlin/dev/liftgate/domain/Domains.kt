@@ -29,7 +29,10 @@ import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insertReturning
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.update
 import org.jetbrains.exposed.v1.jdbc.updateReturning
+import java.time.Duration
+import java.time.Instant
 import java.util.UUID
 
 fun ResultRow.toDomain() = Domain(
@@ -40,13 +43,25 @@ fun ResultRow.toDomain() = Domain(
     this[DomainsTable.verificationToken],
     this[DomainsTable.verifiedAt]?.toInstant(),
     this[DomainsTable.certificateStatus],
+    this[DomainsTable.certificateMessage],
+    this[DomainsTable.edgeId],
 )
+
+private val orphanAge = Duration.ofMinutes(10)
+
+private fun String.host() = trim().lowercase().removeSuffix(".")
 
 /**
  * @author Dean
  * @date 9/17/2026
  */
-class Domains(private val db: Db, private val deployDomain: String, private val limits: Limits = Limits()) {
+class Domains(
+    private val db: Db,
+    private val deployDomain: String,
+    private val limits: Limits = Limits(),
+    private val edge: Cloudflare? = null,
+    private val txt: (String) -> List<String> = ::txtRecords,
+) {
     suspend fun ensurePlatform(scope: ServiceScope): Domain = db.tx {
         val service = scope.service
         ServicesTable.select(ServicesTable.id).where { ServicesTable.id eq service.id }.forUpdate().toList()
@@ -64,37 +79,64 @@ class Domains(private val db: Db, private val deployDomain: String, private val 
     }
 
     suspend fun addCustom(serviceId: UUID, hostname: String): Domain {
-        val host = hostname.trim().lowercase().removeSuffix(".")
+        val host = hostname.host()
         DomainNames.validate(host, deployDomain)
         return db.tx {
             limits.customDomain(serviceId)
-            if (!DomainsTable.selectAll().where { (DomainsTable.hostname eq host) and DomainsTable.verifiedAt.isNotNull() }.empty()) conflict("$host is already verified by a service")
+            if (verified(host)) conflict("$host is already verified by a service")
             DomainsTable.insertReturning {
                 it[id] = UUID.randomUUID()
                 it[DomainsTable.serviceId] = serviceId
                 it[DomainsTable.hostname] = host
                 it[kind] = DomainKind.CUSTOM.sql
                 it[verificationToken] = randomToken()
-            }.single().toDomain()
+            }.single().toDomain().withRecords(platform(serviceId))
         }
     }
 
     suspend fun verify(id: UUID): Domain {
         val domain = byId(id) ?: notFound("domain")
-        if (domain.verifiedAt != null) return domain
-        val records = withContext(Dispatchers.IO) { txtRecords("_liftgate.${domain.hostname}") }
+        if (domain.verifiedAt != null) return db.tx { domain.withRecords(platform(domain.serviceId)) }
+        val records = withContext(Dispatchers.IO) { txt("_liftgate.${domain.hostname}") }
         if (domain.verificationToken !in records) invalid("no TXT record at _liftgate.${domain.hostname} holds the verification token")
+        if (db.tx { verified(domain.hostname) }) conflict("${domain.hostname} is already verified by a service")
+        val edgeId = edge?.create(domain.hostname)
         return db.tx {
-            routingChanged(domain)
             DomainsTable.deleteWhere { (DomainsTable.hostname eq domain.hostname) and (DomainsTable.id neq id) and DomainsTable.verifiedAt.isNull() }
-            DomainsTable.updateReturning(DomainsTable.columns, { DomainsTable.id eq id }) { it[verifiedAt] = now() }.single().toDomain()
+            DomainsTable.updateReturning(DomainsTable.columns, { DomainsTable.id eq id }) {
+                it[verifiedAt] = now()
+                it[DomainsTable.edgeId] = edgeId
+            }.singleOrNull()?.toDomain()?.also { routingChanged(it) }?.withRecords(platform(domain.serviceId))
+        } ?: run {
+            if (edgeId != null && !db.tx { verified(domain.hostname) }) edge?.delete(edgeId)
+            notFound("domain")
         }
+    }
+
+    suspend fun allowed(hostname: String): Boolean = hostname.host().let { it == deployDomain || db.tx { verified(it) } }
+
+    suspend fun certificate(hostname: String, state: CertificateState) {
+        db.tx { setCertificate(hostname, state) }
+    }
+
+    suspend fun refreshEdge() {
+        val edge = edge ?: return
+        val domains = db.tx { DomainsTable.selectAll().where { DomainsTable.kind eq DomainKind.CUSTOM.sql }.map { it.toDomain() } }
+        val hostnames = edge.hostnames().associateBy { it.id }
+        val changed = domains.filter { it.edgeId != null }.map { it to (hostnames[it.edgeId]?.certificate ?: CertificateState("failed", "Cloudflare has no custom hostname for ${it.hostname}")) }
+            .filter { (domain, state) -> state != CertificateState(domain.certificateStatus, domain.certificateMessage) }
+        if (changed.isNotEmpty()) db.tx { changed.forEach { (domain, state) -> setCertificate(domain.hostname, state) } }
+        val cutoff = Instant.now() - orphanAge
+        hostnames.values.filter { hostname -> domains.none { it.edgeId == hostname.id || it.hostname == hostname.hostname } && hostname.createdAt?.isBefore(cutoff) == true }
+            .forEach { edge.delete(it.id) }
     }
 
     suspend fun byId(id: UUID): Domain? = db.tx { find(id) }
 
     suspend fun forService(serviceId: UUID): List<Domain> = db.tx {
-        DomainsTable.selectAll().where { DomainsTable.serviceId eq serviceId }.orderBy(DomainsTable.hostname).map { it.toDomain() }
+        val domains = DomainsTable.selectAll().where { DomainsTable.serviceId eq serviceId }.orderBy(DomainsTable.hostname).map { it.toDomain() }
+        val platform = domains.firstOrNull { it.kind == DomainKind.PLATFORM }?.hostname
+        domains.map { it.withRecords(platform) }
     }
 
     suspend fun verifiedCustom(): List<Domain> = db.tx {
@@ -102,15 +144,36 @@ class Domains(private val db: Db, private val deployDomain: String, private val 
     }
 
     suspend fun delete(id: UUID) {
+        val domain = byId(id) ?: return
+        if (domain.kind == DomainKind.PLATFORM) conflict("platform hostnames cannot be removed")
+        domain.edgeId?.let { edge?.delete(it) }
         db.tx {
-            val domain = find(id) ?: return@tx
-            if (domain.kind == DomainKind.PLATFORM) conflict("platform hostnames cannot be removed")
             DomainsTable.deleteWhere { DomainsTable.id eq id }
             if (domain.verifiedAt != null) routingChanged(domain)
         }
     }
 
     private fun find(id: UUID) = DomainsTable.selectAll().where { DomainsTable.id eq id }.singleOrNull()?.toDomain()
+
+    private fun verified(hostname: String) = !DomainsTable.selectAll().where { (DomainsTable.hostname eq hostname) and DomainsTable.verifiedAt.isNotNull() }.empty()
+
+    private fun platform(serviceId: UUID) = DomainsTable.select(DomainsTable.hostname)
+        .where { (DomainsTable.serviceId eq serviceId) and (DomainsTable.kind eq DomainKind.PLATFORM.sql) }
+        .firstOrNull()?.get(DomainsTable.hostname)
+
+    private fun Domain.withRecords(platform: String?) = if (kind == DomainKind.PLATFORM) this else copy(
+        dnsRecords = listOfNotNull(
+            verificationToken?.takeIf { verifiedAt == null }?.let { DnsRecord("TXT", "_liftgate.$hostname", it) },
+            (if (edge != null) "cname.$deployDomain" else platform)?.let { DnsRecord("CNAME", hostname, it) },
+        ),
+    )
+
+    private fun setCertificate(hostname: String, state: CertificateState) = DomainsTable.update({
+        (DomainsTable.hostname eq hostname) and (DomainsTable.kind eq DomainKind.CUSTOM.sql) and DomainsTable.verifiedAt.isNotNull()
+    }) {
+        it[certificateStatus] = state.status
+        it[certificateMessage] = state.message
+    }
 
     private fun JdbcTransaction.routingChanged(domain: Domain) = enqueue(
         Subject.DOMAIN_VERIFY_REQUESTED,

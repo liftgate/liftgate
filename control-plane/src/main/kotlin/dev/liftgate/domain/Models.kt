@@ -6,6 +6,7 @@ import dev.liftgate.http.InstantSerializer
 import dev.liftgate.http.UuidSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 import kotlinx.serialization.UseSerializers
 import java.time.Instant
 import java.util.UUID
@@ -33,4 +34,7 @@ data class Domain(
     val verificationToken: String?,
     val verifiedAt: Instant?,
     val certificateStatus: String,
+    val certificateMessage: String? = null,
+    @Transient val edgeId: String? = null,
+    val dnsRecords: List<DnsRecord> = emptyList(),
 )

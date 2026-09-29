@@ -105,6 +105,8 @@ export type Domain = {
   verificationToken: string | null;
   verifiedAt: string | null;
   certificateStatus: string;
+  certificateMessage: string | null;
+  dnsRecords: DnsRecord[];
 };
 
 export type OAuthProvider = "github" | "google" | "gitlab" | "bitbucket";
@@ -220,3 +222,5 @@ export type CurrentDeployment = { deploymentId: string; status: DeploymentStatus
 export type GitHubRepository = { fullName: string; defaultBranch: string; private: boolean };
 
 export type ImportableRepositories = { repositories: GitHubRepository[]; installUrl: string };
+
+export type DnsRecord = { type: "TXT" | "CNAME"; name: string; value: string };

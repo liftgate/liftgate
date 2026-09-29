@@ -93,4 +93,30 @@ class DomainsTest {
         DomainNames.platform(scope, "liftgate.app").dropLast(1).forEach { issue(holder.id, it) }
         assertEquals("${scope.service.id.toString().replace("-", "")}.liftgate.app", domains.ensurePlatform(scope).hostname)
     }
+
+    @Test
+    fun `gateway mode asks for a TXT record and a CNAME to the platform hostname until the domain is verified`() = runBlocking {
+        var token = ""
+        val domains = Domains(db, "liftgate.app", txt = { listOf(token) })
+        val shop = project("acme", "shop")
+        val service = web(production(shop))
+        val platform = domains.ensurePlatform(requireNotNull(services.scope(service.id))).hostname
+        val domain = domains.addCustom(service.id, "Shop.Example.com.")
+        token = requireNotNull(domain.verificationToken)
+        val cname = DnsRecord("CNAME", "shop.example.com", platform)
+        assertEquals(listOf(DnsRecord("TXT", "_liftgate.shop.example.com", token), cname), domain.dnsRecords)
+        assertEquals(listOf(cname), domains.verify(domain.id).dnsRecords)
+        assertEquals(listOf(emptyList(), listOf(cname)), domains.forService(service.id).map { it.dnsRecords })
+    }
+
+    @Test
+    fun `the ask check allows verified hostnames and the deploy domain only`() = runBlocking {
+        val service = web(production(project("acme", "shop")))
+        val platform = domains.ensurePlatform(requireNotNull(services.scope(service.id))).hostname
+        domains.addCustom(service.id, "shop.example.com")
+        assertEquals(
+            listOf(true, true, true, false, false),
+            listOf("liftgate.app", "$platform.", platform.uppercase(), "shop.example.com", "other.example.com").map { domains.allowed(it) },
+        )
+    }
 }

@@ -25,6 +25,7 @@ import dev.liftgate.db.Db
 import dev.liftgate.db.Housekeeping
 import dev.liftgate.deploy.Builds
 import dev.liftgate.deploy.Deployments
+import dev.liftgate.domain.Cloudflare
 import dev.liftgate.domain.Domains
 import dev.liftgate.events.LeaderElection
 import dev.liftgate.events.Nats
@@ -33,6 +34,7 @@ import dev.liftgate.events.Subject
 import dev.liftgate.events.uuid
 import dev.liftgate.http.httpServer
 import dev.liftgate.http.json
+import dev.liftgate.k8s.CertificateWatcher
 import dev.liftgate.k8s.DeploymentWatcher
 import dev.liftgate.k8s.PodLogs
 import dev.liftgate.k8s.PodWatcher
@@ -101,7 +103,7 @@ class App(val config: Config) : AutoCloseable {
     val envVars by lazy { EnvVars(db, secrets) }
     val builds = Builds(db)
     val deployments = Deployments(db, metrics, limits)
-    val domains = Domains(db, config.deployDomain, limits)
+    val domains = Domains(db, config.deployDomain, limits, config.cloudflare?.let { Cloudflare(it, http, config.customDomainsMax) })
     val github by lazy { config.github?.let { GitHubApp(it, http) } }
     val oauth by lazy { OAuth(http, config.publicUrl, OAuthProviders.enabled(config)) }
     val signIn by lazy { SignIn(db, sessions, config.signup, config.signupAllow, consent = config.termsUrl != null) }
@@ -142,6 +144,7 @@ class App(val config: Config) : AutoCloseable {
             Suspension(this, kube).start()
             Sweeper(this, kube).start()
             PodWatcher(this, kube).start()
+            CertificateWatcher(this, kube).start()
         }
         if (runs(Role.BUILDER)) {
             Builder(this, kube).start()

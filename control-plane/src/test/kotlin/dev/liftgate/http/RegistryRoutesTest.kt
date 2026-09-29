@@ -119,6 +119,16 @@ class RegistryRoutesTest {
     }
 
     @Test
+    fun `a build started before the upgrade may still push to the repository name of the previous release`() = testApplication {
+        val build = runningBuild("acme")
+        val password = tokens.issue(build)
+        application { liftgate(app) }
+        val previous = jwt(BuildJobs.name(build), password, "repository:acme/shop-api:pull,push", "repository:acme/shop-web:pull,push")
+        assertEquals(listOf(mapOf("type" to "repository", "name" to "acme/shop-api", "actions" to listOf("pull", "push"))), access(previous))
+        assertEquals(202, registry("POST", "acme/shop-api/blobs/uploads/", previous))
+    }
+
+    @Test
     fun `finished builds, revoked logins, wrong passwords and anonymous requests get no token`() = testApplication {
         val finished = runningBuild("acme")
         val revoked = runningBuild("rival")

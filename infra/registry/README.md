@@ -26,7 +26,8 @@ image retention:
 | `storage.delete.enabled` | `true` | |
 
 Each build logs in as `build-<build id>` and gets tokens only while it runs, for pull and push on
-its own repository and, for a preview build, pull on the same service's production repository. Nodes log in as `pull`, which can read every repository and write none. The
+its own repository and on `<org>/<project>-<service>`, the name the previous release used, and,
+for a preview build, pull on the same service's production repository. Nodes log in as `pull`, which can read every repository and write none. The
 builder's image janitor logs in as `janitor`, which can pull and delete in every repository and
 push to none.
 

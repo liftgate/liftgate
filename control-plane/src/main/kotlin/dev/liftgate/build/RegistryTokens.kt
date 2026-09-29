@@ -58,7 +58,9 @@ class RegistryTokens(private val db: Db, private val services: Services, private
         PULL_ACCOUNT -> mapOf(null to setOf("pull")).takeIf { matches(config.registryTokens?.pullPassword, password) }
         JANITOR_ACCOUNT -> mapOf(null to setOf("pull", "delete")).takeIf { matches(config.registryJanitorPassword, password) }
         else -> buildScope(account, password)?.let { scope ->
-            mapOf(BuildJobs.repository(scope) to setOf("pull", "push")) + listOfNotNull(services.production(scope)).associate { BuildJobs.repository(it) to setOf("pull") }
+            val previous = with(scope) { "${org.slug}/${project.slug}-${service.slug}" }
+            listOf(BuildJobs.repository(scope), previous).associateWith { setOf("pull", "push") } +
+                listOfNotNull(services.production(scope)).associate { BuildJobs.repository(it) to setOf("pull") }
         }
     }
 

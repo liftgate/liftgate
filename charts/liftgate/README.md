@@ -593,9 +593,11 @@ with token authentication that points at Liftgate:
   control plane stores only a hash of it and accepts it only while the build runs. The build job no
   longer mounts `registry-credentials`.
 - `<publicUrl>/api/v1/registry/token` answers the registry's token requests with a token valid
-  for 5 minutes that allows pull and push on the build's own repository,
-  `<org>/<project>/<environment>/<service>`, pull on the same service's production repository
-  for a preview build's cache, and nothing else. Build jobs reach it over their internet egress.
+  for 5 minutes. It allows pull and push on the build's own repository,
+  `<org>/<project>/<environment>/<service>`, and on `<org>/<project>-<service>`, the name the
+  previous release used, so that a build running during the upgrade can finish. A preview build
+  may also pull the same service's production repository for its cache. Nothing else is
+  allowed. Build jobs reach it over their internet egress.
 - Nodes pull as `pull` with `registryPullPassword`, which reads every repository and writes
   none. Add it to `/etc/rancher/k3s/registries.yaml` on every node.
 - The builder prunes images as `janitor` with `registryJanitorPassword`, which may pull and

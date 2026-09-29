@@ -185,6 +185,15 @@ class BuilderTest {
     }
 
     @Test
+    fun `a job the previous release started is adopted and the image it pushed is recorded`() {
+        val previous = "registry.liftgate.internal/acme/shop-api:abc123"
+        val spec = BuildJobSpec(queued, testService, testProject, "ghs_token", previous, "registry.liftgate.internal/acme/shop-api:cache", "build-image", "liftgate-build", emptyMap(), false)
+        client.resource(BuildJobs.job(spec)).create()
+        build(JobStatusBuilder().withSucceeded(1).build())
+        coVerify(exactly = 1) { builds.markSucceeded(queued.id, previous) }
+    }
+
+    @Test
     fun `token auth gives the build its own registry login`() {
         every { app.config } returns testConfig(mapOf("LIFTGATE_REGISTRY_AUTH" to "token"))
         build(JobStatusBuilder().withFailed(1).build())

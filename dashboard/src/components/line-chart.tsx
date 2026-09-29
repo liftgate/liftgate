@@ -23,6 +23,7 @@ const moves: Record<string, (index: number, last: number) => number> = {
 
 export function LineChart({ label, points, start, end, step, measure, limit }: Props) {
   const [active, setActive] = useState<number>();
+  const [readout, setReadout] = useState("");
   const { top, ticks } = axis(Math.max(limit ?? 0, ...points.map((p) => p.value)), measure);
   const { line, area } = paths(points, { start, end, step, top });
   const last = points.length - 1;
@@ -42,7 +43,9 @@ export function LineChart({ label, points, start, end, step, measure, limit }: P
     const move = moves[e.key];
     if (!move) return;
     e.preventDefault();
-    setActive(Math.min(last, Math.max(0, move(active ?? last, last))));
+    const next = Math.min(last, Math.max(0, move(active ?? last, last)));
+    setActive(next);
+    setReadout(`${format(points[next].value)}, ${time(points[next].time)}`);
   };
   return (
     <div className="flex flex-col gap-2">
@@ -61,7 +64,10 @@ export function LineChart({ label, points, start, end, step, measure, limit }: P
           onPointerMove={pointer}
           onPointerLeave={() => setActive(undefined)}
           onFocus={() => setActive(last)}
-          onBlur={() => setActive(undefined)}
+          onBlur={() => {
+            setActive(undefined);
+            setReadout("");
+          }}
           onKeyDown={key}
           className="relative min-w-0 flex-1 touch-pan-y rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
         >
@@ -96,6 +102,9 @@ export function LineChart({ label, points, start, end, step, measure, limit }: P
           )}
         </div>
       </div>
+      <span className="sr-only" aria-live="polite">
+        {readout}
+      </span>
       <div aria-hidden className="flex justify-between gap-4 pl-18 text-xs text-graphite-400">
         <span>{time(start)}</span>
         <span>{time(end)}</span>

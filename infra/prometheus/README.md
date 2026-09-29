@@ -104,7 +104,7 @@ q 'count(container_cpu_usage_seconds_total{namespace=~"env-.+", container!="", c
 
 If the per-container count is lower than the pod count, metering must use the pod-level series
 too. If the pod-level count is lower too, OrgCpuSaturated cannot fire for those pods and their
-Metrics tab has no CPU or memory chart.
+Metrics tab has no CPU chart.
 
 | Date | Cluster | Tenant pods | Pod-level series | Per-container series |
 |---|---|---|---|---|

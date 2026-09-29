@@ -154,7 +154,7 @@ class CloudflareTest {
     @Test
     fun `the poller records pending, active and failed custom hostnames with Cloudflare's message`() = runBlocking {
         val serviceId = service()
-        val hosts = mapOf("pending.example.com" to "h1", "active.example.com" to "h2", "failed.example.com" to "h3", "lost.example.com" to "h4")
+        val hosts = mapOf("pending.example.com" to "h1", "active.example.com" to "h2", "failed.example.com" to "h3", "lost.example.com" to "h4", "claimed.example.com" to null)
         db.tx {
             hosts.forEach { (host, edgeId) ->
                 DomainsTable.insert {
@@ -163,7 +163,7 @@ class CloudflareTest {
                     it[DomainsTable.hostname] = host
                     it[DomainsTable.kind] = "custom"
                     it[verificationToken] = "token"
-                    it[verifiedAt] = now()
+                    it[verifiedAt] = edgeId?.let { now() }
                     it[DomainsTable.edgeId] = edgeId
                 }
             }
@@ -174,6 +174,7 @@ class CloudflareTest {
                     """{"id":"h1","hostname":"pending.example.com","status":"pending","ssl":{"status":"pending_validation"},"verification_errors":["custom hostname does not CNAME to this zone."]}""",
                     hostname("h2", "active.example.com", "active", "active", Instant.EPOCH),
                     """{"id":"h3","hostname":"failed.example.com","status":"pending","ssl":{"status":"validation_timed_out","validation_errors":[{"message":"caa_error: blocked by CAA"}]}}""",
+                    hostname("h5", "claimed.example.com", created = Instant.EPOCH),
                 ).joinToString(",", "[", "]"),
             )
         }

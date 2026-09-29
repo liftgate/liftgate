@@ -121,13 +121,14 @@ class Domains(
 
     suspend fun refreshEdge() {
         val edge = edge ?: return
-        val domains = db.tx { DomainsTable.selectAll().where { DomainsTable.edgeId.isNotNull() }.map { it.toDomain() } }
+        val domains = db.tx { DomainsTable.selectAll().where { DomainsTable.kind eq DomainKind.CUSTOM.sql }.map { it.toDomain() } }
         val hostnames = edge.hostnames().associateBy { it.id }
-        val changed = domains.map { it to (hostnames[it.edgeId]?.certificate ?: CertificateState("failed", "Cloudflare has no custom hostname for ${it.hostname}")) }
+        val changed = domains.filter { it.edgeId != null }.map { it to (hostnames[it.edgeId]?.certificate ?: CertificateState("failed", "Cloudflare has no custom hostname for ${it.hostname}")) }
             .filter { (domain, state) -> state != CertificateState(domain.certificateStatus, domain.certificateMessage) }
         if (changed.isNotEmpty()) db.tx { changed.forEach { (domain, state) -> setCertificate(domain.hostname, state) } }
         val cutoff = Instant.now() - orphanAge
-        (hostnames - domains.mapNotNull { it.edgeId }).values.filter { it.createdAt?.isBefore(cutoff) == true }.forEach { edge.delete(it.id) }
+        hostnames.values.filter { hostname -> domains.none { it.edgeId == hostname.id || it.hostname == hostname.hostname } && hostname.createdAt?.isBefore(cutoff) == true }
+            .forEach { edge.delete(it.id) }
     }
 
     suspend fun byId(id: UUID): Domain? = db.tx { find(id) }

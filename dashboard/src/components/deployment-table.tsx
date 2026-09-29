@@ -10,12 +10,14 @@ export function DeploymentTable({
   replicas,
   rolling,
   onRollback,
+  readOnly = false,
 }: {
   deployments: Deployment[];
   builds?: Build[];
   replicas: number;
   rolling?: string;
   onRollback?: (id: string) => void;
+  readOnly?: boolean;
 }) {
   return (
     <Table columns={["Status", "Build", "Ready", "Created", ""]}>
@@ -43,7 +45,7 @@ export function DeploymentTable({
                 <span title={deployment.createdAt}>{timeAgo(deployment.createdAt)}</span>
               </Cell>
               <Cell className="text-right">
-                {i > 0 && !build?.imagePruned && (
+                {!readOnly && i > 0 && !build?.imagePruned && (
                   <Button disabled={!!rolling} pending={rolling === deployment.id} onClick={onRollback && (() => onRollback(deployment.id))}>
                     Roll back to this
                   </Button>

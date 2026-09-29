@@ -16,6 +16,7 @@ import dev.liftgate.k8s.testService
 import dev.liftgate.org.User
 import dev.liftgate.service.ServiceScope
 import dev.liftgate.service.Services
+import dev.liftgate.discardingDb
 import dev.liftgate.testConfig
 import dev.liftgate.unlimitedCache
 import io.ktor.client.request.post
@@ -50,6 +51,7 @@ class DeployRoutesTest {
         every { metrics } returns PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
         every { config } returns testConfig()
         every { cache } returns unlimitedCache
+        every { db } returns discardingDb
         every { github } returns null
         every { this@mockk.builds } returns this@DeployRoutesTest.builds
         every { deployments } returns mockk<Deployments> { coEvery { redeploy(testService.id) } returns testDeployment }

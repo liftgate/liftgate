@@ -109,7 +109,7 @@ class SignInTest {
         val owner = db.tx { insertUser("owner", null, null, null) }.id
         val org = Orgs(db).create("acme", "Acme", owner)
         val approval = withSignup(Signup.APPROVAL)
-        suspend fun jit(name: String) = status(approval.complete(VerifiedIdentity(SAML, "connection:$name", "$name@acme.dev", true, vouchedBy = org.id)).userId)
+        suspend fun jit(name: String) = status(approval.complete(VerifiedIdentity(SAML, "connection:$name", "$name@acme.dev", true, org = org.id)).userId)
         assertEquals("active", jit("first"))
         setStatus(owner, "pending")
         assertEquals("pending", jit("second"))

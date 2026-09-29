@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { api, ApiError } from "@/lib/api";
-import { useApi } from "@/lib/hooks";
+import { useApi, useRole } from "@/lib/hooks";
 import type { ProjectTree } from "@/lib/types";
 import { findService } from "@/lib/util";
 import { PageHeader } from "@/components/page-header";
@@ -37,8 +37,10 @@ async function loadService(org: string, projectSlug: string, environmentSlug: st
 export function ServiceView({ org, projectSlug, environmentSlug, serviceSlug }: { org: string; projectSlug: string; environmentSlug: string; serviceSlug: string }) {
   const [tab, setTab] = useState<Tab>("deployments");
   const lookup = useApi(`${org}/${projectSlug}/${environmentSlug}/${serviceSlug}`, () => loadService(org, projectSlug, environmentSlug, serviceSlug));
+  const { query: role, admin } = useRole(org);
   if (lookup.error) return <ErrorState error={lookup.error} retry={lookup.reload} />;
-  if (!lookup.data) return <PageSkeleton />;
+  if (role.error) return <ErrorState error={role.error} retry={role.reload} />;
+  if (!lookup.data || role.loading) return <PageSkeleton />;
   const { service, environment } = lookup.data;
   return (
     <div className="flex flex-col gap-8">
@@ -52,12 +54,12 @@ export function ServiceView({ org, projectSlug, environmentSlug, serviceSlug }: 
           </>
         }
       />
-      <Tabs items={tabs} value={tab} onChange={setTab} />
-      {tab === "deployments" && <DeploymentsTab service={service} />}
+      <Tabs items={admin ? tabs : tabs.filter((t) => t.id !== "settings")} value={tab} onChange={setTab} />
+      {tab === "deployments" && <DeploymentsTab service={service} admin={admin} />}
       {tab === "logs" && <LogsTab service={service} />}
-      {tab === "builds" && <BuildsTab service={service} />}
-      {tab === "env" && <EnvTab service={service} />}
-      {tab === "domains" && <DomainsTab service={service} />}
+      {tab === "builds" && <BuildsTab service={service} admin={admin} />}
+      {tab === "env" && <EnvTab service={service} admin={admin} />}
+      {tab === "domains" && <DomainsTab service={service} admin={admin} />}
       {tab === "settings" && <SettingsTab service={service} projectHref={`/${org}/${projectSlug}`} onChanged={lookup.reload} />}
     </div>
   );

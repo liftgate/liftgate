@@ -15,6 +15,7 @@ import dev.liftgate.org.Orgs
 import dev.liftgate.org.User
 import dev.liftgate.service.ServiceScope
 import dev.liftgate.service.Services
+import dev.liftgate.discardingDb
 import dev.liftgate.testConfig
 import dev.liftgate.unlimitedCache
 import io.ktor.client.plugins.websocket.WebSockets
@@ -65,6 +66,7 @@ class OriginTest {
         every { config } returns testConfig()
         every { metrics } returns PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
         every { cache } returns unlimitedCache
+        every { db } returns discardingDb
         every { this@mockk.sessions } returns this@OriginTest.sessions
         every { this@mockk.deployments } returns this@OriginTest.deployments
         every { apiTokens } returns mockk<ApiTokens> { coEvery { resolve("lg_token") } returns (testOrg.id to user.id) }

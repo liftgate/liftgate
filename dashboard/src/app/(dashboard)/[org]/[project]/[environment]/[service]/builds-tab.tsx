@@ -15,7 +15,7 @@ import { TableSkeleton } from "@/components/ui/skeleton";
 
 const inProgress = (status: string) => ["queued", "running"].includes(status.toLowerCase());
 
-export function BuildsTab({ service }: { service: Service }) {
+export function BuildsTab({ service, admin }: { service: Service; admin: boolean }) {
   const builds = useApi<Build[]>(`/services/${service.id}/builds`);
   const [selected, setSelected] = useState<string | null>();
   const deploy = useAction(async (form: HTMLFormElement) => {
@@ -33,25 +33,30 @@ export function BuildsTab({ service }: { service: Service }) {
     <div className="flex flex-col gap-6">
       <BuildsCard
         actions={
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              deploy.run(e.currentTarget);
-            }}
-            className="flex gap-2"
-          >
-            <Input name="ref" placeholder="Branch or commit (optional)" className="w-64 font-mono" />
-            <Button type="submit" variant="primary" pending={deploy.pending}>
-              Deploy
-            </Button>
-          </form>
+          admin && (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                deploy.run(e.currentTarget);
+              }}
+              className="flex gap-2"
+            >
+              <Input name="ref" placeholder="Branch or commit (optional)" className="w-64 font-mono" />
+              <Button type="submit" variant="primary" pending={deploy.pending}>
+                Deploy
+              </Button>
+            </form>
+          )
         }
       >
         <FormError message={deploy.error} />
         <Loaded query={builds} skeleton={<TableSkeleton />}>
           {(list) =>
             list.length === 0 ? (
-              <EmptyState title="No builds yet" description="Push to the tracked branch or deploy a ref above." />
+              <EmptyState
+                title="No builds yet"
+                description={admin ? "Push to the tracked branch or deploy a ref above." : "A push to the tracked branch starts a build."}
+              />
             ) : (
               <BuildTable builds={list} selected={selected} onToggle={(id) => setSelected(id === selected ? null : id)} />
             )

@@ -2,6 +2,7 @@
 
 package dev.liftgate.org
 
+import dev.liftgate.auth.OrgRole
 import dev.liftgate.http.InstantSerializer
 import dev.liftgate.http.UuidSerializer
 import kotlinx.serialization.Serializable
@@ -28,4 +29,5 @@ data class Organization(
     val plan: String,
     val suspendedAt: Instant? = null,
     val suspendedReason: String? = null,
+    val role: OrgRole? = null,
 )

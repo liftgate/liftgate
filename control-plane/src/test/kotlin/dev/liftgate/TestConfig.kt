@@ -2,6 +2,8 @@ package dev.liftgate
 
 import dev.liftgate.cache.Cache
 import dev.liftgate.config.Config
+import dev.liftgate.db.Db
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import java.util.Base64
@@ -15,3 +17,5 @@ val minimalEnv = mapOf(
 fun testConfig(overrides: Map<String, String> = emptyMap()) = Config.fromEnv(minimalEnv + overrides)
 
 val unlimitedCache = mockk<Cache> { every { allow(any(), any(), any()) } returns true }
+
+val discardingDb = mockk<Db> { coEvery { tx<Any?>(any()) } returns null }

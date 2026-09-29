@@ -391,7 +391,12 @@ object AuditLog : Table("audit_log") {
     val targetId = text("target_id")
     val details = jsonb("details", Json, JsonObject.serializer()).default(JsonObject(emptyMap()))
     val createdAt = createdAtColumn()
+    val viaToken = bool("via_token").default(false)
     override val primaryKey = PrimaryKey(id)
+
+    init {
+        index("audit_log_org", false, orgId, id)
+    }
 }
 
 /**
@@ -438,4 +443,20 @@ object NotificationChannels : Table("notification_channels") {
     init {
         index("notification_channels_org", false, orgId)
     }
+}
+
+/**
+ * @author Dean
+ * @date 9/27/2026
+ */
+object Invitations : Table("invitations") {
+    val id = javaUUID("id")
+    val orgId = fk("org_id", Organizations.id, CASCADE)
+    val role = oneOf("role", "owner", "admin", "member")
+    val tokenHash = text("token_hash").uniqueIndex()
+    val createdBy = fk("created_by", Users.id, CASCADE)
+    val createdAt = createdAtColumn()
+    val expiresAt = timestampWithTimeZone("expires_at")
+    val acceptedAt = timestampWithTimeZone("accepted_at").nullable()
+    override val primaryKey = PrimaryKey(id)
 }

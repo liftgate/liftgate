@@ -1,13 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAction, useApi } from "@/lib/hooks";
 import type { Organization, User } from "@/lib/types";
+import { CreateOrgForm } from "./create-org-form";
 import { Mark } from "./mark";
 import { Button } from "./ui/button";
+import { Dialog } from "./ui/dialog";
 import { Select } from "./ui/select";
 
 export function Nav({ actions }: { actions?: ReactNode }) {
@@ -17,6 +19,7 @@ export function Nav({ actions }: { actions?: ReactNode }) {
   const inApp = !onLogin && !actions;
   const me = useApi<User>(inApp && "/me");
   const orgs = useApi<Organization[]>(inApp && "/orgs");
+  const [creating, setCreating] = useState(false);
   const signOut = useAction(async () => {
     await api("/auth/logout", { method: "POST" });
     window.location.replace("/login");
@@ -43,13 +46,19 @@ export function Nav({ actions }: { actions?: ReactNode }) {
         </nav>
         {!onLogin && (
           <div className="flex items-center gap-4">
-            {org && orgs.data && orgs.data.length > 1 && (
-              <Select aria-label="Organization" value={org} onChange={(e) => router.push(`/${e.target.value}`)}>
+            {org && orgs.data && (
+              <Select
+                aria-label="Organization"
+                value={org}
+                onChange={(e) => (e.target.value ? router.push(`/${e.target.value}`) : setCreating(true))}
+                className="max-w-40"
+              >
                 {orgs.data.map((o) => (
                   <option key={o.slug} value={o.slug}>
                     {o.name}
                   </option>
                 ))}
+                <option value="">New organization…</option>
               </Select>
             )}
             {me.data && (
@@ -73,6 +82,15 @@ export function Nav({ actions }: { actions?: ReactNode }) {
           </p>
         </div>
       )}
+      <Dialog open={creating} title="New organization" onClose={() => setCreating(false)}>
+        <CreateOrgForm
+          onCreated={() => {
+            setCreating(false);
+            orgs.reload();
+          }}
+          onCancel={() => setCreating(false)}
+        />
+      </Dialog>
     </header>
   );
 }

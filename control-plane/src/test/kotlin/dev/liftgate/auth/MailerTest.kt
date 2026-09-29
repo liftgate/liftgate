@@ -4,7 +4,6 @@ import dev.liftgate.config.EmailConfig
 import dev.liftgate.testConfig
 import jakarta.mail.Message
 import jakarta.mail.internet.MimeMessage
-import jakarta.mail.internet.MimeMultipart
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -43,25 +42,22 @@ class MailerTest {
     }
 
     @Test
-    fun `the code email has a plain text and an html part`() {
+    fun `a message is plain utf-8 text to one recipient`() {
         val sent = mutableListOf<MimeMessage>()
-        Mailer(email("smtp://user:pass@mail.example.com")!!) { sent += it }.sendCode("dean@liftgate.dev", "042917", 10)
+        Mailer(email("smtp://user:pass@mail.example.com")!!) { sent += it }.send("dean@liftgate.dev", "Join Äcme on Liftgate", "Accept the invitation: https://liftgate.dev/x")
         val message = sent.single().apply { saveChanges() }
-        assertEquals("Your Liftgate sign-in code", message.subject)
+        assertEquals("Join Äcme on Liftgate", message.subject)
         assertEquals("dean@liftgate.dev", message.getRecipients(Message.RecipientType.TO).single().toString())
         assertEquals("Liftgate <login@liftgate.dev>", message.from.single().toString())
-        val parts = message.content as MimeMultipart
-        val text = parts.getBodyPart(0).content as String
-        assertTrue(parts.getBodyPart(0).isMimeType("text/plain") && parts.getBodyPart(1).isMimeType("text/html"))
-        listOf("042917", "expires in 10 minutes", "did not request").forEach { assertTrue(it in text, it) }
-        assertTrue("042917" in parts.getBodyPart(1).content as String)
+        assertTrue(message.isMimeType("text/plain") && "utf-8" in message.contentType.lowercase())
+        assertEquals("Accept the invitation: https://liftgate.dev/x", message.content)
         assertEquals("true", message.session.getProperty("mail.smtp.starttls.required"))
     }
 
     @Test
     fun `smtps sessions send over the smtps transport`() {
         val sent = mutableListOf<MimeMessage>()
-        Mailer(email("smtps://mail.example.com")!!) { sent += it }.sendCode("dean@liftgate.dev", "000001", 10)
+        Mailer(email("smtps://mail.example.com")!!) { sent += it }.send("dean@liftgate.dev", "Your Liftgate sign-in code", "000001")
         val session = sent.single().session
         assertEquals("smtps", session.getProperty("mail.transport.protocol.rfc822"))
         assertEquals("465", session.getProperty("mail.smtps.port"))

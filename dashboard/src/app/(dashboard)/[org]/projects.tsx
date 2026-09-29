@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api, ApiError } from "@/lib/api";
-import { useAction, useApi } from "@/lib/hooks";
+import { useAction, useApi, useRole } from "@/lib/hooks";
 import type { GitConnection, Project, Usage } from "@/lib/types";
 import { formValues } from "@/lib/util";
 import { Loaded } from "@/components/loaded";
@@ -22,6 +22,7 @@ import { Cell, Row, Table } from "@/components/ui/table";
 
 export function Projects({ org }: { org: string }) {
   const router = useRouter();
+  const { query: role, admin } = useRole(org);
   const [creating, setCreating] = useState(false);
   const [githubLost, setGithubLost] = useState(false);
   const projects = useApi<Project[]>(`/orgs/${org}/projects`);
@@ -44,7 +45,7 @@ export function Projects({ org }: { org: string }) {
     setCreating(false);
     setGithubLost(false);
   };
-  const newProject = (
+  const newProject = admin && (
     <Button variant="primary" onClick={() => setCreating(true)}>
       New project
     </Button>
@@ -63,10 +64,14 @@ export function Projects({ org }: { org: string }) {
           </>
         }
       />
-      <Loaded query={projects} skeleton={<TableSkeleton />}>
+      <Loaded query={projects} also={[role]} skeleton={<TableSkeleton />}>
         {(list) =>
           list.length === 0 ? (
-            <EmptyState title="No projects yet" description="Connect a GitHub repository to start deploying." action={newProject} />
+            <EmptyState
+              title="No projects yet"
+              description={admin ? "Connect a GitHub repository to start deploying." : "An admin of this organization connects repositories."}
+              action={newProject}
+            />
           ) : (
             <Table columns={["Name", "Repository", "Default branch"]}>
               {list.map((project) => (

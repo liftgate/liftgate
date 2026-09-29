@@ -250,6 +250,9 @@ address, and turns on only when both are set. `smtp://` connects with STARTTLS (
 587), `smtps://` with implicit TLS (port 465). Percent-encode reserved characters in the user
 name and password (`@` becomes `%40`).
 
+The same server sends organization invitations and the approval and suspension notices of the
+`admin` command. Without it, an invitation is still created and its link is shown to copy.
+
 A self-hosted server such as Postfix, Stalwart or Maddy, with a mailbox for Liftgate:
 
 ```yaml

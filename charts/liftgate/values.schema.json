@@ -286,7 +286,19 @@
       "additionalProperties": false,
       "properties": {
         "enabled": { "type": "boolean" },
-        "max": { "type": ["integer", "null"], "minimum": 0 }
+        "max": { "type": ["integer", "null"], "minimum": 0 },
+        "cloudflare": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "zoneId": { "type": "string" },
+            "apiToken": { "type": "string" },
+            "cnameTarget": { "type": "string" },
+            "gatewayServerName": { "type": "string" }
+          },
+          "if": { "properties": { "zoneId": { "minLength": 1 } }, "required": ["zoneId"] },
+          "then": { "properties": { "apiToken": { "minLength": 1 }, "gatewayServerName": { "minLength": 1 } }, "required": ["apiToken", "gatewayServerName"] }
+        }
       }
     },
     "allowSharedSite": { "type": "boolean" },

@@ -95,6 +95,22 @@ jobs:
             | [.[] | select(.kind == "Deployment" and .metadata.labels["liftgate.dev/role"] == "builder") | .spec.template.spec.containers[0].envFrom[].secretRef.name // empty | $secrets[.].stringData // {} | has("LIFTGATE_SECRETS_MASTER_KEY")]
             | all' rendered.json
           jq -e '.[] | select(.kind == "HTTPRoute" and .metadata.name == "liftgate-control-plane") | .spec.rules[0].matches == [{path: {type: "PathPrefix", value: "/api"}}]' rendered.json
+      - name: custom domain edge mode
+        run: |
+          set -o pipefail
+          render() { helm template liftgate charts/liftgate ${{ matrix.args }} "$@"; }
+          edge="--set customDomains.cloudflare.zoneId=0123456789abcdef --set customDomains.cloudflare.apiToken=token --set customDomains.cloudflare.gatewayServerName=edge.example.net"
+          render $edge | yq ea -o json '[.]' > rendered.json
+          jq -e '.[] | select(.kind == "Gateway") | .spec.listeners[] | select(.name == "https-edge") | .hostname == null and .tls.certificateRefs[0].name == "liftgate-edge-tls"' rendered.json
+          jq -e '.[] | select(.kind == "Certificate" and .metadata.name == "liftgate-edge") | .spec.dnsNames == ["edge.example.net"] and .spec.secretName == "liftgate-edge-tls"' rendered.json
+          jq -e '.[] | select(.kind == "ConfigMap" and .metadata.name == "liftgate") | .data.LIFTGATE_CLOUDFLARE_ZONE_ID == "0123456789abcdef"' rendered.json
+          jq -e '[.[] | select(.kind == "Secret" and .stringData.LIFTGATE_CLOUDFLARE_API_TOKEN == "token") | .metadata.name | test("^liftgate(-api|-reconciler)?$")] | length > 0 and all' rendered.json
+          jq -e '[.[] | select(.kind == "Secret" and (.metadata.name | test("-(builder|meter)$"))) | .stringData.LIFTGATE_CLOUDFLARE_API_TOKEN] | all(. == null)' rendered.json
+          if render | grep -e https-edge -e LIFTGATE_CLOUDFLARE; then exit 1; fi
+          if render --set customDomains.cloudflare.zoneId=0123456789abcdef 2> render.err; then exit 1; fi
+          grep "/customDomains/cloudflare" render.err
+          if render $edge --set customDomains.cloudflare.gatewayServerName=edge.liftgate.app 2> render.err; then exit 1; fi
+          grep "gatewayServerName must be" render.err
 
   rules:
     runs-on: ubuntu-24.04

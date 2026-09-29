@@ -78,11 +78,52 @@ dashboard host routes `/` to the dashboard, and the dashboard image must be buil
 browser bundle at build time; the published image uses same-host relative URLs. The control
 plane then allows credentialed cross-origin requests from the `dashboardUrl` origin only.
 
-Verified custom domains get their own HTTPS listener: the reconciler server-side applies one
-listener per domain onto the Gateway (field manager `liftgate`) and keeps the matching
-cert-manager `Certificate` beside the Gateway. A Gateway holds at most 64 listeners, which
-caps custom domains per cluster. `helm upgrade` rewrites the listener list; the next release
-or domain change restores the custom-domain listeners.
+## Custom domains
+
+A custom domain is verified by a TXT record at `_liftgate.<hostname>` that holds the domain's
+token. The dashboard lists the records to create and checks them every 15 seconds.
+
+Gateway mode is the default. Users point a CNAME at the service's platform hostname. Each
+verified custom domain gets its own HTTPS listener: the reconciler server-side applies one
+listener per domain onto the Gateway (field manager `liftgate`) and keeps a cert-manager
+`Certificate` from ClusterIssuer `gateway.issuer` beside the Gateway. The certificate status
+shown in the dashboard follows the `Certificate`'s `Ready` condition. A Gateway holds at most 64
+listeners, so keep `customDomains.max` below 64 minus the chart's own listeners. A `helm
+upgrade` that rewrites the listener list drops the custom-domain listeners; the reconciler
+leader compares listeners and `Certificate`s with the database every 30 seconds and restores
+them.
+
+Edge mode serves custom domains through Cloudflare for SaaS custom hostnames instead, for
+installations that sit behind Cloudflare, where the HTTP-01 challenge cannot reach the gateway:
+
+```yaml
+customDomains:
+  cloudflare:
+    zoneId: <zone that holds deployDomain>
+    apiToken: <token with Zone, SSL and Certificates, Edit on that zone>
+    cnameTarget: ""
+    gatewayServerName: edge.example.net
+```
+
+- Once the TXT check passes, the control plane creates a custom hostname with HTTP validation
+  and a DV certificate. Deleting the domain deletes the custom hostname. No listener or
+  `Certificate` is created, and the reconciler leader polls Cloudflare every 30 seconds for the
+  certificate status.
+- Users point a CNAME at `cnameTarget`, `cname.<deployDomain>` by default.
+- `customDomains.max` defaults to 100, the number of custom hostnames Cloudflare for SaaS
+  includes on its Free plan; each one beyond that is billed.
+- The zone needs Cloudflare for SaaS enabled, `cnameTarget` as a proxied record, and a fallback
+  origin that reaches a reverse proxy in front of the gateway. Cloudflare sends the custom
+  hostname as both SNI and `Host` to the fallback origin, so the proxy needs a certificate for
+  every custom hostname; with the zone's SSL mode on Full rather than Full (strict), Cloudflare
+  accepts one the proxy issues itself.
+- The chart adds a listener `https-edge` without a hostname, whose certificate names
+  `gatewayServerName` and comes from `gateway.issuer`. The proxy forwards to the gateway with
+  `gatewayServerName` as the TLS server name, trusts that issuer, and keeps the `Host` header.
+  `gatewayServerName` must not be a name another listener matches.
+- A proxy that issues certificates on demand can ask
+  `GET <publicUrl>/api/v1/domains/allowed?domain=<hostname>` before issuing: it answers 200 for
+  verified hostnames and `deployDomain`, 404 otherwise, and is rate limited per client IP.
 
 ## Separate sites
 

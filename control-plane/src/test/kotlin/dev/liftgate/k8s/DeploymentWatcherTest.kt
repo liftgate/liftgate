@@ -7,6 +7,7 @@ import io.fabric8.kubernetes.api.model.apps.Deployment
 import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder
 import io.fabric8.kubernetes.api.model.apps.DeploymentStatusBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
+import io.fabric8.kubernetes.client.KubernetesClientException
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient
 import io.mockk.clearMocks
 import io.mockk.coEvery
@@ -90,14 +91,14 @@ class DeploymentWatcherTest {
     }
 
     @Test
-    fun `a failed rollout reverts to the deployment still running and says so in its error`() {
+    fun `a failed rollout reverts to the deployment still running once the api server answers and says so in its error`() {
         val previous = testDeployment.copy(id = UUID.randomUUID(), status = DeploymentStatus.RUNNING)
         val deployments = mockk<Deployments>(relaxUnitFun = true) { coEvery { fallback(testDeployment.id) } returns previous }
-        val reconciler = mockk<Reconciler>(relaxUnitFun = true)
+        val reconciler = mockk<Reconciler> { coEvery { reapply(testService.id) } throws KubernetesClientException("unavailable", 503, null) andThen Unit }
         client.resource(stalled()).create()
         DeploymentWatcher(app(deployments), client, reconciler).start().use {
-            coVerify(timeout = 10_000) { deployments.transition(testDeployment.id, DeploymentStatus.FAILED, 0, "api has timed out progressing; reverted to ${previous.id}") }
-            coVerify(timeout = 10_000) { reconciler.reapply(testService.id) }
+            coVerify(timeout = 15_000) { deployments.transition(testDeployment.id, DeploymentStatus.FAILED, 0, "api has timed out progressing; reverted to ${previous.id}") }
+            coVerify(exactly = 2) { reconciler.reapply(testService.id) }
         }
     }
 

@@ -5,6 +5,7 @@ import dev.liftgate.deploy.DeploymentStatus
 import dev.liftgate.http.LiftgateException
 import io.fabric8.kubernetes.api.model.apps.Deployment
 import io.fabric8.kubernetes.client.KubernetesClient
+import io.fabric8.kubernetes.client.KubernetesClientException
 import io.fabric8.kubernetes.client.informers.ResourceEventHandler
 import io.fabric8.kubernetes.client.informers.SharedIndexInformer
 import kotlinx.coroutines.channels.Channel
@@ -80,6 +81,10 @@ class DeploymentWatcher(private val app: App, private val kube: KubernetesClient
             } catch (e: LiftgateException) {
                 return log.debug("ignored rollout of deployment {}: {}", rollout.deploymentId, e.message)
             } catch (e: SQLException) {
+                log.warn("could not record rollout of deployment {}, retrying", rollout.deploymentId, e)
+                delay(recordRetry)
+            } catch (e: KubernetesClientException) {
+                if (e.code in 400..499 && e.code != 409 && e.code != 429) return log.warn("could not record rollout of deployment {}", rollout.deploymentId, e)
                 log.warn("could not record rollout of deployment {}, retrying", rollout.deploymentId, e)
                 delay(recordRetry)
             } catch (e: Exception) {

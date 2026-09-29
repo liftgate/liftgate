@@ -17,7 +17,7 @@ The examples use these names. Replace them with yours everywhere.
 | `liftgate.example.com` | The dashboard and the API, the chart's `publicUrl` |
 | `apps.example.net` | The deploy domain; apps get `<service>-<project>-<org>.apps.example.net` |
 | `203.0.113.10` | The VM's public IPv4 address |
-| `10.0.0.3` | The registry machine's address on the private network it shares with the VM |
+| `192.168.100.3` | The registry machine's address on the private network it shares with the VM |
 | `ops@example.com` | The address Let's Encrypt writes to about your certificates |
 | `your-github-login` | Your GitHub login |
 
@@ -34,7 +34,7 @@ session cookie. The chart refuses to render such a pair, as Separate sites in th
   few small apps; it is a starting point, not a measured minimum. The kubelet settings reserve 1 CPU and
   2 GiB for the system, and a single build may use 2 CPUs, 4 GiB of memory and 20 GiB of disk.
 - A second machine for the container registry, with a private network between it and the VM that
-  carries only machines you control and trust. Step 2 explains why the registry cannot run on the VM.
+  carries only machines you control and trust, numbered outside `10.0.0.0/8`. Step 2 explains why.
 - Two domains whose DNS you control, one for the dashboard and one for the apps. The apps' DNS must let
   cert-manager create TXT records, either through RFC 2136 dynamic updates or through one of the
   [DNS providers cert-manager supports](https://cert-manager.io/docs/configuration/acme/dns01/).
@@ -65,6 +65,11 @@ so a registry on the VM itself, or inside the cluster, is unreachable for builds
 machine on the private network instead, with disk for the images Liftgate keeps: the newest 10 builds of
 each service and a build cache per service.
 
+Number that network outside `10.0.0.0/8`. Cilium, as `infra/install.sh` installs it, hands out pod
+addresses from that range and
+[assumes traffic to it targets pods](https://docs.cilium.io/en/stable/network/concepts/ipam/cluster-pool/),
+so neither the VM nor the builds would reach a registry there.
+
 On the registry machine, install Docker, create a password, and start
 [CNCF Distribution](https://distribution.github.io/distribution/) with that login and deletes enabled,
 so Liftgate can prune old images:
@@ -89,12 +94,12 @@ auth:
     realm: liftgate
     path: /etc/docker/registry/htpasswd
 EOF
-docker run -d --name liftgate-registry --restart unless-stopped -p 10.0.0.3:5000:5000 \
+docker run -d --name liftgate-registry --restart unless-stopped -p 192.168.100.3:5000:5000 \
   -v /srv/liftgate-registry:/var/lib/registry \
   -v /etc/liftgate-registry/config.yml:/etc/docker/registry/config.yml:ro \
   -v /etc/liftgate-registry/htpasswd:/etc/docker/registry/htpasswd:ro \
   registry:2.8.3
-curl -s -o /dev/null -w '%{http_code}\n' -u "liftgate:$REGISTRY_PASSWORD" http://10.0.0.3:5000/v2/
+curl -s -o /dev/null -w '%{http_code}\n' -u "liftgate:$REGISTRY_PASSWORD" http://192.168.100.3:5000/v2/
 ```
 
 The last command prints `200`. Note the password; the VM needs it in steps 3 and 7. The registry listens
@@ -118,9 +123,12 @@ Liftgate Cloud uses, which puts the registry in read-only mode while it collects
 garbage collection removes more than it should.
 
 This setup gives every build the same registry login, so a build can read other projects' images. That
-suits an installation whose users trust each other. For strangers, switch to `registryAuth: token`, which
-gives each build a login for its own repository only; see Registry authentication in the
-[chart README](../charts/liftgate/README.md#registry-authentication).
+suits an installation whose users trust each other. `registryAuth: token`, which gives each build a login
+for its own repository only, does not work on this layout: build jobs fetch that login from `publicUrl`
+over their internet egress, and here `publicUrl` is the VM's own address, which builds cannot reach for
+the reason above and because step 7 denies it to them. Before strangers build here, serve `publicUrl`
+from an address outside the cluster, such as a proxy on another machine, then switch as Registry
+authentication in the [chart README](../charts/liftgate/README.md#registry-authentication) describes.
 
 ## 3. Prepare the VM
 
@@ -142,11 +150,11 @@ REGISTRY_PASSWORD=<the password from step 2>
 mkdir -p /etc/rancher/k3s
 cat > /etc/rancher/k3s/registries.yaml <<EOF
 mirrors:
-  "10.0.0.3:5000":
+  "192.168.100.3:5000":
     endpoint:
-      - "http://10.0.0.3:5000"
+      - "http://192.168.100.3:5000"
 configs:
-  "10.0.0.3:5000":
+  "192.168.100.3:5000":
     auth:
       username: liftgate
       password: $REGISTRY_PASSWORD
@@ -244,13 +252,13 @@ GITHUB_WEBHOOK_SECRET=<the webhook secret from step 6>
 cat > liftgate-values.yaml <<EOF
 deployDomain: apps.example.net
 publicUrl: https://liftgate.example.com
-registry: 10.0.0.3:5000
+registry: 192.168.100.3:5000
 registryInsecure: true
 build:
   allowedEgressCidrs:
-    - cidr: 10.0.0.3/32
+    - cidr: 192.168.100.3/32
       ports: [5000]
-  registryCredentials: '{"auths":{"10.0.0.3:5000":{"auth":"$(printf 'liftgate:%s' "$REGISTRY_PASSWORD" | base64 -w0)"}}}'
+  registryCredentials: '{"auths":{"192.168.100.3:5000":{"auth":"$(printf 'liftgate:%s' "$REGISTRY_PASSWORD" | base64 -w0)"}}}'
 deniedEgressCidrs:
   - 203.0.113.10/32
 signup:
@@ -500,7 +508,7 @@ kubectl get --raw /api/v1/namespaces/liftgate-system/services/liftgate-control-p
 | "Your account is waiting for approval" | Approve the account with `admin approve`, as in step 8 |
 | The repository picker is empty | Install the App on the account that owns the repository; your GitHub account must be able to push to it. Then choose Refresh |
 | Pushes do not start builds | The App's Advanced tab lists recent webhook deliveries and their responses. The webhook secret must match `github.webhookSecret`, and the push must be to an environment's branch |
-| A build fails while pushing the image | `curl -u liftgate:<password> http://10.0.0.3:5000/v2/` from the VM, `build.allowedEgressCidrs` and `build.registryCredentials` |
+| A build fails while pushing the image | `curl -u liftgate:<password> http://192.168.100.3:5000/v2/` from the VM, `build.allowedEgressCidrs` and `build.registryCredentials` |
 | A deployment fails with `ImagePullBackOff` | `k3s crictl pull <image>` on the VM with the image from the build. After changing `/etc/rancher/k3s/registries.yaml`, run `systemctl restart k3s` |
 | App pods never appear, or stay in `ContainerCreating` with a runtime handler error | `kubectl get runtimeclass gvisor`, `kubectl get pods --all-namespaces -l liftgate.dev/managed=true`, and the gVisor section of `infra/k3s/install.md` |
 | The Metrics tab stays empty | `kubectl -n liftgate-system get pods` for Prometheus, and gVisor and cAdvisor in `infra/prometheus/README.md` |

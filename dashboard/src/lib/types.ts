@@ -224,3 +224,17 @@ export type GitHubRepository = { fullName: string; defaultBranch: string; privat
 export type ImportableRepositories = { repositories: GitHubRepository[]; installUrl: string };
 
 export type DnsRecord = { type: "TXT" | "CNAME"; name: string; value: string };
+
+export type MetricPoint = { time: number; value: number };
+
+export type ServiceMetrics = {
+  start: number;
+  end: number;
+  step: number;
+  cpu: MetricPoint[];
+  memory: MetricPoint[];
+  memoryLimitBytes: number;
+  networkRx: MetricPoint[];
+  networkTx: MetricPoint[];
+  restarts: number;
+};

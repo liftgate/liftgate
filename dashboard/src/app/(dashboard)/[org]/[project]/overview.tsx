@@ -17,7 +17,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { EmptyState, ErrorState } from "@/components/ui/empty-state";
 import { Field, FormError, Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { PageSkeleton, Skeleton, TableSkeleton } from "@/components/ui/skeleton";
+import { Skeleton, TableSkeleton } from "@/components/ui/skeleton";
 
 export function Overview({ org, projectSlug }: { org: string; projectSlug: string }) {
   const router = useRouter();
@@ -53,8 +53,6 @@ export function Overview({ org, projectSlug }: { org: string; projectSlug: strin
     );
   }
   if (tree.error) return <ErrorState error={tree.error} retry={tree.reload} />;
-  if (role.error) return <ErrorState error={role.error} retry={role.reload} />;
-  if (role.loading) return <PageSkeleton />;
   const href = `/${org}/${projectSlug}`;
   return (
     <div className="flex flex-col gap-8">
@@ -74,7 +72,7 @@ export function Overview({ org, projectSlug }: { org: string; projectSlug: strin
           )
         }
       />
-      <Loaded query={tree} skeleton={<TableSkeleton />}>
+      <Loaded query={tree} also={role} skeleton={<TableSkeleton />}>
         {({ environments: list, services }) =>
           list.length === 0 ? (
             <EmptyState

@@ -11,10 +11,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CopyField } from "@/components/ui/copy-field";
 import { Dialog } from "@/components/ui/dialog";
-import { ErrorState } from "@/components/ui/empty-state";
 import { Field, FormError, Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { PageSkeleton, TableSkeleton } from "@/components/ui/skeleton";
+import { TableSkeleton } from "@/components/ui/skeleton";
 import { Cell, Row, Table } from "@/components/ui/table";
 
 const roles: OrgRole[] = ["owner", "admin", "member"];
@@ -48,8 +47,6 @@ export function Members({ org }: { org: string }) {
     setInviting(false);
     setSent(undefined);
   };
-  if (role.error) return <ErrorState error={role.error} retry={role.reload} />;
-  if (role.loading) return <PageSkeleton />;
   return (
     <div className="flex flex-col gap-8">
       <PageHeader
@@ -64,7 +61,7 @@ export function Members({ org }: { org: string }) {
         }
       />
       <FormError message={changeRole.error} />
-      <Loaded query={members} skeleton={<TableSkeleton />}>
+      <Loaded query={members} also={role} skeleton={<TableSkeleton />}>
         {(list) => (
           <Table columns={["Member", "Email", "Role", ""]}>
             {list.map((member) => {

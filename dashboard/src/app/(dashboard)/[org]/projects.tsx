@@ -15,9 +15,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
-import { EmptyState, ErrorState } from "@/components/ui/empty-state";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Field, FormError, Input } from "@/components/ui/input";
-import { PageSkeleton, Skeleton, TableSkeleton } from "@/components/ui/skeleton";
+import { Skeleton, TableSkeleton } from "@/components/ui/skeleton";
 import { Cell, Row, Table } from "@/components/ui/table";
 
 export function Projects({ org }: { org: string }) {
@@ -50,8 +50,6 @@ export function Projects({ org }: { org: string }) {
       New project
     </Button>
   );
-  if (role.error) return <ErrorState error={role.error} retry={role.reload} />;
-  if (role.loading) return <PageSkeleton />;
   return (
     <div className="flex flex-col gap-8">
       <PageHeader
@@ -66,7 +64,7 @@ export function Projects({ org }: { org: string }) {
           </>
         }
       />
-      <Loaded query={projects} skeleton={<TableSkeleton />}>
+      <Loaded query={projects} also={role} skeleton={<TableSkeleton />}>
         {(list) =>
           list.length === 0 ? (
             <EmptyState

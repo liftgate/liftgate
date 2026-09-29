@@ -1,7 +1,10 @@
 package dev.liftgate.service
 
 import dev.liftgate.build.orphanRepositories
+import dev.liftgate.db.Builds
 import dev.liftgate.db.Db
+import dev.liftgate.db.Deployments
+import dev.liftgate.db.Domains
 import dev.liftgate.db.Environments
 import dev.liftgate.db.Memberships
 import dev.liftgate.db.Organizations
@@ -9,6 +12,8 @@ import dev.liftgate.db.Projects
 import dev.liftgate.db.Services as ServicesTable
 import dev.liftgate.db.sql
 import dev.liftgate.db.toEnum
+import dev.liftgate.deploy.DeploymentStatus
+import dev.liftgate.domain.DomainKind
 import dev.liftgate.events.Subject
 import dev.liftgate.events.enqueue
 import dev.liftgate.org.Limits
@@ -19,9 +24,12 @@ import dev.liftgate.project.toProject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.jetbrains.exposed.v1.core.ResultRow
+import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.innerJoin
+import org.jetbrains.exposed.v1.core.isNotNull
 import org.jetbrains.exposed.v1.core.statements.UpdateBuilder
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insertReturning
@@ -80,13 +88,15 @@ class Services(private val db: Db, private val limits: Limits = Limits()) {
         ProjectTree(
             project,
             Environments.selectAll().where { Environments.projectId eq project.id }.orderBy(Environments.slug).map { it.toEnvironment() },
-            (ServicesTable innerJoin Environments).selectAll().where { Environments.projectId eq project.id }.orderBy(ServicesTable.slug).map { it.toService() },
+            (ServicesTable innerJoin Environments).selectAll().where { Environments.projectId eq project.id }.orderBy(ServicesTable.slug).map { it.toService() }.let(::status),
         )
     }
 
     suspend fun forEnvironment(environmentId: UUID): List<Service> = db.tx {
         (ServicesTable innerJoin Environments).selectAll().where { ServicesTable.environmentId eq environmentId }.orderBy(ServicesTable.slug).map { it.toService() }
     }
+
+    suspend fun withStatus(services: List<Service>): List<Service> = db.tx { status(services) }
 
     suspend fun production(scope: ServiceScope): ServiceScope? = if (scope.environment.kind == EnvironmentKind.PRODUCTION) null else db.tx {
         (ServicesTable innerJoin Environments).selectAll()
@@ -126,6 +136,25 @@ class Services(private val db: Db, private val limits: Limits = Limits()) {
         this[ServicesTable.startCommand] = spec.startCommand
         this[ServicesTable.healthCheckPath] = spec.healthCheckPath
         this[ServicesTable.watchPaths] = spec.watchPaths
+    }
+
+    private fun status(services: List<Service>): List<Service> {
+        if (services.isEmpty()) return services
+        val ids = services.map { it.id }
+        val hosts = Domains.select(Domains.serviceId, Domains.hostname)
+            .where { (Domains.serviceId inList ids) and Domains.verifiedAt.isNotNull() }
+            .withDistinctOn(Domains.serviceId to SortOrder.ASC)
+            .orderBy((Domains.kind eq DomainKind.PLATFORM.sql) to SortOrder.DESC, Domains.verifiedAt to SortOrder.ASC)
+            .associate { it[Domains.serviceId] to it[Domains.hostname] }
+        val current = (Deployments innerJoin Builds).select(Deployments.serviceId, Deployments.id, Deployments.status, Deployments.replicasReady, Deployments.createdAt, Builds.commitSha)
+            .where { Deployments.serviceId inList ids }
+            .withDistinctOn(Deployments.serviceId to SortOrder.ASC)
+            .orderBy((Deployments.status eq DeploymentStatus.RUNNING.sql) to SortOrder.DESC, Deployments.createdAt to SortOrder.DESC)
+            .associate {
+                it[Deployments.serviceId] to
+                    Service.Current(it[Deployments.id], it[Deployments.status].toEnum(), it[Deployments.replicasReady], it[Builds.commitSha], it[Deployments.createdAt].toInstant())
+            }
+        return services.map { service -> service.copy(url = hosts[service.id]?.takeIf { service.kind.servesHttp }?.let { "https://$it" }, current = current[service.id]) }
     }
 
     private fun namespace(environmentId: UUID) = Environments.select(Environments.namespace).where { Environments.id eq environmentId }.single()[Environments.namespace]

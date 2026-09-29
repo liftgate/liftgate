@@ -103,7 +103,7 @@ class AuthRoutesTest {
     fun `providers lists the configured oauth providers`() = testApplication {
         application { liftgate(app) }
         assertEquals(
-            """{"oauth":["github","google"],"passkey":true,"email":false,"sso":true,"customDomains":true}""",
+            """{"oauth":["github","google"],"passkey":true,"email":false,"sso":true,"customDomains":true,"deployDomain":"liftgate.app"}""",
             client.get("/api/v1/auth/providers").bodyAsText(),
         )
     }

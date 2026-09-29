@@ -18,6 +18,7 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.put
 import io.ktor.server.routing.route
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonObject
@@ -34,21 +35,25 @@ private val repoPath = Regex("[A-Za-z0-9._/-]*")
 
 fun Route.serviceRoutes(app: App) {
     route("/environments/{id}/services") {
-        get { call.respond(app.services.forEnvironment(call.environment(app).id)) }
+        get { call.respond(app.services.withStatus(app.services.forEnvironment(call.environment(app).id))) }
         post {
             val environment = call.environment(app, OrgRole.ADMIN)
             val service = app.services.create(environment.id, call.receive<ServiceSpec>().validated())
-            try {
-                app.claimPlatformDomain(app.services.scope(service.id) ?: notFound("service"))
+            val build = try {
+                val scope = app.services.scope(service.id) ?: notFound("service")
+                app.claimPlatformDomain(scope)
+                if (call.request.queryParameters["deploy"] != "true") null
+                else app.branchHead(scope.project, environment.branch).let { (sha, message) -> app.builds.request(service.id, sha, message, environment.branch) }
             } catch (e: Exception) {
                 app.services.delete(service.id)
                 throw e
             }
-            call.respond(HttpStatusCode.Created, service)
+            val body = json.encodeToJsonElement(service).jsonObject
+            call.respond(HttpStatusCode.Created, build?.let { JsonObject(body + ("buildId" to JsonPrimitive(it.id.toString()))) } ?: body)
         }
     }
     route("/services/{id}") {
-        get { call.respond(call.service(app).service) }
+        get { call.respond(app.services.withStatus(listOf(call.service(app).service)).single()) }
         patch {
             val scope = call.service(app, OrgRole.ADMIN)
             val merged = JsonObject(json.encodeToJsonElement(scope.service.spec()).jsonObject + call.receive<JsonObject>())
@@ -84,17 +89,17 @@ suspend fun ApplicationCall.service(app: App, min: OrgRole = OrgRole.MEMBER, id:
 
 private fun ServiceSpec.validated(): ServiceSpec {
     requireSlug(slug)
-    if (name.isBlank()) invalid("name is required")
-    if (port != null && port !in 1..65535) invalid("port must be between 1 and 65535")
-    if (replicas !in 0..MAX_REPLICAS) invalid("replicas must be between 0 and $MAX_REPLICAS")
-    if (cpuMillis !in 1..MAX_CPU_MILLIS) invalid("cpuMillis must be between 1 and $MAX_CPU_MILLIS")
-    if (memoryMb !in 1..MAX_MEMORY_MB) invalid("memoryMb must be between 1 and $MAX_MEMORY_MB")
-    if (!rootDir.isRepoPath()) invalid("rootDir must be a path inside the repository")
-    if (dockerfilePath.isBlank() || dockerfilePath.startsWith('/') || !dockerfilePath.isRepoPath()) invalid("dockerfilePath must be a relative path inside rootDir")
-    if (kind == ServiceKind.CRON && cronSchedule.isNullOrBlank()) invalid("cron services need a cronSchedule")
-    if (healthCheckPath != null && (!healthCheckPath.startsWith('/') || healthCheckPath.length > MAX_HEALTH_CHECK_PATH)) invalid("the health check path must start with / and be at most $MAX_HEALTH_CHECK_PATH characters")
-    if (healthCheckPath != null && port == null && !kind.servesHttp) invalid("a health check path needs a port to probe")
-    if (watchPaths.size > MAX_WATCH_PATHS || watchPaths.any { it.isBlank() || it.length > MAX_WATCH_PATH_LENGTH }) invalid("watchPaths must be at most $MAX_WATCH_PATHS non-blank globs of up to $MAX_WATCH_PATH_LENGTH characters")
+    if (name.isBlank()) invalid("name is required", "name")
+    if (port != null && port !in 1..65535) invalid("the port must be between 1 and 65535", "port")
+    if (replicas !in 0..MAX_REPLICAS) invalid("replicas must be between 0 and $MAX_REPLICAS", "replicas")
+    if (cpuMillis !in 1..MAX_CPU_MILLIS) invalid("CPU must be between 1 and $MAX_CPU_MILLIS millicores", "cpuMillis")
+    if (memoryMb !in 1..MAX_MEMORY_MB) invalid("memory must be between 1 and $MAX_MEMORY_MB MB", "memoryMb")
+    if (!rootDir.isRepoPath()) invalid("the root directory must be a path inside the repository", "rootDir")
+    if (dockerfilePath.isBlank() || dockerfilePath.startsWith('/') || !dockerfilePath.isRepoPath()) invalid("the Dockerfile path must be relative to the root directory and stay inside it", "dockerfilePath")
+    if (kind == ServiceKind.CRON && cronSchedule.isNullOrBlank()) invalid("cron services need a schedule", "cronSchedule")
+    if (healthCheckPath != null && (!healthCheckPath.startsWith('/') || healthCheckPath.length > MAX_HEALTH_CHECK_PATH)) invalid("the health check path must start with / and be at most $MAX_HEALTH_CHECK_PATH characters", "healthCheckPath")
+    if (healthCheckPath != null && port == null && !kind.servesHttp) invalid("a health check path needs a port to probe", "healthCheckPath")
+    if (watchPaths.size > MAX_WATCH_PATHS || watchPaths.any { it.isBlank() || it.length > MAX_WATCH_PATH_LENGTH }) invalid("list at most $MAX_WATCH_PATHS watch paths of up to $MAX_WATCH_PATH_LENGTH characters each", "watchPaths")
     return this
 }
 

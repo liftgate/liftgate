@@ -24,6 +24,7 @@ import org.jetbrains.exposed.v1.jdbc.transactions.TransactionManager
 import java.util.UUID
 
 private const val CUSTOM_DOMAINS_LOCK = 7_261_696_401L
+private val resources = listOf(Triple("replicas", "replicas", ""), Triple("cpuMillis", "CPU", "m"), Triple("memoryMb", "memory", " MB"))
 
 /**
  * @author Dean
@@ -104,8 +105,9 @@ class Limits(private val plans: Plans = Plans(), private val customDomainsMax: I
     private fun reserve(name: String, plan: Plan, before: Collection<ServiceSpec>, after: Collection<ServiceSpec>) {
         val was = reserved(before).toList()
         val will = reserved(after).toList()
-        listOf("replicas" to plan.replicas, "cpuMillis" to plan.cpuMillis, "memoryMb" to plan.memoryMb).forEachIndexed { i, (what, limit) ->
-            if (limit != null && will[i] > limit && will[i] > was[i]) planLimit("the $name plan's $what limit is $limit across the organization, and this change needs ${will[i]}")
+        listOf(plan.replicas, plan.cpuMillis, plan.memoryMb).forEachIndexed { i, limit ->
+            val (field, label, unit) = resources[i]
+            if (limit != null && will[i] > limit && will[i] > was[i]) planLimit("the $name plan's $label limit is $limit$unit across the organization, and this change needs ${will[i]}$unit", field)
         }
     }
 

@@ -50,7 +50,7 @@ fun Application.liftgate(app: App) {
         listOf(HttpMethod.Put, HttpMethod.Patch, HttpMethod.Delete).forEach(::allowMethod)
     }
     install(StatusPages) {
-        exception<LiftgateException> { call, e -> call.respond(e.status, ErrorBody(e.code, e.message)) }
+        exception<LiftgateException> { call, e -> call.respond(e.status, ErrorBody(e.code, e.message, e.field)) }
         exception<PayloadTooLargeException> { call, _ -> call.respond(HttpStatusCode.PayloadTooLarge, tooLarge) }
         exception<BadRequestException> { call, e ->
             if (generateSequence<Throwable>(e) { it.cause }.any { it is PayloadTooLargeException }) call.respond(HttpStatusCode.PayloadTooLarge, tooLarge)

@@ -32,6 +32,7 @@ fun Route.apiRoutes(app: App) {
         registryRoutes(app)
         rateLimits(app)
         notificationRoutes(app)
+        githubRoutes(app)
         audit(app)
     }
 }

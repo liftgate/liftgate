@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { useAction, useApi, usePolling } from "@/lib/hooks";
 import type { AuthProviders, Domain, Service } from "@/lib/types";
@@ -40,12 +40,17 @@ export function DomainsTab({ service, admin }: { service: Service; admin: boolea
     await api(`/domains/${domain.id}`, { method: "DELETE" });
     domains.reload();
   });
+  const checking = useRef(false);
   usePolling(
     !!domains.data?.some(settling),
-    () =>
-      Promise.allSettled(domains.data?.filter((domain) => admin && unverified(domain)).map((domain) => api(`/domains/${domain.id}/verify`, { method: "POST" })) ?? []).then(
-        domains.reload,
-      ),
+    () => {
+      if (checking.current) return;
+      checking.current = true;
+      Promise.allSettled(domains.data?.filter((domain) => admin && unverified(domain)).map((domain) => api(`/domains/${domain.id}/verify`, { method: "POST" })) ?? []).then(() => {
+        checking.current = false;
+        domains.reload();
+      });
+    },
     CHECK_MS,
   );
   return (
@@ -132,7 +137,7 @@ export function DomainsTab({ service, admin }: { service: Service; admin: boolea
                 </p>
               </div>
               {domain.dnsRecords.map((record) => (
-                <div key={record.type} className="grid gap-4 md:grid-cols-2">
+                <div key={`${record.type} ${record.name}`} className="grid gap-4 md:grid-cols-2">
                   <CopyField label={`${record.type} name`} value={record.name} />
                   <CopyField label={record.type === "CNAME" ? "CNAME target" : `${record.type} value`} value={record.value} />
                 </div>

@@ -110,8 +110,9 @@ customDomains:
   `Certificate` is created, and the reconciler leader polls Cloudflare every 30 seconds for the
   certificate status.
 - Users point a CNAME at `cnameTarget`, `cname.<deployDomain>` by default.
-- `customDomains.max` defaults to 100, the number of custom hostnames Cloudflare for SaaS
-  includes on its Free plan; each one beyond that is billed.
+- With `customDomains.max` left at `null`, the control plane caps custom domains at 100, the
+  number of custom hostnames Cloudflare for SaaS includes on its Free plan; each one beyond
+  that is billed.
 - The zone needs Cloudflare for SaaS enabled, `cnameTarget` as a proxied record, and a fallback
   origin that reaches a reverse proxy in front of the gateway. Cloudflare sends the custom
   hostname as both SNI and `Host` to the fallback origin, so the proxy needs a certificate for
@@ -518,7 +519,11 @@ other than 2xx is retried with a growing delay for an hour.
 | `legal.privacyUrl` | `""` | `LIFTGATE_PRIVACY_URL` |
 | `legal.aupUrl` | `""` | `LIFTGATE_AUP_URL`, the acceptable use policy |
 | `customDomains.enabled` | `true` | `LIFTGATE_CUSTOM_DOMAINS_ENABLED`; `false` replaces the dashboard's add-domain form with a notice, for edges that cannot route customer hostnames yet |
-| `customDomains.max` | `null` | `LIFTGATE_CUSTOM_DOMAINS_MAX`; the number of custom domains across every organization, unlimited when `null` |
+| `customDomains.max` | `null` | `LIFTGATE_CUSTOM_DOMAINS_MAX`; the number of custom domains across every organization; `null` means unlimited in gateway mode and 100 in edge mode |
+| `customDomains.cloudflare.zoneId` | `""` | `LIFTGATE_CLOUDFLARE_ZONE_ID`; turns on edge mode, see [Custom domains](#custom-domains) |
+| `customDomains.cloudflare.apiToken` | `""` | `LIFTGATE_CLOUDFLARE_API_TOKEN`, required with `zoneId`; stored in the api and reconciler Secrets |
+| `customDomains.cloudflare.cnameTarget` | `""` | `LIFTGATE_CLOUDFLARE_CNAME_TARGET`; the name users point their CNAME at, `cname.<deployDomain>` when empty |
+| `customDomains.cloudflare.gatewayServerName` | `""` | Required with `zoneId`; the name on the `https-edge` listener's certificate |
 | `plans` | `free`, `unlimited` | `LIFTGATE_PLANS`; see [Plans](#plans) |
 | `defaultPlan` | `unlimited` | `LIFTGATE_DEFAULT_PLAN`; the plan of every organization that has not been given one with `admin plan` |
 | `allowSharedSite` | `false` | Render although `deployDomain` ends in the same two labels as `publicUrl` or `dashboardUrl`; see [Separate sites](#separate-sites) |

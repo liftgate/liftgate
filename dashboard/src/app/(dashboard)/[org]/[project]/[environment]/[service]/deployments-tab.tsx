@@ -13,7 +13,7 @@ import { TableSkeleton } from "@/components/ui/skeleton";
 
 const inProgress = (status: string) => ["pending", "releasing"].includes(status.toLowerCase());
 
-export function DeploymentsTab({ service, admin, onBuild }: { service: Service; admin: boolean; onBuild: (id: string) => void }) {
+export function DeploymentsTab({ service, admin, onBuild, onChanged }: { service: Service; admin: boolean; onBuild: (id: string) => void; onChanged: () => void }) {
   const deployments = useApi<Deployment[]>(`/services/${service.id}/deployments`);
   const builds = useApi<Build[]>(`/services/${service.id}/builds`);
   const [target, setTarget] = useState<string>();
@@ -22,7 +22,10 @@ export function DeploymentsTab({ service, admin, onBuild }: { service: Service; 
     deployments.reload();
   });
   const deploy = useAction(async () => onBuild((await api<Build>(`/services/${service.id}/deploy`, { method: "POST", body: {} })).id));
-  usePolling(!!deployments.data?.some((d) => inProgress(d.status)), deployments.reload);
+  usePolling(!!deployments.data?.some((d) => inProgress(d.status)), () => {
+    deployments.reload();
+    onChanged();
+  });
   return (
     <Loaded query={deployments} skeleton={<TableSkeleton />}>
       {(list) =>

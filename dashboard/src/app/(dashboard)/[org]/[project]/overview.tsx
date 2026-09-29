@@ -22,7 +22,7 @@ import { Skeleton, TableSkeleton } from "@/components/ui/skeleton";
 export function Overview({ org, projectSlug, onboarding }: { org: string; projectSlug: string; onboarding: boolean }) {
   const router = useRouter();
   const { query: role, admin } = useRole(org);
-  const [dialog, setDialog] = useState<"environment" | "service" | undefined>(onboarding ? "service" : undefined);
+  const [dialog, setDialog] = useState<"environment" | "service" | "deploy" | undefined>(onboarding ? "deploy" : undefined);
   const [environmentId, setEnvironmentId] = useState<string>();
   const tree = useApi<ProjectTree>(`/orgs/${org}/projects/${projectSlug}/tree`);
   const deployDomain = useApi<AuthProviders>("/auth/providers").data?.deployDomain;
@@ -39,8 +39,8 @@ export function Overview({ org, projectSlug, onboarding }: { org: string; projec
     tree.reload();
   });
   const createService = useAction(async (spec: ServiceSpec) => {
-    const service = await api<Service & { buildId: string }>(`/environments/${environment?.id}/services?deploy=true`, { method: "POST", body: spec });
-    router.push(`/${org}/${projectSlug}/${environment?.slug}/${service.slug}?tab=builds&build=${service.buildId}`);
+    const service = await api<Service & { buildId?: string }>(`/environments/${environment?.id}/services${dialog === "deploy" ? "?deploy=true" : ""}`, { method: "POST", body: spec });
+    router.push(`/${org}/${projectSlug}/${environment?.slug}/${service.slug}${service.buildId ? `?tab=builds&build=${service.buildId}` : ""}`);
   });
   const newService = (id?: string) => {
     setEnvironmentId(id);
@@ -133,7 +133,7 @@ export function Overview({ org, projectSlug, onboarding }: { org: string; projec
           </div>
         </form>
       </Dialog>
-      <Dialog open={admin && dialog === "service" && !!environment} title={onboarding ? "Configure and deploy" : "New service"} onClose={close}>
+      <Dialog open={admin && (dialog === "service" || dialog === "deploy") && !!environment} title={dialog === "deploy" ? "Configure and deploy" : "New service"} onClose={close}>
         <ServiceForm
           before={
             environments && environments.length > 1 && (
@@ -148,12 +148,12 @@ export function Overview({ org, projectSlug, onboarding }: { org: string; projec
               </Field>
             )
           }
-          prefill={onboarding ? project?.name : undefined}
+          prefill={dialog === "deploy" ? project?.name : undefined}
           hostFor={environment && deployDomain ? (slug) => platformHost({ service: slug, environment: environment.slug, project: projectSlug, org }, deployDomain) : undefined}
           pending={createService.pending}
           error={createService.error}
           errorField={createService.field}
-          submitLabel="Deploy"
+          submitLabel={dialog === "deploy" ? "Deploy" : "Create service"}
           onSubmit={createService.run}
           onCancel={close}
         />

@@ -87,7 +87,7 @@ export function ServiceView({ org, projectSlug, environmentSlug, serviceSlug }: 
         <FormError message={redeploy.error} />
       </div>
       <Tabs items={visible} value={tab} label={`${service.name} sections`} onChange={(id) => show(id)}>
-        {tab === "deployments" && <DeploymentsTab key={round} service={service} admin={admin} onBuild={(id) => show("builds", id)} />}
+        {tab === "deployments" && <DeploymentsTab key={round} service={service} admin={admin} onBuild={(id) => show("builds", id)} onChanged={lookup.reload} />}
         {tab === "logs" && <LogsTab service={service} />}
         {tab === "builds" && <BuildsTab service={service} admin={admin} linked={search.get("build") ?? undefined} onSelect={(id) => show("builds", id)} />}
         {tab === "env" && <EnvTab service={service} admin={admin} />}

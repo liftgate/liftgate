@@ -54,13 +54,12 @@ class Reconciler(private val app: App, private val kube: KubernetesClient) {
     }
 
     suspend fun reroute(serviceId: UUID) {
-        app.deployments.current(serviceId)?.let { load(it) }?.let { withContext(Dispatchers.IO) { route(it) } }
+        applied(serviceId)?.let { load(it) }?.let { withContext(Dispatchers.IO) { route(it) } }
         syncCustomDomains()
     }
 
     suspend fun reapply(serviceId: UUID, live: HasMetadata? = null) {
-        val latest = app.deployments.forService(serviceId, limit = 1).singleOrNull() ?: return
-        val release = load(latest.takeIf { it.status == DeploymentStatus.RELEASING } ?: app.deployments.current(serviceId) ?: latest) ?: return
+        val release = applied(serviceId)?.let { load(it) } ?: return
         if (live != null && (live.stopped() || !release.suspended) &&
             (live.metadata.labels?.get(DEPLOYMENT_LABEL) == release.deployment.id.toString() || overtaken(release, live))
         ) return withContext(Dispatchers.IO) { environment(release).forEach { kube.resource(it).apply() } }
@@ -85,6 +84,11 @@ class Reconciler(private val app: App, private val kube: KubernetesClient) {
             teardown(it.getValue("namespace").jsonPrimitive.content, it["serviceId"]?.jsonPrimitive?.content?.let(UUID::fromString))
         }
         return consumers.coroutineContext.job
+    }
+
+    private suspend fun applied(serviceId: UUID): Deployment? {
+        val latest = app.deployments.forService(serviceId, limit = 1).singleOrNull() ?: return null
+        return latest.takeIf { it.status == DeploymentStatus.RELEASING } ?: app.deployments.current(serviceId) ?: latest
     }
 
     private suspend fun load(deployment: Deployment): Release? {

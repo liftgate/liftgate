@@ -10,6 +10,7 @@ import { StatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { CopyField } from "@/components/ui/copy-field";
+import { ConfirmDialog } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FormError, Input } from "@/components/ui/input";
 import { Skeleton, TableSkeleton } from "@/components/ui/skeleton";
@@ -24,7 +25,7 @@ export function DomainsTab({ service, admin }: { service: Service; admin: boolea
   const domains = useApi<Domain[]>(`/services/${service.id}/domains`);
   const providers = useApi<AuthProviders>(admin && "/auth/providers");
   const [verifying, setVerifying] = useState<string>();
-  const [removing, setRemoving] = useState<string>();
+  const [removing, setRemoving] = useState<Domain>();
   const add = useAction(async (form: HTMLFormElement) => {
     const { hostname } = formValues(form);
     await api(`/services/${service.id}/domains`, { method: "POST", body: { hostname } });
@@ -36,8 +37,8 @@ export function DomainsTab({ service, admin }: { service: Service; admin: boolea
     domains.reload();
   });
   const remove = useAction(async (domain: Domain) => {
-    if (!window.confirm(`Remove ${domain.hostname}?`)) return;
     await api(`/domains/${domain.id}`, { method: "DELETE" });
+    setRemoving(undefined);
     domains.reload();
   });
   const checking = useRef(false);
@@ -61,7 +62,7 @@ export function DomainsTab({ service, admin }: { service: Service; admin: boolea
           description="Custom domains are routed once a TXT record proves ownership. Certificates are issued automatically."
         />
         <div className="flex flex-col gap-4 p-6">
-          <FormError message={verify.error ?? remove.error} />
+          <FormError message={verify.error} />
           <Loaded query={domains} skeleton={<TableSkeleton rows={2} />}>
             {(list) =>
               list.length === 0 ? (
@@ -105,14 +106,7 @@ export function DomainsTab({ service, admin }: { service: Service; admin: boolea
                                 Verify
                               </Button>
                             )}
-                            <Button
-                              variant="danger"
-                              pending={remove.pending && removing === domain.id}
-                              onClick={() => {
-                                setRemoving(domain.id);
-                                remove.run(domain);
-                              }}
-                            >
+                            <Button variant="danger" onClick={() => setRemoving(domain)}>
                               Remove
                             </Button>
                           </div>
@@ -163,7 +157,7 @@ export function DomainsTab({ service, admin }: { service: Service; admin: boolea
                   className="flex flex-col gap-4 p-6"
                 >
                   <div className="flex gap-2">
-                    <Input name="hostname" required placeholder="app.example.com" pattern="[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}" className="max-w-sm flex-1 font-mono" />
+                    <Input name="hostname" required placeholder="app.example.com" pattern="[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}" className="min-w-0 max-w-sm flex-1 font-mono" />
                     <Button type="submit" variant="primary" pending={add.pending}>
                       Add domain
                     </Button>
@@ -180,6 +174,16 @@ export function DomainsTab({ service, admin }: { service: Service; admin: boolea
           }
         </Loaded>
       )}
+      <ConfirmDialog
+        open={!!removing}
+        title="Remove domain"
+        pending={remove.pending}
+        error={remove.error}
+        onConfirm={() => removing && remove.run(removing)}
+        onClose={() => setRemoving(undefined)}
+      >
+        <span className="font-mono text-white">{removing?.hostname}</span> stops routing to this service.
+      </ConfirmDialog>
     </div>
   );
 }

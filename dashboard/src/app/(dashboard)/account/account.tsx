@@ -12,21 +12,34 @@ import { PageHeader } from "@/components/page-header";
 import { ProviderLabel, ProviderLink, providerNames } from "@/components/provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
-import { Dialog } from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Field, FormError, Input } from "@/components/ui/input";
+import { FormError, Input } from "@/components/ui/input";
 import { Skeleton, TableSkeleton } from "@/components/ui/skeleton";
 import { Cell, Row, Table } from "@/components/ui/table";
 
 function useRemoval(reload: () => void) {
-  const [target, setTarget] = useState<string>();
-  const action = useAction(async (path: string, question: string) => {
-    if (!window.confirm(question)) return;
-    setTarget(path);
+  const [target, setTarget] = useState<{ path: string; title: string; detail: string }>();
+  const remove = useAction(async (path: string) => {
     await api(path, { method: "DELETE" });
+    setTarget(undefined);
     reload();
   });
-  return { ...action, removing: (path: string) => action.pending && target === path };
+  return {
+    ask: (path: string, title: string, detail: string) => setTarget({ path, title, detail }),
+    dialog: (
+      <ConfirmDialog
+        open={!!target}
+        title={target?.title ?? ""}
+        pending={remove.pending}
+        error={remove.error}
+        onConfirm={() => target && remove.run(target.path)}
+        onClose={() => setTarget(undefined)}
+      >
+        {target?.detail}
+      </ConfirmDialog>
+    ),
+  };
 }
 
 export function Account({ error }: { error?: string }) {
@@ -72,7 +85,6 @@ function SignInMethods({ oauth }: { oauth: OAuthProvider[] }) {
     <Card>
       <CardHeader title="Sign-in methods" description="Any of these signs you in to this account. Passkeys are listed separately." />
       <div className="flex flex-col gap-4 p-6">
-        <FormError message={remove.error} />
         <Loaded query={identities} skeleton={<TableSkeleton rows={2} />}>
           {(list) =>
             list.length === 0 ? (
@@ -92,8 +104,7 @@ function SignInMethods({ oauth }: { oauth: OAuthProvider[] }) {
                       <Cell className="text-right">
                         <Button
                           variant="danger"
-                          pending={remove.removing(path)}
-                          onClick={() => remove.run(path, `Remove ${providerNames[identity.provider]} as a sign-in method?`)}
+                          onClick={() => remove.ask(path, "Remove sign-in method", `${providerNames[identity.provider]} no longer signs you in to this account.`)}
                         >
                           Remove
                         </Button>
@@ -115,6 +126,7 @@ function SignInMethods({ oauth }: { oauth: OAuthProvider[] }) {
           </div>
         )}
       </div>
+      {remove.dialog}
     </Card>
   );
 }
@@ -133,7 +145,6 @@ function Passkeys() {
     <Card>
       <CardHeader title="Passkeys" description="Sign in with Touch ID, Windows Hello, a phone or a security key." />
       <div className="flex flex-col gap-4 p-6">
-        <FormError message={remove.error} />
         <Loaded query={passkeys} skeleton={<TableSkeleton rows={1} />}>
           {(list) =>
             list.length === 0 ? (
@@ -148,7 +159,7 @@ function Passkeys() {
                       <Cell className="text-graphite-400">{timeAgo(passkey.createdAt)}</Cell>
                       <Cell className="text-graphite-400">{lastUsed(passkey.lastUsedAt)}</Cell>
                       <Cell className="text-right">
-                        <Button variant="danger" pending={remove.removing(path)} onClick={() => remove.run(path, `Remove the passkey ${passkey.name}?`)}>
+                        <Button variant="danger" onClick={() => remove.ask(path, "Remove passkey", `${passkey.name} no longer signs you in to this account.`)}>
                           Remove
                         </Button>
                       </Cell>
@@ -167,7 +178,7 @@ function Passkeys() {
           className="flex flex-col gap-2"
         >
           <div className="flex gap-2">
-            <Input name="name" required maxLength={64} aria-label="Passkey name" placeholder="MacBook Touch ID" className="max-w-sm flex-1" />
+            <Input name="name" required maxLength={64} aria-label="Passkey name" placeholder="MacBook Touch ID" className="min-w-0 max-w-sm flex-1" />
             <Button type="submit" variant="primary" pending={add.pending}>
               Add passkey
             </Button>
@@ -175,6 +186,7 @@ function Passkeys() {
           <FormError message={add.error} />
         </form>
       </div>
+      {remove.dialog}
     </Card>
   );
 }
@@ -186,7 +198,6 @@ function GitConnections({ github }: { github: boolean }) {
     <Card>
       <CardHeader title="Git connections" description="Used to list and import repositories. A git connection does not sign you in." />
       <div className="flex flex-col gap-4 p-6">
-        <FormError message={remove.error} />
         <Loaded query={connections} skeleton={<TableSkeleton rows={1} />}>
           {(list) =>
             list.length === 0 ? (
@@ -215,8 +226,7 @@ function GitConnections({ github }: { github: boolean }) {
                       <Cell className="text-right">
                         <Button
                           variant="danger"
-                          pending={remove.removing(path)}
-                          onClick={() => remove.run(path, `Disconnect ${providerNames[connection.provider]}? Reconnect it to import repositories again.`)}
+                          onClick={() => remove.ask(path, `Disconnect ${providerNames[connection.provider]}`, "Reconnect it to import repositories again.")}
                         >
                           Disconnect
                         </Button>
@@ -229,21 +239,17 @@ function GitConnections({ github }: { github: boolean }) {
           }
         </Loaded>
       </div>
+      {remove.dialog}
     </Card>
   );
 }
 
 function DeleteAccount({ login }: { login?: string }) {
   const [open, setOpen] = useState(false);
-  const [typed, setTyped] = useState("");
   const remove = useAction(async () => {
     await api("/me", { method: "DELETE" });
     window.location.replace("/login");
   });
-  const close = () => {
-    setOpen(false);
-    setTyped("");
-  };
   return (
     <Card>
       <CardHeader
@@ -255,29 +261,17 @@ function DeleteAccount({ login }: { login?: string }) {
           Delete account
         </Button>
       </div>
-      <Dialog open={open} title="Delete your account" onClose={close}>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            remove.run();
-          }}
-          className="flex flex-col gap-4"
-        >
-          <p className="text-sm text-graphite-200">
-            Organizations you own with other members have to be deleted first. Everything else goes with your account.
-          </p>
-          <Field label={`Type ${login} to confirm`}>
-            <Input value={typed} onChange={(e) => setTyped(e.target.value)} required autoComplete="off" autoFocus className="font-mono" />
-          </Field>
-          <FormError message={remove.error} />
-          <div className="flex justify-end gap-2">
-            <Button onClick={close}>Cancel</Button>
-            <Button type="submit" variant="danger" pending={remove.pending} disabled={typed !== login}>
-              Delete account
-            </Button>
-          </div>
-        </form>
-      </Dialog>
+      <ConfirmDialog
+        open={open}
+        title="Delete account"
+        typed={login}
+        pending={remove.pending}
+        error={remove.error}
+        onConfirm={() => remove.run()}
+        onClose={() => setOpen(false)}
+      >
+        Organizations you own with other members have to be deleted first. Everything else goes with your account.
+      </ConfirmDialog>
     </Card>
   );
 }

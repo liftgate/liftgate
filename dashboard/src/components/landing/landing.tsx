@@ -25,6 +25,7 @@ export const landingMetadata: Metadata = {
   title: { absolute: title },
   description,
   alternates: { canonical: "/" },
+  robots: { index: true, follow: true },
   openGraph: {
     type: "website",
     url: "/",

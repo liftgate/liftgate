@@ -10,7 +10,7 @@ import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CopyField } from "@/components/ui/copy-field";
-import { Dialog } from "@/components/ui/dialog";
+import { ConfirmDialog, Dialog } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Field, FormError, Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -229,22 +229,16 @@ export function Notifications({ org }: { org: string }) {
           />
         )}
       </Dialog>
-      <Dialog open={!!removing} title="Delete channel" onClose={() => setRemoving(undefined)}>
-        {removing && (
-          <div className="flex flex-col gap-4">
-            <p className="text-sm text-graphite-200">
-              <span className="font-medium text-white">{removing.name}</span> stops receiving notifications, including any still being retried.
-            </p>
-            <FormError message={remove.error} />
-            <div className="flex justify-end gap-2">
-              <Button onClick={() => setRemoving(undefined)}>Cancel</Button>
-              <Button variant="danger" pending={remove.pending} onClick={() => remove.run(removing)}>
-                Delete channel
-              </Button>
-            </div>
-          </div>
-        )}
-      </Dialog>
+      <ConfirmDialog
+        open={!!removing}
+        title="Delete channel"
+        pending={remove.pending}
+        error={remove.error}
+        onConfirm={() => removing && remove.run(removing)}
+        onClose={() => setRemoving(undefined)}
+      >
+        <span className="font-medium text-white">{removing?.name}</span> stops receiving notifications, including any still being retried.
+      </ConfirmDialog>
     </div>
   );
 }

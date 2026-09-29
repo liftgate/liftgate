@@ -45,6 +45,10 @@ spec:
               value: "3000"
             - name: LIFTGATE_LANDING
               value: {{ .Values.dashboard.landing | default false | quote }}
+            - name: LIFTGATE_DASHBOARD_URL
+              value: {{ include "liftgate.dashboardUrl" . | quote }}
+            - name: LIFTGATE_API_URL
+              value: http://{{ include "liftgate.fullname" . }}-control-plane:8080
           ports:
             - name: http
               containerPort: 3000

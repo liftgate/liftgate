@@ -113,7 +113,7 @@ export function Overview({ org, projectSlug, onboarding }: { org: string; projec
           className="flex flex-col gap-4"
         >
           <NameSlugFields />
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Kind">
               <Select name="kind" defaultValue="production">
                 <option value="production">production</option>

@@ -10,7 +10,7 @@ export function CopyField({ label, value, hint }: { label: string; value: string
     <div className="flex flex-col gap-2">
       <Field label={label} hint={hint}>
         <div className="flex gap-2">
-          <Input readOnly value={value} onFocus={(e) => e.currentTarget.select()} className="flex-1 font-mono" />
+          <Input readOnly value={value} onFocus={(e) => e.currentTarget.select()} className="min-w-0 flex-1 font-mono" />
           <Button onClick={() => copy.run(value)} aria-live="polite">
             {copy.pending && <Spinner />}
             {copy.copied ? "Copied" : "Copy"}

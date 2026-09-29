@@ -10,11 +10,12 @@ import { ServiceForm } from "@/components/service-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { CopyField } from "@/components/ui/copy-field";
-import { FormError } from "@/components/ui/input";
+import { ConfirmDialog } from "@/components/ui/dialog";
 
 export function SettingsTab({ service, projectHref, onChanged }: { service: Service; projectHref: string; onChanged: () => void }) {
   const router = useRouter();
   const [status, setStatus] = useState<string>();
+  const [deleting, setDeleting] = useState(false);
   const save = useAction(async (spec: ServiceSpec, andRedeploy: boolean) => {
     setStatus(undefined);
     await api(`/services/${service.id}`, { method: "PATCH", body: spec });
@@ -22,7 +23,6 @@ export function SettingsTab({ service, projectHref, onChanged }: { service: Serv
     onChanged();
   });
   const remove = useAction(async () => {
-    if (!window.confirm(`Delete ${service.name}? Its deployments, variables and domains are removed with it.`)) return;
     await api(`/services/${service.id}`, { method: "DELETE" });
     router.push(projectHref);
   });
@@ -49,17 +49,23 @@ export function SettingsTab({ service, projectHref, onChanged }: { service: Serv
           title={<span className="text-danger">Delete service</span>}
           description="Removes the service with its deployments, variables and domains. This cannot be undone."
           actions={
-            <Button variant="danger" pending={remove.pending} onClick={() => remove.run()}>
+            <Button variant="danger" onClick={() => setDeleting(true)}>
               Delete service
             </Button>
           }
         />
-        {remove.error && (
-          <div className="px-6 py-4">
-            <FormError message={remove.error} />
-          </div>
-        )}
       </Card>
+      <ConfirmDialog
+        open={deleting}
+        title="Delete service"
+        typed={service.slug}
+        pending={remove.pending}
+        error={remove.error}
+        onConfirm={() => remove.run()}
+        onClose={() => setDeleting(false)}
+      >
+        <span className="font-medium text-white">{service.name}</span> is removed with its deployments, variables and domains.
+      </ConfirmDialog>
     </div>
   );
 }

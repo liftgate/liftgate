@@ -26,11 +26,9 @@ export function SaveActions({ pending, status }: { pending: boolean; status?: st
   );
   return (
     <div className="flex flex-wrap items-center justify-end gap-2">
-      {status && (
-        <span role="status" className="text-sm text-graphite-400">
-          {status}
-        </span>
-      )}
+      <span role="status" className="text-sm text-graphite-400">
+        {status}
+      </span>
       {action("save", "Save")}
       {action("redeploy", "Save and redeploy", "primary")}
     </div>

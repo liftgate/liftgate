@@ -60,7 +60,7 @@ class ProjectTreeTest {
         val other = orgs.create("other", "Other", member.id)
         val shop = projects.create(acme.id, "shop", "Shop", "acme/shop", 42)
         val environments = listOf(projects.environments(shop.id).single(), projects.createEnvironment(shop.id, "staging", "Staging", EnvironmentKind.PREVIEW, "develop"))
-        val workers = environments.map { services.create(it.id, ServiceSpec("worker", "Worker", ServiceKind.WORKER)) }
+        val workers = environments.map { services.create(it.id, ServiceSpec("worker", "Worker", ServiceKind.WORKER, watchPaths = listOf("apps/worker/**", "packages/**"))) }
         coEvery { apiTokens.resolve("lg_acme") } returns (acme.id to member.id)
         coEvery { apiTokens.resolve("lg_other") } returns (other.id to member.id)
         application { liftgate(app) }
@@ -70,6 +70,7 @@ class ProjectTreeTest {
         val tree = json.decodeFromString(ProjectTree.serializer(), response.bodyAsText())
         assertEquals(shop to environments, tree.project to tree.environments)
         assertEquals(workers.toSet(), tree.services.toSet())
+        assertEquals(listOf("apps/worker/**", "packages/**"), tree.services.first().watchPaths)
 
         assertEquals(HttpStatusCode.OK, client.get("/api/v1/orgs/acme/projects/shop/tree") { bearerAuth("lg_acme") }.status)
         assertEquals(HttpStatusCode.Forbidden, client.get("/api/v1/orgs/acme/projects/shop/tree") { bearerAuth("lg_other") }.status)

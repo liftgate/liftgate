@@ -549,9 +549,9 @@ The `ha` profile gives each role its own ServiceAccount and Secret:
 
 | Role | Kubernetes access | Secret values |
 |---|---|---|
-| `api` | Role in the release namespace: leases, endpoints, endpoint slices; in each managed namespace, a RoleBinding to ClusterRole `<fullname>-log-reader` (pods and their logs) that the reconciler creates | master key, GitHub App key and webhook secret, OAuth client secrets, SMTP URL, registry signing key and pull password |
+| `api` | Role in the release namespace: leases, endpoints, endpoint slices; in each managed namespace, a RoleBinding to ClusterRole `<fullname>-log-reader` (pods and their logs) that the reconciler creates | master key, GitHub App key and webhook secret, OAuth client secrets, SMTP URL, registry signing key, pull password and janitor password |
 | `reconciler` | ClusterRole `<fullname>`, the release namespace Role, and `bind` on ClusterRole `<fullname>-log-reader` | master key |
-| `builder` | Role `<fullname>-builder` in `build.namespace` (jobs, secrets, pods and their logs), the release namespace Role | GitHub App key |
+| `builder` | Role `<fullname>-builder` in `build.namespace` (jobs, secrets, pods and their logs), the release namespace Role | master key, to open the service variables it hands to each build; GitHub App key; registry janitor password |
 | `meter` | ClusterRole `<fullname>-meter` (list pods), the release namespace Role | none |
 
 The `single` profile binds all of them to one ServiceAccount. Database credentials reach every
@@ -593,8 +593,11 @@ with token authentication that points at Liftgate:
   control plane stores only a hash of it and accepts it only while the build runs. The build job no
   longer mounts `registry-credentials`.
 - `<publicUrl>/api/v1/registry/token` answers the registry's token requests with a token valid
-  for 5 minutes that allows pull and push on the build's own repository,
-  `<org>/<project>-<service>`, and nothing else. Build jobs reach it over their internet egress.
+  for 5 minutes. It allows pull and push on the build's own repository,
+  `<org>/<project>/<environment>/<service>`, and on `<org>/<project>-<service>`, the name the
+  previous release used, so that a build running during the upgrade can finish. A preview build
+  may also pull the same service's production repository for its cache. Nothing else is
+  allowed. Build jobs reach it over their internet egress.
 - Nodes pull as `pull` with `registryPullPassword`, which reads every repository and writes
   none. Add it to `/etc/rancher/k3s/registries.yaml` on every node.
 - The builder prunes images as `janitor` with `registryJanitorPassword`, which may pull and

@@ -3,10 +3,10 @@ package dev.liftgate.build
 import dev.liftgate.db.sql
 import dev.liftgate.deploy.Build
 import dev.liftgate.k8s.MANAGED_LABEL
-import dev.liftgate.org.Organization
 import dev.liftgate.project.Project
+import dev.liftgate.service.EnvVar
 import dev.liftgate.service.Service
-import io.fabric8.kubernetes.api.model.EnvVar
+import dev.liftgate.service.ServiceScope
 import io.fabric8.kubernetes.api.model.EnvVarBuilder
 import io.fabric8.kubernetes.api.model.OwnerReferenceBuilder
 import io.fabric8.kubernetes.api.model.Quantity
@@ -20,6 +20,7 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
 import java.util.Base64
 import java.util.UUID
+import io.fabric8.kubernetes.api.model.EnvVar as KubeEnvVar
 
 const val BUILD_LABEL = "liftgate.dev/build"
 const val REGISTRY_SECRET = "registry-credentials"
@@ -41,6 +42,8 @@ data class BuildJobSpec(
     val registryInsecure: Boolean,
     val registryTokenAuth: Boolean = false,
     val tolerations: List<Toleration> = emptyList(),
+    val productionCacheRef: String? = null,
+    val variables: List<EnvVar> = emptyList(),
 )
 
 /**
@@ -55,14 +58,19 @@ object BuildJobs {
     const val DOCKER_CONFIG_KEY = ".dockerconfigjson"
     private const val WORKSPACE = "/workspace"
     private const val TOKEN_KEY = "token"
+    private const val VARIABLE_KEY = "env."
+    private const val VARIABLE_ENV = "LIFTGATE_ENV_"
     private const val EPHEMERAL_STORAGE = "20Gi"
 
     fun name(buildId: UUID) = "build-$buildId"
 
-    fun repository(org: Organization, project: Project, service: Service) = "${org.slug}/${project.slug}-${service.slug}"
+    fun repository(scope: ServiceScope) = with(scope) { "${org.slug}/${project.slug}/${environment.slug}/${service.slug}" }
 
-    fun imageRef(registry: String, org: Organization, project: Project, service: Service, sha: String) =
-        "$registry/${repository(org, project, service)}:${sha.replace('/', '-')}"
+    fun previousRepository(scope: ServiceScope) = with(scope) { "${org.slug}/${project.slug}-${service.slug}" }
+
+    fun imageRef(registry: String, scope: ServiceScope, sha: String) = "$registry/${repository(scope)}:${sha.replace('/', '-')}"
+
+    fun imageRef(job: Job): String = job.spec.template.spec.containers.single().env.single { it.name == "IMAGE" }.value
 
     fun job(spec: BuildJobSpec): Job {
         val labels = mapOf(MANAGED_LABEL to "true", BUILD_LABEL to spec.build.id.toString())
@@ -74,10 +82,10 @@ object BuildJobs {
             "CACHE" to spec.cacheRef,
             "DOCKER_CONFIG" to DOCKER_CONFIG,
             "LIFTGATE_REGISTRY_INSECURE" to spec.registryInsecure.toString(),
+            "PRODUCTION_CACHE" to spec.productionCacheRef.orEmpty(),
+            "LIFTGATE_BUILD_ENV_NAMES" to spec.variables.joinToString(" ") { it.name },
+            "LIFTGATE_BUILD_ARG_NAMES" to spec.variables.filterNot { it.secret }.joinToString(" ") { it.name },
         )
-        val token = EnvVarBuilder().withName("LIFTGATE_GIT_TOKEN")
-            .withNewValueFrom().withNewSecretKeyRef().withName(name(spec.build.id)).withKey(TOKEN_KEY).endSecretKeyRef().endValueFrom()
-            .build()
         val storage = mapOf("ephemeral-storage" to Quantity(EPHEMERAL_STORAGE))
         return JobBuilder()
             .withNewMetadata().withName(name(spec.build.id)).withNamespace(spec.namespace).withLabels<String, String>(labels).endMetadata()
@@ -101,16 +109,16 @@ object BuildJobs {
             .withImage(spec.buildImage)
             .withCommand("/usr/local/bin/clone.sh")
             .withEnv(
-                EnvVar("LIFTGATE_REPO_URL", "https://github.com/${spec.project.repoFullName}.git", null),
-                EnvVar("LIFTGATE_COMMIT", spec.build.commitSha, null),
-                token,
+                KubeEnvVar("LIFTGATE_REPO_URL", "https://github.com/${spec.project.repoFullName}.git", null),
+                KubeEnvVar("LIFTGATE_COMMIT", spec.build.commitSha, null),
+                secretEnv(spec, "LIFTGATE_GIT_TOKEN", TOKEN_KEY),
             )
             .addNewVolumeMount().withName("workspace").withMountPath(WORKSPACE).endVolumeMount()
             .endInitContainer()
             .addNewContainer()
             .withName("build")
             .withImage(spec.buildImage)
-            .withEnv(env.map { (name, value) -> EnvVar(name, value, null) })
+            .withEnv(env.map { (name, value) -> KubeEnvVar(name, value, null) } + spec.variables.map { secretEnv(spec, VARIABLE_ENV + it.name, VARIABLE_KEY + it.name) })
             .withNewResources()
             .withRequests<String, Quantity>(mapOf("cpu" to Quantity("500m"), "memory" to Quantity("1Gi")) + storage)
             .withLimits<String, Quantity>(mapOf("cpu" to Quantity("2"), "memory" to Quantity("4Gi")) + storage)
@@ -140,7 +148,14 @@ object BuildJobs {
         .withNamespace(spec.namespace)
         .withOwnerReferences(OwnerReferenceBuilder().withApiVersion("batch/v1").withKind("Job").withName(owner.metadata.name).withUid(owner.metadata.uid).build())
         .endMetadata()
-        .withStringData<String, String>(mapOf(TOKEN_KEY to spec.installationToken) + listOfNotNull(registryPassword?.let { DOCKER_CONFIG_KEY to dockerConfig(spec, it) }))
+        .withStringData<String, String>(
+            mapOf(TOKEN_KEY to spec.installationToken) + spec.variables.associate { VARIABLE_KEY + it.name to it.value.orEmpty() } +
+                listOfNotNull(registryPassword?.let { DOCKER_CONFIG_KEY to dockerConfig(spec, it) }),
+        )
+        .build()
+
+    private fun secretEnv(spec: BuildJobSpec, env: String, key: String) = EnvVarBuilder().withName(env)
+        .withNewValueFrom().withNewSecretKeyRef().withName(name(spec.build.id)).withKey(key).endSecretKeyRef().endValueFrom()
         .build()
 
     private fun dockerConfig(spec: BuildJobSpec, password: String) = buildJsonObject {

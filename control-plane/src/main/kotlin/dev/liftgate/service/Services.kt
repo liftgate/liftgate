@@ -13,6 +13,7 @@ import dev.liftgate.events.Subject
 import dev.liftgate.events.enqueue
 import dev.liftgate.org.Limits
 import dev.liftgate.org.toOrganization
+import dev.liftgate.project.EnvironmentKind
 import dev.liftgate.project.toEnvironment
 import dev.liftgate.project.toProject
 import kotlinx.serialization.json.buildJsonObject
@@ -45,6 +46,7 @@ fun ResultRow.toService(namespace: String? = getOrNull(Environments.namespace)) 
     this[ServicesTable.cronSchedule],
     this[ServicesTable.startCommand],
     this[ServicesTable.healthCheckPath],
+    this[ServicesTable.watchPaths],
 ).run { copy(internalHost = namespace?.takeIf { listens }?.let { "$slug.$it.svc.cluster.local" }) }
 
 fun orgServiceIds(orgId: UUID) = (ServicesTable innerJoin Environments innerJoin Projects).select(ServicesTable.id).where { Projects.orgId eq orgId }
@@ -86,6 +88,13 @@ class Services(private val db: Db, private val limits: Limits = Limits()) {
         (ServicesTable innerJoin Environments).selectAll().where { ServicesTable.environmentId eq environmentId }.orderBy(ServicesTable.slug).map { it.toService() }
     }
 
+    suspend fun production(scope: ServiceScope): ServiceScope? = if (scope.environment.kind == EnvironmentKind.PRODUCTION) null else db.tx {
+        (ServicesTable innerJoin Environments).selectAll()
+            .where { (Environments.projectId eq scope.project.id) and (Environments.kind eq EnvironmentKind.PRODUCTION.sql) and (ServicesTable.slug eq scope.service.slug) }
+            .orderBy(Environments.createdAt)
+            .firstOrNull()?.let { scope.copy(service = it.toService(), environment = it.toEnvironment()) }
+    }
+
     suspend fun update(id: UUID, spec: ServiceSpec): Service = db.tx {
         limits.resize(id, spec)
         ServicesTable.updateReturning(ServicesTable.columns, { ServicesTable.id eq id }) { it.set(spec) }.single().let { it.toService(namespace(it[ServicesTable.environmentId])) }
@@ -116,6 +125,7 @@ class Services(private val db: Db, private val limits: Limits = Limits()) {
         this[ServicesTable.cronSchedule] = spec.cronSchedule
         this[ServicesTable.startCommand] = spec.startCommand
         this[ServicesTable.healthCheckPath] = spec.healthCheckPath
+        this[ServicesTable.watchPaths] = spec.watchPaths
     }
 
     private fun namespace(environmentId: UUID) = Environments.select(Environments.namespace).where { Environments.id eq environmentId }.single()[Environments.namespace]

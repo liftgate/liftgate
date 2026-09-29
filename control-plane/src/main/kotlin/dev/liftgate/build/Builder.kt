@@ -43,10 +43,11 @@ class Builder(private val app: App, private val kube: KubernetesClient) {
         val github = app.github ?: return fail(buildId, "the GitHub App is not configured")
         val config = app.config
         val project = scope.project
-        val image = BuildJobs.imageRef(config.registry, scope.org, project, scope.service, build.commitSha)
-        val cache = BuildJobs.imageRef(config.registry, scope.org, project, scope.service, "cache")
+        val image = BuildJobs.imageRef(config.registry, scope, build.commitSha)
+        val cache = BuildJobs.imageRef(config.registry, scope, "cache")
         val jobs = kube.batch().v1().jobs().inNamespace(config.buildNamespace)
         val sample = Timer.start()
+        var pushed: String? = null
         val failure = try {
             val token = github.installationToken(project.installationId, project.repoFullName.substringAfter('/'))
             if (project.importedByLogin?.let { github.canPush(token, project.repoFullName, it) } == false) {
@@ -55,8 +56,11 @@ class Builder(private val app: App, private val kube: KubernetesClient) {
                 val spec = BuildJobSpec(
                     build, scope.service, project, token, image, cache, config.buildImage, config.buildNamespace,
                     config.buildNodeSelector, config.registryInsecure, config.registryTokenAuth, config.buildTolerations,
+                    app.services.production(scope)?.let { BuildJobs.imageRef(config.registry, it, "cache") },
+                    app.envVars.list(scope.service.id, reveal = true),
                 )
-                "the build job failed".takeUnless { run(jobs.resource(BuildJobs.job(spec)), spec) }
+                pushed = run(jobs.resource(BuildJobs.job(spec)), spec)
+                "the build job failed".takeIf { pushed == null }
             }
         } catch (e: Exception) {
             currentCoroutineContext().ensureActive()
@@ -64,7 +68,7 @@ class Builder(private val app: App, private val kube: KubernetesClient) {
             e.message ?: "the build could not be run"
         }
         if (failure == null) {
-            app.builds.markSucceeded(buildId, image)
+            app.builds.markSucceeded(buildId, checkNotNull(pushed))
             runCatching { jobs.withName(BuildJobs.name(buildId)).delete() }
         } else {
             app.builds.markFailed(buildId, failure)
@@ -81,7 +85,7 @@ class Builder(private val app: App, private val kube: KubernetesClient) {
         app.nats.logs.end(buildId, reason)
     }
 
-    private suspend fun run(job: ScalableResource<KubeJob>, spec: BuildJobSpec): Boolean = coroutineScope {
+    private suspend fun run(job: ScalableResource<KubeJob>, spec: BuildJobSpec): String? = coroutineScope {
         val buildId = spec.build.id
         val owner = runInterruptible(Dispatchers.IO) { job.get() ?: job.create() }
         if (runInterruptible(Dispatchers.IO) { kube.secrets().inNamespace(spec.namespace).withName(BuildJobs.name(buildId)).get() } == null) {
@@ -92,7 +96,7 @@ class Builder(private val app: App, private val kube: KubernetesClient) {
         val finished = runInterruptible(Dispatchers.IO) { job.waitUntilCondition({ it?.status?.run { (succeeded ?: 0) > 0 || (failed ?: 0) > 0 } == true }, WAIT_MINUTES, TimeUnit.MINUTES) }
         withTimeoutOrNull(logDrain) { logs.join() }
         logs.cancel()
-        (finished.status.succeeded ?: 0) > 0
+        BuildJobs.imageRef(owner).takeIf { (finished.status.succeeded ?: 0) > 0 }
     }
 
     private fun stream(buildId: UUID) = runCatching {

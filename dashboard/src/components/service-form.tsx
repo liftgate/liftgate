@@ -6,7 +6,7 @@ import { formValues } from "@/lib/util";
 import { NameSlugFields } from "./name-slug-fields";
 import { redeployRequested } from "./save-actions";
 import { Button } from "./ui/button";
-import { Field, FormError, Input } from "./ui/input";
+import { Field, FormError, Input, Textarea } from "./ui/input";
 import { Select } from "./ui/select";
 
 const kinds: ServiceKind[] = ["web", "worker", "cron", "static"];
@@ -26,6 +26,7 @@ const toSpec = (v: Record<string, string>): ServiceSpec => ({
   cronSchedule: v.cronSchedule || null,
   startCommand: v.startCommand || null,
   healthCheckPath: v.healthCheckPath || null,
+  watchPaths: v.watchPaths.split("\n").map((path) => path.trim()).filter(Boolean),
 });
 
 export function ServiceForm({
@@ -105,6 +106,15 @@ export function ServiceForm({
           <Input name="healthCheckPath" placeholder="/healthz" maxLength={256} defaultValue={initial?.healthCheckPath ?? ""} className="font-mono" />
         </Field>
       </div>
+      <Field label="Watch paths" hint="One glob per line. A push that changes no matching file skips this service; empty watches the root directory">
+        <Textarea
+          name="watchPaths"
+          rows={3}
+          placeholder={"apps/web/**\npackages/ui/**"}
+          defaultValue={initial?.watchPaths.join("\n") ?? ""}
+          className="font-mono"
+        />
+      </Field>
       <FormError message={error} />
       <div className="flex justify-end gap-2">
         {onCancel && <Button onClick={onCancel}>Cancel</Button>}

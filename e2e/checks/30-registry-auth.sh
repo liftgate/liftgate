@@ -260,10 +260,10 @@ kubectl -n $ns run probe --image=liftgate/build-image:e2e --image-pull-policy=Ne
 kubectl -n $ns wait pod/probe --for=condition=Ready --timeout=2m
 
 expect "anonymous registry access" "$(probe curl -s -o /dev/null -w '%{http_code}' "http://$registry/v2/")" 401
-mine=$(token "build-$own" "$own_password" e2e/hello-web:pull,push)
-expect "push to its own repository" "$(registry_status POST e2e/hello-web/blobs/uploads/ "$mine")" 202
-theirs=$(token "build-$own" "$own_password" e2e-rival/app-web:pull,push)
-expect "push to another org's repository" "$(registry_status POST e2e-rival/app-web/blobs/uploads/ "$theirs")" 401
+mine=$(token "build-$own" "$own_password" e2e/hello/production/web:pull,push)
+expect "push to its own repository" "$(registry_status POST e2e/hello/production/web/blobs/uploads/ "$mine")" 202
+theirs=$(token "build-$own" "$own_password" e2e-rival/app/production/web:pull,push)
+expect "push to another org's repository" "$(registry_status POST e2e-rival/app/production/web/blobs/uploads/ "$theirs")" 401
 
 cat > "$work/isolated" <<'EOF'
 FROM busybox:1.36
@@ -272,7 +272,7 @@ RUN echo "buildkitd-visible $(cat /proc/*/comm 2>/dev/null | grep -c -x buildkit
  && echo "docker-config $(ls /proc/*/root/home/user/.docker 2>/dev/null | wc -l)"
 EOF
 kubectl -n $ns create configmap isolated --from-file=Dockerfile="$work/isolated"
-build isolated "$rival" "$rival_password" e2e-rival/app-web
+build isolated "$rival" "$rival_password" e2e-rival/app/production/web
 expect "isolated build" "$(finished isolated)" Succeeded
 kubectl -n $ns logs pod/isolated -c build > "$work/isolated.log"
 grep -E ' (buildkitd-visible|git-token|docker-config) [0-9]+$' "$work/isolated.log"
@@ -280,22 +280,22 @@ expect "buildkitd seen from a build step" "$(sed -n 's/.* buildkitd-visible //p'
 expect "git token seen from a build step" "$(sed -n 's/.* git-token //p' "$work/isolated.log")" 0
 expect "docker config listed from a build step" "$(sed -n 's/.* docker-config //p' "$work/isolated.log")" 0
 
-pulled=$(token pull "$pull_password" e2e-rival/app-web:pull,push)
-expect "node pull of a tenant image" "$(registry_status GET e2e-rival/app-web/tags/list "$pulled")" 200
-expect "node push" "$(registry_status POST e2e-rival/app-web/blobs/uploads/ "$pulled")" 401
-pruning=$(token janitor "$janitor_password" e2e-rival/app-web:pull,push,delete)
-expect "janitor read of a tenant image" "$(registry_status GET e2e-rival/app-web/tags/list "$pruning")" 200
-expect "janitor push" "$(registry_status POST e2e-rival/app-web/blobs/uploads/ "$pruning")" 401
-theirs=$(token "build-$own" "$own_password" e2e-rival/app-web:pull)
-expect "read of another org's image" "$(registry_status GET e2e-rival/app-web/tags/list "$theirs")" 401
+pulled=$(token pull "$pull_password" e2e-rival/app/production/web:pull,push)
+expect "node pull of a tenant image" "$(registry_status GET e2e-rival/app/production/web/tags/list "$pulled")" 200
+expect "node push" "$(registry_status POST e2e-rival/app/production/web/blobs/uploads/ "$pulled")" 401
+pruning=$(token janitor "$janitor_password" e2e-rival/app/production/web:pull,push,delete)
+expect "janitor read of a tenant image" "$(registry_status GET e2e-rival/app/production/web/tags/list "$pruning")" 200
+expect "janitor push" "$(registry_status POST e2e-rival/app/production/web/blobs/uploads/ "$pruning")" 401
+theirs=$(token "build-$own" "$own_password" e2e-rival/app/production/web:pull)
+expect "read of another org's image" "$(registry_status GET e2e-rival/app/production/web/tags/list "$theirs")" 401
 
-printf 'FROM %s/e2e-rival/app-web:latest\n' "$registry" > "$work/cross"
+printf 'FROM %s/e2e-rival/app/production/web:latest\n' "$registry" > "$work/cross"
 kubectl -n $ns create configmap cross --from-file=Dockerfile="$work/cross"
-build cross "$own" "$own_password" e2e/hello-web
+build cross "$own" "$own_password" e2e/hello/production/web
 expect "build from another org's image" "$(finished cross)" Failed
 kubectl -n $ns logs pod/cross -c build | grep -i -E '401|403|insufficient_scope|unauthorized'
 
-expect "token for a running build" "$(token_status "build-$own" "$own_password" e2e/hello-web:pull)" 200
+expect "token for a running build" "$(token_status "build-$own" "$own_password" e2e/hello/production/web:pull)" 200
 kubectl -n liftgate-system exec liftgate-postgres-1 -c postgres -- psql --username postgres --dbname liftgate --set ON_ERROR_STOP=1 \
   --command "update builds set status = 'succeeded', finished_at = now() where id = '$own'"
-expect "token after the build finished" "$(token_status "build-$own" "$own_password" e2e/hello-web:pull)" 401
+expect "token after the build finished" "$(token_status "build-$own" "$own_password" e2e/hello/production/web:pull)" 401

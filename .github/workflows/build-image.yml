@@ -1,0 +1,26 @@
+name: build-image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - build-image/**
+      - .github/workflows/build-image.yml
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - run: docker build --quiet --tag liftgate/build-image:test build-image
+      - run: sh build-image/test/run.sh liftgate/build-image:test

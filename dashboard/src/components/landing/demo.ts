@@ -27,6 +27,7 @@ const service = (id: string, kind: ServiceKind, rootDir: string, cpuMillis: numb
   startCommand,
   healthCheckPath: null,
   internalHost: null,
+  watchPaths: [],
 });
 
 export const services: Service[] = [

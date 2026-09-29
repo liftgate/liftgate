@@ -2,10 +2,14 @@ package dev.liftgate.build
 
 import dev.liftgate.http.json
 import dev.liftgate.k8s.testBuild
+import dev.liftgate.k8s.testEnvironment
 import dev.liftgate.k8s.testOrg
 import dev.liftgate.k8s.testProject
 import dev.liftgate.k8s.testService
+import dev.liftgate.project.EnvironmentKind
 import dev.liftgate.service.BuildStrategy
+import dev.liftgate.service.EnvVar
+import dev.liftgate.service.ServiceScope
 import io.fabric8.kubernetes.api.model.Container
 import io.fabric8.kubernetes.api.model.Quantity
 import io.fabric8.kubernetes.api.model.TolerationBuilder
@@ -27,8 +31,9 @@ import kotlin.test.assertTrue
  */
 class BuildJobsTest {
     private val service = testService.copy(rootDir = "/apps/api", buildStrategy = BuildStrategy.DOCKERFILE, dockerfilePath = "docker/Dockerfile")
-    private val image = BuildJobs.imageRef("registry.test", testOrg, testProject, service, testBuild.commitSha)
-    private val cache = BuildJobs.imageRef("registry.test", testOrg, testProject, service, "cache")
+    private val scope = ServiceScope(service, testEnvironment, testProject, testOrg)
+    private val image = BuildJobs.imageRef("registry.test", scope, testBuild.commitSha)
+    private val cache = BuildJobs.imageRef("registry.test", scope, "cache")
     private val spec = BuildJobSpec(testBuild, service, testProject, "ghs_token", image, cache, "ghcr.io/liftgate/build-image:latest", "liftgate-build", emptyMap(), false)
     private val job = BuildJobs.job(spec)
     private val pod = job.spec.template.spec
@@ -37,10 +42,17 @@ class BuildJobsTest {
     private val owner = JobBuilder(job).editMetadata().withUid("job-uid").endMetadata().build()
 
     @Test
-    fun `image refs are registry, org, project-service and a tag without slashes`() {
-        assertEquals("registry.test/acme/shop-api:abc123", image)
-        assertEquals("registry.test/acme/shop-api:cache", cache)
-        assertEquals("registry.test/acme/shop-api:feature-login", BuildJobs.imageRef("registry.test", testOrg, testProject, service, "feature/login"))
+    fun `image refs are registry, org, project, environment, service and a tag without slashes`() {
+        assertEquals("registry.test/acme/shop/production/api:abc123", image)
+        assertEquals("registry.test/acme/shop/production/api:cache", cache)
+        assertEquals("registry.test/acme/shop/production/api:feature-login", BuildJobs.imageRef("registry.test", scope, "feature/login"))
+    }
+
+    @Test
+    fun `production and preview builds of one service and sha get different image refs and caches`() {
+        val preview = scope.copy(environment = testEnvironment.copy(slug = "preview", kind = EnvironmentKind.PREVIEW))
+        assertEquals("registry.test/acme/shop/preview/api:abc123", BuildJobs.imageRef("registry.test", preview, testBuild.commitSha))
+        assertEquals("registry.test/acme/shop/preview/api:cache", BuildJobs.imageRef("registry.test", preview, "cache"))
     }
 
     @Test
@@ -82,9 +94,39 @@ class BuildJobsTest {
                 "CACHE" to cache,
                 "DOCKER_CONFIG" to "/home/user/.docker",
                 "LIFTGATE_REGISTRY_INSECURE" to "false",
+                "PRODUCTION_CACHE" to "",
+                "LIFTGATE_BUILD_ENV_NAMES" to "",
+                "LIFTGATE_BUILD_ARG_NAMES" to "",
             ),
             container.env.associate { it.name to it.value },
         )
+        val preview = BuildJobs.job(spec.copy(productionCacheRef = cache)).spec.template.spec.containers.single()
+        assertEquals(cache, preview.env.single { it.name == "PRODUCTION_CACHE" }.value)
+    }
+
+    @Test
+    fun `build variables reach the build container as references to the job's secret and never as plaintext in the job`() {
+        val variables = listOf(EnvVar("NEXT_PUBLIC_GREETING", "Hello from build time"), EnvVar("STRIPE_KEY", "sk_live_build_secret", secret = true))
+        val configured = spec.copy(variables = variables)
+        val job = BuildJobs.job(configured)
+        val build = job.spec.template.spec.containers.single()
+        val secret = BuildJobs.tokenSecret(configured, owner)
+        val references = build.env.filter { it.valueFrom != null }.map { it.name to it.valueFrom.secretKeyRef.run { name to key } }
+        assertEquals(
+            listOf(
+                "LIFTGATE_ENV_NEXT_PUBLIC_GREETING" to (secret.metadata.name to "env.NEXT_PUBLIC_GREETING"),
+                "LIFTGATE_ENV_STRIPE_KEY" to (secret.metadata.name to "env.STRIPE_KEY"),
+            ),
+            references,
+        )
+        assertEquals("NEXT_PUBLIC_GREETING STRIPE_KEY", build.env.single { it.name == "LIFTGATE_BUILD_ENV_NAMES" }.value)
+        assertEquals("NEXT_PUBLIC_GREETING", build.env.single { it.name == "LIFTGATE_BUILD_ARG_NAMES" }.value)
+        assertEquals(
+            mapOf("token" to "ghs_token", "env.NEXT_PUBLIC_GREETING" to "Hello from build time", "env.STRIPE_KEY" to "sk_live_build_secret"),
+            secret.stringData,
+        )
+        val serialized = Serialization.asJson(job)
+        listOf("Hello from build time", "sk_live_build_secret", "ghs_token").forEach { assertFalse(it in serialized, it) }
     }
 
     @Test

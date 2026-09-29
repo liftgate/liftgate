@@ -27,6 +27,8 @@ private const val MAX_REPLICAS = 10
 private const val MAX_CPU_MILLIS = 4000
 private const val MAX_MEMORY_MB = 8192
 private const val MAX_HEALTH_CHECK_PATH = 256
+private const val MAX_WATCH_PATHS = 20
+private const val MAX_WATCH_PATH_LENGTH = 100
 private val envVarName = Regex("[A-Za-z_][A-Za-z0-9_]*")
 private val repoPath = Regex("[A-Za-z0-9._/-]*")
 
@@ -91,6 +93,7 @@ private fun ServiceSpec.validated(): ServiceSpec {
     if (kind == ServiceKind.CRON && cronSchedule.isNullOrBlank()) invalid("cron services need a cronSchedule")
     if (healthCheckPath != null && (!healthCheckPath.startsWith('/') || healthCheckPath.length > MAX_HEALTH_CHECK_PATH)) invalid("the health check path must start with / and be at most $MAX_HEALTH_CHECK_PATH characters")
     if (healthCheckPath != null && port == null && !kind.servesHttp) invalid("a health check path needs a port to probe")
+    if (watchPaths.size > MAX_WATCH_PATHS || watchPaths.any { it.isBlank() || it.length > MAX_WATCH_PATH_LENGTH }) invalid("watchPaths must be at most $MAX_WATCH_PATHS non-blank globs of up to $MAX_WATCH_PATH_LENGTH characters")
     return this
 }
 

@@ -53,7 +53,7 @@ probe() {
 }
 
 token() {
-  probe curl -sS --fail -u "$1:$2" "$realm?service=$registry&scope=repository:$3" | jq -r .token
+  probe curl -sS --fail --retry 10 --retry-delay 1 -u "$1:$2" "$realm?service=$registry&scope=repository:$3" | jq -r .token
 }
 
 status() {
@@ -169,8 +169,10 @@ expect "app through the gateway" "$(curl --fail --silent --show-error --insecure
   --resolve registry-hello-e2e.liftgate.app:443:$node https://registry-hello-e2e.liftgate.app)" in-cluster-registry
 
 layer=$(manifest "$doomed" | jq -r '.layers[-1].digest')
+old=$(kubectl -n $system get pods -l app.kubernetes.io/component=control-plane -o name)
 kubectl -n $system rollout restart deployment/liftgate-control-plane
 kubectl -n $system rollout status deployment/liftgate-control-plane --timeout=10m
+kubectl -n $system wait --for=delete $old --timeout=5m
 for attempt in $(seq 60); do
   kubectl -n $system logs deployment/liftgate-control-plane -c control-plane | grep 'registry janitor deleted' && break
   sleep 2

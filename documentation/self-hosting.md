@@ -601,6 +601,9 @@ From 0.2.0-alpha.3 to 0.2.0-alpha.4:
   request to 1Gi.
 - The dashboard and the API send security headers. A proxy in front of them must pass them through, as
   [A proxy in front of Liftgate](#a-proxy-in-front-of-liftgate) says.
+
+From 0.2.0-alpha.4 to the release after it:
+
 - The chart can run the registry inside the cluster, which this guide now uses. Nothing changes until
   `inClusterRegistry.enabled` is set; [Moving to the in-cluster registry](#moving-to-the-in-cluster-registry)
   switches an installation with a registry on another machine.
@@ -639,6 +642,11 @@ like this:
    remove `registry`, `registryInsecure`, `registryAuth`, `build.registryCredentials` and the registry's
    entry in `build.allowedEgressCidrs`. Upgrade as in step 3 of [Upgrading](#upgrading), then wait for
    `kubectl -n liftgate-system rollout status statefulset/liftgate-registry`.
+4. If the old registry uses token auth, set `auth.token.service` in its `config.yml` to
+   `10.43.0.50:5000` as soon as the upgrade has finished, and start it again as in step 5 of
+   [`infra/registry/README.md`](../infra/registry/README.md#setup). The control plane now signs every
+   registry token for the in-cluster registry, whatever `service` a client asks for, and the old
+   registry accepts only tokens for its own `service`, so until then it refuses every pull.
 
 Builds after the upgrade push to the in-cluster registry. Images of earlier builds stay in the old
 registry: apps keep running from them, a rollback to one of those builds pulls it from there, and the

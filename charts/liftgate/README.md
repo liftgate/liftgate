@@ -734,7 +734,9 @@ their own, such as a single machine. It is off by default.
 
 Turning it on for an existing install sends new builds to it. Images of earlier builds stay in the old
 registry, where nodes keep pulling them for running apps and rollbacks, and the builder no longer prunes
-them; build each service again to move it.
+them; build each service again to move it. The control plane then signs every registry token for the
+in-cluster registry, so an old registry with token auth refuses those pulls until its
+`auth.token.service` is changed to `<clusterIP>:5000`.
 [Moving to the in-cluster registry](../../documentation/self-hosting.md#moving-to-the-in-cluster-registry)
 has the steps.
 

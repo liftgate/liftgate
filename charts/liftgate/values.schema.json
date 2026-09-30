@@ -52,7 +52,7 @@
     "controlPlane": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["image", "tag", "replicas", "logLevel", "trustedProxies", "javaOpts", "resources", "clientIpHeader", "upstreamOverwritesClientIpHeader", "trustedProxyCidrs", "databasePoolSize"],
+      "required": ["image", "tag", "replicas", "logLevel", "trustedProxies", "javaOpts", "resources", "clientIpHeader", "upstreamOverwritesClientIpHeader", "trustedProxyCidrs", "databasePoolSize", "logFormat", "roleResources"],
       "properties": {
         "image": { "type": "string", "minLength": 1 },
         "tag": { "type": "string" },
@@ -74,7 +74,18 @@
         "clientIpHeader": { "type": "string" },
         "upstreamOverwritesClientIpHeader": { "type": "boolean" },
         "trustedProxyCidrs": { "type": "array", "items": { "type": "string" } },
-        "databasePoolSize": { "type": "integer", "minimum": 0 }
+        "databasePoolSize": { "type": "integer", "minimum": 0 },
+        "logFormat": { "type": "string", "enum": ["text", "json"] },
+        "roleResources": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "api": { "type": "object" },
+            "reconciler": { "type": "object" },
+            "builder": { "type": "object" },
+            "meter": { "type": "object" }
+          }
+        }
       }
     },
     "dashboard": {

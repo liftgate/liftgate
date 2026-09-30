@@ -25,7 +25,7 @@ envFrom:
   - secretRef:
       name: {{ include "liftgate.roleName" (list $root (index . 1)) }}
 resources:
-  {{- toYaml $root.Values.controlPlane.resources | nindent 2 }}
+  {{- toYaml (index $root.Values.controlPlane.roleResources (index . 1) | default $root.Values.controlPlane.resources) | nindent 2 }}
 securityContext:
   allowPrivilegeEscalation: false
   capabilities:

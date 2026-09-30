@@ -5,6 +5,7 @@ import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import dev.liftgate.TestDatabase
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.slf4j.LoggerFactory
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -25,5 +26,11 @@ class DbTest {
             flyway.detachAppender(events)
         }
         assertEquals(emptyList(), events.list.filter { it.level.isGreaterOrEqual(Level.WARN) }.map { it.formattedMessage })
+    }
+
+    @Test
+    fun `the connection pool reports to the metrics registry`() {
+        val metrics = SimpleMeterRegistry()
+        Db(TestDatabase.config, metrics).use { assertEquals(2.0, metrics.get("hikaricp.connections.min").gauge().value()) }
     }
 }

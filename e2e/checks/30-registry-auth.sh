@@ -28,141 +28,18 @@ expect() {
   [ "$2" = "$3" ] || { echo "$1: expected $3, got $2" >&2; exit 1; }
 }
 
-probe() {
-  kubectl -n $ns exec probe -- "$@"
-}
-
 token_status() {
   probe curl -s -o /dev/null -w '%{http_code}' -u "$1:$2" "$realm?service=$registry&scope=repository:$3"
 }
 
-token() {
-  probe curl -sS --fail -u "$1:$2" "$realm?service=$registry&scope=repository:$3" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p'
-}
+. e2e/registry.sh
 
-registry_status() {
-  probe curl -s -o /dev/null -w '%{http_code}' -X "$1" -H "Authorization: Bearer $3" "http://$registry/v2/$2"
-}
-
-finished() {
-  for attempt in $(seq 120); do
-    phase=$(kubectl -n $ns get pod "$1" -o jsonpath='{.status.phase}')
-    case "$phase" in Succeeded | Failed) break ;; esac
-    sleep 5
-  done
-  echo "$phase"
-}
-
-build() {
-  auth=$(printf 'build-%s:%s' "$2" "$3" | base64 -w0)
-  kubectl -n $ns create secret generic "build-$2" --from-literal=token=ghs_e2e_git_token \
-    --from-literal=.dockerconfigjson="{\"auths\":{\"$registry\":{\"auth\":\"$auth\"}}}"
-  kubectl apply -f - <<EOF
-apiVersion: v1
-kind: Pod
-metadata:
-  name: $1
-  namespace: $ns
-spec:
-  restartPolicy: Never
-  automountServiceAccountToken: false
-  securityContext:
-    runAsUser: 1000
-    runAsGroup: 1000
-    fsGroup: 1000
-  initContainers:
-    - name: repository
-      image: liftgate/build-image:e2e
-      imagePullPolicy: Never
-      command:
-        - sh
-        - -c
-        - git init -q /repository/app && cp /fixture/Dockerfile /repository/app && git -C /repository/app add Dockerfile && git -C /repository/app -c user.name=e2e -c user.email=e2e@liftgate.test commit -qm fixture
-      volumeMounts:
-        - name: fixture
-          mountPath: /fixture
-        - name: repository
-          mountPath: /repository
-    - name: clone
-      image: liftgate/build-image:e2e
-      imagePullPolicy: Never
-      command: [/usr/local/bin/clone.sh]
-      env:
-        - name: LIFTGATE_REPO_URL
-          value: file:///repository/app
-        - name: LIFTGATE_COMMIT
-          value: HEAD
-        - name: LIFTGATE_GIT_TOKEN
-          valueFrom:
-            secretKeyRef:
-              name: build-$2
-              key: token
-      volumeMounts:
-        - name: repository
-          mountPath: /repository
-        - name: workspace
-          mountPath: /workspace
-  containers:
-    - name: build
-      image: liftgate/build-image:e2e
-      imagePullPolicy: Never
-      env:
-        - name: LIFTGATE_ROOT_DIR
-          value: /
-        - name: LIFTGATE_BUILD_STRATEGY
-          value: dockerfile
-        - name: LIFTGATE_DOCKERFILE_PATH
-          value: Dockerfile
-        - name: IMAGE
-          value: $registry/$4:latest
-        - name: CACHE
-          value: $registry/$4:cache
-        - name: DOCKER_CONFIG
-          value: /home/user/.docker
-        - name: LIFTGATE_REGISTRY_INSECURE
-          value: "true"
-      securityContext:
-        seccompProfile:
-          type: Unconfined
-        appArmorProfile:
-          type: Unconfined
-      volumeMounts:
-        - name: docker-config
-          mountPath: /home/user/.docker
-          readOnly: true
-        - name: workspace
-          mountPath: /workspace
-        - name: buildkit
-          mountPath: /home/user/.config/buildkit
-  volumes:
-    - name: fixture
-      configMap:
-        name: $1
-    - name: repository
-      emptyDir: {}
-    - name: workspace
-      emptyDir: {}
-    - name: docker-config
-      secret:
-        secretName: build-$2
-        items:
-          - key: .dockerconfigjson
-            path: config.json
-    - name: buildkit
-      configMap:
-        name: buildkit
-EOF
-}
-
-openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=liftgate-registry-token \
-  -keyout "$work/token.key" -out "$work/token.crt" 2> /dev/null
+signing_key
 docker buildx build --load --quiet --tag liftgate/build-image:e2e build-image
 kind load docker-image --name liftgate liftgate/build-image:e2e
 
 kubectl create namespace $ns
 kubectl -n $ns create configmap registry --from-file=config.yml=infra/registry/config.yml --from-file=token.crt="$work/token.crt"
-printf '[registry."%s"]\n  http = true\n' "$registry" > "$work/buildkitd.toml"
-kubectl -n $ns create configmap buildkit --from-file=buildkitd.toml="$work/buildkitd.toml"
 kubectl apply -f - <<EOF
 apiVersion: apps/v1
 kind: Deployment
@@ -215,25 +92,7 @@ helm upgrade liftgate charts/liftgate --namespace liftgate-system --reuse-values
 kubectl -n liftgate-system rollout status deployment/liftgate-control-plane --timeout=10m
 kubectl -n $ns rollout status deployment/registry --timeout=5m
 
-for build in $own $rival; do
-  kubectl apply -f - <<EOF
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: build-$build
-  namespace: liftgate-build
-  labels:
-    liftgate.dev/build: $build
-spec:
-  suspend: true
-  template:
-    spec:
-      restartPolicy: Never
-      containers:
-        - name: build
-          image: busybox:1.36
-EOF
-done
+for build in $own $rival; do job $build; done
 
 kubectl -n liftgate-system exec -i liftgate-postgres-1 -c postgres -- psql --username postgres --dbname liftgate --set ON_ERROR_STOP=1 \
   --set own="$own_password" --set rival="$rival_password" <<'EOF'

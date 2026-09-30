@@ -5,7 +5,7 @@ kubectl -n env-e2e-b wait deployment/web --for=create --timeout=5m
 kubectl -n env-e2e-b rollout status deployment/web --timeout=5m
 kubectl -n liftgate-system wait clusters.postgresql.cnpg.io/liftgate-postgres --for=condition=Ready --timeout=5m
 
-python3 -m http.server 5050 --bind 0.0.0.0 > /dev/null 2>&1 &
+python3 -m http.server 5000 --bind 0.0.0.0 > /dev/null 2>&1 &
 trap "kill $!; kubectl -n default delete pod isolation-probe --ignore-not-found --wait=false" EXIT
 kubectl -n default run isolation-probe --image busybox:1.36 --restart Never --command -- sleep 900
 kubectl -n default wait pod/isolation-probe --for=condition=Ready --timeout=2m
@@ -29,11 +29,11 @@ expect() {
 
 expect open env-e2e deploy/web "$tenant_a_service" 80
 for target in "$tenant_b 8080" "$tenant_b_service 80" "$control_plane 8080" "$control_plane 5701" "$postgres 5432" \
-  "$nats 4222" "$nats 8222" "169.254.169.254 80" "$host 5050" "$node 6443" "$node 10250"; do
+  "$nats 4222" "$nats 8222" "169.254.169.254 80" "$host 5000" "$node 6443" "$node 10250"; do
   expect closed env-e2e deploy/web $target
 done
 
-for target in "$host 5050" "$node 10250" "$control_plane 8080" "$dashboard 3000"; do
+for target in "$host 5000" "$node 10250" "$control_plane 8080" "$dashboard 3000"; do
   expect open default isolation-probe $target
 done
 for target in "$tenant_b 8080" "$control_plane 5701" "$postgres 5432" "$nats 4222" "$nats 8222"; do

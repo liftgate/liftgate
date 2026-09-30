@@ -81,20 +81,20 @@ that changes the containerd major version.
 
 A dedicated build node keeps untrusted build steps off the machine that holds Postgres, the
 control plane and `secrets.masterKey`. These steps join a second Firecracker microVM to a k3s
-server that already runs in one. The addresses are examples: the server VM is `10.200.0.2`
-behind tap `lgfc0` (host side `10.200.0.1`), and the registry listens on the host at
-`10.200.0.1:5050`.
+server that already runs in one. The addresses are examples: the server VM is `172.16.0.2`
+behind tap `fc0` (host side `172.16.0.1`), and the registry listens on the host at
+`172.16.0.1:5000`.
 
 1. Start the VM under the jailer with its own `--id`, rootfs, MAC and tap device, and give the
    tap its own /30 on the host:
 
    ```sh
-   ip tuntap add dev lgfc1 mode tap user firecracker group firecracker
-   ip addr replace 10.200.0.5/30 dev lgfc1
-   ip link set lgfc1 up
+   ip tuntap add dev fc1 mode tap user firecracker group firecracker
+   ip addr replace 172.16.0.5/30 dev fc1
+   ip link set fc1 up
    ```
 
-   Inside the VM, use `10.200.0.6/30` with gateway `10.200.0.5`.
+   Inside the VM, use `172.16.0.6/30` with gateway `172.16.0.5`.
 2. On the host firewall, let the VMs reach each other only on the k3s ports: 6443/tcp from the
    new node to the server, and 10250/tcp, 8472/udp (Cilium VXLAN), 4240/tcp and ICMP echo
    (Cilium health) both ways. Give the new VM the same registry port and NATed internet egress
@@ -106,11 +106,11 @@ behind tap `lgfc0` (host side `10.200.0.1`), and the registry listens on the hos
    ```sh
    sudo tee /etc/rancher/k3s/registries.yaml > /dev/null <<'EOF'
    mirrors:
-     "10.200.0.1:5050":
+     "172.16.0.1:5000":
        endpoint:
-         - "http://10.200.0.1:5050"
+         - "http://172.16.0.1:5000"
    EOF
-   curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.34.8+k3s1 K3S_URL=https://10.200.0.2:6443 K3S_TOKEN=NODE_TOKEN \
+   curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.34.8+k3s1 K3S_URL=https://172.16.0.2:6443 K3S_TOKEN=NODE_TOKEN \
      INSTALL_K3S_EXEC='agent --node-label=liftgate.dev/pool=build --node-taint=liftgate.dev/pool=build:NoSchedule' sh -
    ```
 4. Install gVisor on it as described above, restarting `k3s-agent`.

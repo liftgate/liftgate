@@ -23,7 +23,12 @@
     "build",
     "prometheusUrl"
   ],
-  "if": { "required": ["registryAuth"], "properties": { "registryAuth": { "const": "token" } } },
+  "if": {
+    "anyOf": [
+      { "required": ["registryAuth"], "properties": { "registryAuth": { "const": "token" } } },
+      { "required": ["inClusterRegistry"], "properties": { "inClusterRegistry": { "required": ["enabled"], "properties": { "enabled": { "const": true } } } } }
+    ]
+  },
   "then": {
     "required": ["registryTokenKey", "registryTokenCertificate", "registryPullPassword", "registryJanitorPassword"],
     "properties": {
@@ -312,7 +317,19 @@
     },
     "plans": { "type": "object", "minProperties": 1, "propertyNames": { "not": { "const": "default" } }, "additionalProperties": { "$ref": "#/definitions/plan" } },
     "defaultPlan": { "type": "string", "minLength": 1 },
-    "deniedEgressCidrs": { "type": "array", "items": { "type": "string", "pattern": "^((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\\.){3}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])/([1-9]|[12][0-9]|3[0-2])$" } }
+    "deniedEgressCidrs": { "type": "array", "items": { "type": "string", "pattern": "^((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\\.){3}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])/([1-9]|[12][0-9]|3[0-2])$" } },
+    "inClusterRegistry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "clusterIP", "storage"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "clusterIP": { "type": "string", "pattern": "^(((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\\.){3}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9]))?$" },
+        "storage": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?(Ki|Mi|Gi|Ti|k|M|G|T)?$" }
+      },
+      "if": { "properties": { "enabled": { "const": true } } },
+      "then": { "properties": { "clusterIP": { "minLength": 1 } } }
+    }
   },
   "definitions": {
     "nodeSelector": { "type": "object", "additionalProperties": { "type": "string" } },

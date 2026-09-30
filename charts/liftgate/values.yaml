@@ -191,3 +191,8 @@ plans:
 defaultPlan: unlimited
 
 deniedEgressCidrs: []
+
+inClusterRegistry:
+  enabled: false
+  clusterIP: ""
+  storage: 20Gi

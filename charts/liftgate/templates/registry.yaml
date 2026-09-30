@@ -1,0 +1,299 @@
+{{- if .Values.inClusterRegistry.enabled }}
+{{- $fullname := include "liftgate.fullname" . }}
+{{- $address := .Values.inClusterRegistry.clusterIP }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $fullname }}-registry
+  labels:
+    {{- include "liftgate.labels" . | nindent 4 }}
+data:
+  nginx.conf: |
+    worker_processes 1;
+    pid /tmp/nginx.pid;
+    events {}
+    http {
+      server {
+        listen 5001;
+        location = /api/v1/registry/token {
+          proxy_pass http://{{ $fullname }}-control-plane:8080;
+        }
+        location / {
+          return 404;
+        }
+      }
+    }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-registry
+  labels:
+    {{- include "liftgate.labels" . | nindent 4 }}
+    app.kubernetes.io/component: registry
+spec:
+  type: ClusterIP
+  clusterIP: {{ $address }}
+  selector:
+    {{- include "liftgate.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: registry
+  ports:
+    - name: registry
+      port: 5000
+      targetPort: registry
+    - name: token
+      port: 5001
+      targetPort: token
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $fullname }}-registry
+  labels:
+    {{- include "liftgate.labels" . | nindent 4 }}
+    app.kubernetes.io/component: registry
+spec:
+  serviceName: {{ $fullname }}-registry
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "liftgate.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: registry
+  template:
+    metadata:
+      labels:
+        {{- include "liftgate.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: registry
+      annotations:
+        checksum/certificate: {{ .Values.registryTokenCertificate | sha256sum }}
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: registry
+          image: registry:2.8.3@sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373
+          command:
+            - sh
+            - -c
+            - |
+              config=/etc/docker/registry/config.yml
+              REGISTRY_STORAGE_MAINTENANCE_READONLY='{"enabled":true}' registry serve $config &
+              test -d /var/lib/registry/docker && registry garbage-collect --delete-untagged $config
+              kill $!
+              wait
+              exec registry serve $config
+          env:
+            - name: REGISTRY_STORAGE_DELETE_ENABLED
+              value: "true"
+            - name: REGISTRY_AUTH
+              value: token
+            - name: REGISTRY_AUTH_TOKEN_REALM
+              value: http://{{ $address }}:5001/api/v1/registry/token
+            - name: REGISTRY_AUTH_TOKEN_SERVICE
+              value: {{ printf "%s:5000" $address | quote }}
+            - name: REGISTRY_AUTH_TOKEN_ISSUER
+              value: liftgate
+            - name: REGISTRY_AUTH_TOKEN_ROOTCERTBUNDLE
+              value: /etc/liftgate/token.crt
+          ports:
+            - name: registry
+              containerPort: 5000
+          readinessProbe:
+            tcpSocket:
+              port: registry
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/registry
+            - name: certificate
+              mountPath: /etc/liftgate
+              readOnly: true
+        - name: token
+          image: nginxinc/nginx-unprivileged:1.30.5-alpine@sha256:ed04ec1ff34502c339ee5c3ae3f855442398edc1d05591e2b98981dcbbd20b1e
+          command: [nginx, -c, /etc/liftgate/nginx.conf, -g, "daemon off;"]
+          ports:
+            - name: token
+              containerPort: 5001
+          readinessProbe:
+            tcpSocket:
+              port: token
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: token
+              mountPath: /etc/liftgate
+              readOnly: true
+      volumes:
+        - name: certificate
+          configMap:
+            name: {{ $fullname }}
+            items:
+              - key: LIFTGATE_REGISTRY_TOKEN_CERTIFICATE
+                path: token.crt
+        - name: token
+          configMap:
+            name: {{ $fullname }}-registry
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: {{ .Values.inClusterRegistry.storage }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fullname }}-registry
+  labels:
+    {{- include "liftgate.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "liftgate.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: registry
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.build.namespace }}
+      ports:
+        - protocol: TCP
+          port: 5000
+        - protocol: TCP
+          port: 5001
+{{- if .Capabilities.APIVersions.Has "cilium.io/v2/CiliumNetworkPolicy" }}
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: {{ $fullname }}-registry-nodes
+  labels:
+    {{- include "liftgate.labels" . | nindent 4 }}
+spec:
+  endpointSelector:
+    matchLabels:
+      {{- include "liftgate.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: registry
+  ingress:
+    - fromEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "5000"
+              protocol: TCP
+            - port: "5001"
+              protocol: TCP
+{{- end }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $fullname }}-registry-gc
+  labels:
+    {{- include "liftgate.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $fullname }}-registry-gc
+  labels:
+    {{- include "liftgate.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [apps]
+    resources: [statefulsets]
+    resourceNames: [{{ $fullname }}-registry]
+    verbs: [get, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $fullname }}-registry-gc
+  labels:
+    {{- include "liftgate.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $fullname }}-registry-gc
+subjects:
+  - kind: ServiceAccount
+    name: {{ $fullname }}-registry-gc
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ $fullname }}-registry-gc
+  labels:
+    {{- include "liftgate.labels" . | nindent 4 }}
+spec:
+  schedule: "30 4 * * 0"
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: {{ $fullname }}-registry-gc
+          restartPolicy: OnFailure
+          {{- with .Values.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: restart
+              image: registry.k8s.io/kubectl:v1.34.8@sha256:186cd2d31d25fb766566eb5049f7993bd3a81f265b1e99a1fd6199c4c69e26dc
+              args: [rollout, restart, statefulset/{{ $fullname }}-registry]
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  memory: 128Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+{{- end }}

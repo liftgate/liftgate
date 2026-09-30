@@ -10,13 +10,13 @@ storage:
   delete:
     enabled: true
 http:
-  addr: 10.200.0.1:5050
+  addr: 192.168.100.3:5000
   headers:
     X-Content-Type-Options: [nosniff]
 auth:
   token:
-    realm: https://liftgate.dev/api/v1/registry/token
-    service: 10.200.0.1:5050
+    realm: https://liftgate.example.com/api/v1/registry/token
+    service: 192.168.100.3:5000
     issuer: liftgate
     rootcertbundle: /etc/docker/registry/token.crt
 health:

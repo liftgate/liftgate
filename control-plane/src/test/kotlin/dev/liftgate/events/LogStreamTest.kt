@@ -5,6 +5,7 @@ import io.nats.client.api.StorageType
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -75,6 +76,20 @@ class LogStreamTest {
         val added = threads.threadCount - before
         viewers.forEach { it.cancel() }
         assertTrue(added < 10, "500 viewers added $added threads")
+    }
+
+    @Test
+    fun `a viewer that stops reading holds back delivery and still gets every line in order once it reads again`() = runBlocking {
+        val lines = List(20_000) { "line $it" }
+        lines.chunked(1_000).forEach { chunk -> chunk.map { logs.publish(build, it) }.forEach { it.get() } }
+        logs.end(build, null).get()
+        val reading = CompletableDeferred<Unit>()
+        val received = async { logs.follow(build) { true }.onEach { reading.await() }.toList() }
+        delay(2.seconds)
+        val delivered = TestNats.streams.getConsumers("LIFTGATE_LOGS").sumOf { it.delivered.consumerSequence }
+        reading.complete(Unit)
+        assertTrue(delivered < 2_000, "a stalled viewer was sent $delivered lines")
+        assertEquals(lines + "Build succeeded", withTimeout(30.seconds) { received.await() })
     }
 
     @Test

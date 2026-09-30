@@ -1,5 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, servicePath, settled, test, type Api } from "./fixtures";
+import { asOperator, expect, servicePath, settled, test, type Api } from "./fixtures";
 
 const service = "web · production · shop · Liftgate";
 
@@ -8,6 +8,7 @@ const routes: { path: string; title: string; parent?: string; setup?: (api: Api)
   { path: "/login", title: "Sign in · Liftgate" },
   { path: "/login/sso", title: "SAML single sign-on · Liftgate" },
   { path: "/dashboard", title: "Dashboard · Liftgate", setup: (api) => api.on("GET /orgs", []) },
+  ...["pending", "users", "orgs"].map((view) => ({ path: `/dashboard/operator?view=${view}`, title: "Operator · Liftgate", setup: asOperator })),
   { path: "/account", title: "Account · Liftgate" },
   { path: "/account/invitations/welcome", title: "Invitation · Liftgate" },
   { path: "/acme", title: "acme · Liftgate" },

@@ -9,7 +9,7 @@ export function Tabs<T extends string>({
   onChange,
   children,
 }: {
-  items: readonly { id: T; label: string }[];
+  items: readonly { id: T; label: ReactNode }[];
   value: T;
   label: string;
   onChange: (id: T) => void;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Button } from "./button";
+import { Button, type ButtonVariant } from "./button";
 import { Field, FormError, Input } from "./input";
 
 export function Dialog({ open, title, onClose, children }: { open: boolean; title: string; onClose: () => void; children: ReactNode }) {
@@ -32,6 +32,8 @@ export function ConfirmDialog({
   open,
   title,
   typed,
+  prompt,
+  variant = "danger",
   pending,
   error,
   onConfirm,
@@ -41,9 +43,11 @@ export function ConfirmDialog({
   open: boolean;
   title: string;
   typed?: string;
+  prompt?: string;
+  variant?: ButtonVariant;
   pending: boolean;
   error?: string;
-  onConfirm: () => void;
+  onConfirm: (value: string) => void;
   onClose: () => void;
   children: ReactNode;
 }) {
@@ -57,20 +61,20 @@ export function ConfirmDialog({
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          onConfirm();
+          onConfirm(value.trim());
         }}
         className="flex flex-col gap-4"
       >
         <p className="text-sm text-graphite-200">{children}</p>
-        {typed && (
-          <Field label={`Type ${typed} to confirm`}>
-            <Input value={value} onChange={(e) => setValue(e.target.value)} required autoComplete="off" autoFocus className="font-mono" />
+        {(typed || prompt) && (
+          <Field label={prompt ?? `Type ${typed} to confirm`}>
+            <Input value={value} onChange={(e) => setValue(e.target.value)} required autoComplete="off" autoFocus className={typed ? "font-mono" : undefined} />
           </Field>
         )}
         <FormError message={error} />
         <div className="flex justify-end gap-2">
           <Button onClick={close}>Cancel</Button>
-          <Button type="submit" variant="danger" pending={pending} disabled={!!typed && value !== typed}>
+          <Button type="submit" variant={variant} pending={pending} disabled={!!typed && value !== typed}>
             {title}
           </Button>
         </div>

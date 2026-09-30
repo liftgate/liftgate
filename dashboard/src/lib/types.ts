@@ -5,6 +5,7 @@ export type User = {
   email: string | null;
   avatarUrl: string | null;
   status: UserStatus;
+  operator?: boolean;
 };
 
 export type Organization = {
@@ -278,3 +279,9 @@ export type Database = {
 };
 
 export type Backup = { name: string; phase: string | null; startedAt: string | null; stoppedAt: string | null };
+
+export type OperatorUser = { user: User; providers: IdentityProvider[]; orgs: number; createdAt: string };
+
+export type OperatorOrg = { org: Organization; members: number; projects: number; services: number; createdAt: string };
+
+export type OperatorSummary = { pending: number; plans: string[] };

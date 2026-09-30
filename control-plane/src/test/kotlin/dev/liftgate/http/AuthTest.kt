@@ -13,8 +13,10 @@ import io.ktor.client.request.header
 import io.ktor.client.request.options
 import io.ktor.client.request.post
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.contentType
 import io.ktor.server.response.respond
 import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
@@ -51,6 +53,15 @@ class AuthTest {
         application { liftgate(app) }
         val response = client.get("/api/v1/me")
         assertEquals(HttpStatusCode.Unauthorized, response.status)
+        assertEquals("""{"error":"unauthorized","message":"authentication required"}""", response.bodyAsText())
+    }
+
+    @Test
+    fun `api errors keep their status and json body when the client asks for html`() = testApplication {
+        application { liftgate(app) }
+        val response = client.get("/api/v1/me") { header(HttpHeaders.Accept, "text/html") }
+        assertEquals(HttpStatusCode.Unauthorized, response.status)
+        assertEquals(ContentType.Application.Json, response.contentType()?.withoutParameters())
         assertEquals("""{"error":"unauthorized","message":"authentication required"}""", response.bodyAsText())
     }
 

@@ -16,7 +16,6 @@ import org.jetbrains.exposed.v1.core.Op
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.core.inSubQuery
 import org.jetbrains.exposed.v1.core.innerJoin
 import org.jetbrains.exposed.v1.core.isNull
 import org.jetbrains.exposed.v1.jdbc.JdbcTransaction
@@ -25,7 +24,6 @@ import org.jetbrains.exposed.v1.jdbc.insertIgnore
 import org.jetbrains.exposed.v1.jdbc.insertReturning
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
-import org.jetbrains.exposed.v1.jdbc.update
 import org.jetbrains.exposed.v1.jdbc.updateReturning
 import java.util.UUID
 
@@ -59,7 +57,6 @@ fun JdbcTransaction.enqueueTeardown(where: () -> Op<Boolean>) = (Environments in
     .forEach { enqueue(Subject.TEARDOWN_REQUESTED, buildJsonObject { put("namespace", it[Environments.namespace]) }) }
 
 fun JdbcTransaction.deleteEnvironments(where: () -> Op<Boolean>) {
-    ProjectsTable.update({ ProjectsTable.previewBaseEnvironmentId inSubQuery Environments.select(Environments.id).where(where) }) { it[previewBaseEnvironmentId] = null }
     enqueueTeardown(where)
     orphanRepositories(where())
     Environments.deleteWhere { where() }

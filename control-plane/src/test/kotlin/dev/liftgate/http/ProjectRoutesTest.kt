@@ -124,7 +124,7 @@ class ProjectRoutesTest {
     }
 
     @Test
-    fun `project settings turn previews on from a base environment of the same project, and pull request slugs stay free for previews`() = testApplication {
+    fun `project settings turn previews on from a base environment of the same project, pull request slugs stay free for previews, and deleting the base environment clears it`() = testApplication {
         val org = orgs.create("acme", "Acme", user.id)
         val project = app.projects.create(org.id, "shop", "Shop", "acme/shop", 42)
         val other = app.projects.environments(app.projects.create(org.id, "blog", "Blog", "acme/blog", 42).id).single()
@@ -145,6 +145,8 @@ class ProjectRoutesTest {
         val updated = json.decodeFromString(Project.serializer(), patch("""{"previewsEnabled":true,"previewBaseEnvironmentId":"${staging.id}"}""").bodyAsText())
         assertEquals(true to staging.id, updated.previewsEnabled to updated.previewBaseEnvironmentId)
         assertEquals(updated, json.decodeFromString(Project.serializer(), patch("""{}""").bodyAsText()))
+        client.delete("/api/v1/environments/${staging.id}") { session() }
+        assertEquals(updated.copy(previewBaseEnvironmentId = null), app.projects.byId(project.id))
     }
 
     @Test

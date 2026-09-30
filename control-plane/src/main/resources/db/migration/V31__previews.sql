@@ -1,6 +1,6 @@
 alter table projects
     add column previews_enabled boolean not null default false,
-    add column preview_base_environment_id uuid;
+    add column preview_base_environment_id uuid references environments (id) on delete set null;
 
 alter table environments add column pull_request integer;
 

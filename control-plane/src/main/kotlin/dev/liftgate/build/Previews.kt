@@ -91,7 +91,7 @@ class Previews(private val app: App) {
         return Status(missing, app.db.tx { PullRequests.selectAll().where { PullRequests.projectId eq project.id }.orderBy(PullRequests.number, SortOrder.DESC).map { it.toPullRequest() } })
     }
 
-    suspend fun open(project: Project, request: PullRequest) {
+    suspend fun open(project: Project, request: PullRequest, admit: () -> Unit) {
         val pull = app.db.tx {
             PullRequests.upsertReturning {
                 it[projectId] = project.id
@@ -104,7 +104,9 @@ class Previews(private val app: App) {
                 it[updatedAt] = now()
             }.single().toPullRequest()
         }
-        if (pull.trusted) deploy(project, pull)
+        if (!pull.trusted) return
+        admit()
+        deploy(project, pull)
     }
 
     suspend fun approve(project: Project, number: Int, sha: String) {
@@ -119,8 +121,10 @@ class Previews(private val app: App) {
         deploy(project, pull)
     }
 
-    suspend fun close(project: Project, number: Int) {
-        val pull = app.db.tx { find(project.id, number).also { removePreview(project.id, number) } } ?: return
+    suspend fun close(project: Project, number: Int, admit: () -> Unit) {
+        val pull = app.db.tx { find(project.id, number) } ?: return
+        admit()
+        app.db.tx { removePreview(project.id, number) }
         if (pull.commentId != null) quietly { publish(project, pull, "$HEADING\n\nThe preview was removed when the pull request closed.") }
     }
 

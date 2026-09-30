@@ -4,6 +4,7 @@ import dev.liftgate.App
 import dev.liftgate.TestDatabase
 import dev.liftgate.auth.Access
 import dev.liftgate.auth.Sessions
+import dev.liftgate.cache.Cache
 import dev.liftgate.config.GitHubConfig
 import dev.liftgate.db.Builds as BuildsTable
 import dev.liftgate.db.Housekeeping
@@ -15,6 +16,7 @@ import dev.liftgate.deploy.Builds
 import dev.liftgate.domain.Domains
 import dev.liftgate.events.Subject
 import dev.liftgate.http.ErrorBody
+import dev.liftgate.http.WEBHOOKS_PER_MINUTE
 import dev.liftgate.http.json
 import dev.liftgate.http.liftgate
 import dev.liftgate.http.session
@@ -34,7 +36,6 @@ import dev.liftgate.service.ServiceKind
 import dev.liftgate.service.ServiceSpec
 import dev.liftgate.service.Services
 import dev.liftgate.testConfig
-import dev.liftgate.unlimitedCache
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -60,6 +61,7 @@ import io.micrometer.prometheusmetrics.PrometheusMeterRegistry
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -71,6 +73,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.minutes
 
 /**
  * @author Dean
@@ -87,6 +90,7 @@ class PreviewsTest {
     private val envVars = EnvVars(db, SecretBox(ByteArray(32)))
     private val requests = mutableListOf<HttpRequestData>()
     private var issues = "write"
+    private val cache = mockk<Cache> { every { allow(any(), any(), any()) } returns true }
     private val github = GitHubApp(
         GitHubConfig("1", TestKeys.privateKeyPem),
         HttpClient(MockEngine { request ->
@@ -107,7 +111,7 @@ class PreviewsTest {
     )
     private val app: App = mockk {
         every { config } returns testConfig().copy(githubWebhookSecret = secret)
-        every { cache } returns unlimitedCache
+        every { cache } returns this@PreviewsTest.cache
         every { metrics } returns PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
         every { db } returns this@PreviewsTest.db
         every { sessions } returns mockk<Sessions> { coEvery { resolve("s") } returns user }
@@ -220,6 +224,20 @@ class PreviewsTest {
         assertEquals(mapOf("web" to listOf("abc123"), "worker" to listOf("abc123")), builtShas(environment))
         val listed = client.get("/api/v1/projects/${project.id}/previews") { session() }.bodyAsText()
         assertTrue(""""headSha":"def456","fork":true,"approvedSha":"abc123"""" in listed, listed)
+    }
+
+    @Test
+    fun `pull request events spend their head repository's own webhook limit, and only when there is work to do`() = testApplication {
+        application { liftgate(app) }
+        listOf(event("closed", headRepo = "mallory/shop"), event("opened", headRepo = "mallory/shop"), event("synchronize", sha = "def456", headRepo = "mallory/shop")).forEach {
+            assertEquals(HttpStatusCode.NoContent, deliver(it).status)
+        }
+        verify(exactly = 0) { cache.allow(any(), any(), any()) }
+        deliver(event("closed", headRepo = "mallory/shop"))
+        deliver(event("opened"))
+        verify(exactly = 1) { cache.allow("rate:webhook-pull-request:42:mallory/shop", WEBHOOKS_PER_MINUTE, 1.minutes) }
+        verify(exactly = 1) { cache.allow("rate:webhook-pull-request:42:acme/shop", WEBHOOKS_PER_MINUTE, 1.minutes) }
+        verify(exactly = 2) { cache.allow(any(), any(), any()) }
     }
 
     @Test

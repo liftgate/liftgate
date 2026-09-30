@@ -58,22 +58,23 @@ class WebhookHandler(private val app: App) {
         services.filter { buildAll || it.spec().watches(files) }.forEach { app.builds.request(it.id, sha, message, branch) }
     }
 
-    suspend fun handlePullRequest(payload: JsonObject, admit: (Long) -> Unit) {
+    suspend fun handlePullRequest(payload: JsonObject, admit: (String) -> Unit) {
         val action = payload.text("action")?.takeIf { it in pullRequestActions } ?: return
         val pull = payload["pull_request"] as? JsonObject ?: return
         val head = pull["head"] as? JsonObject ?: return
         val repo = (payload["repository"] as? JsonObject)?.text("full_name") ?: return
         val installation = (payload["installation"] as? JsonObject)?.get("id")?.jsonPrimitive?.longOrNull ?: return
+        val headRepo = (head["repo"] as? JsonObject)?.text("full_name")
         val request = PullRequest(
             payload["number"]?.jsonPrimitive?.intOrNull ?: return,
             pull.text("title").orEmpty(),
             head.text("ref") ?: return,
             head.text("sha") ?: return,
-            (head["repo"] as? JsonObject)?.text("full_name") != repo,
+            headRepo != repo,
         )
-        val projects = app.projects.forRepo(installation, repo).filter { action == "closed" || it.previewsEnabled }.ifEmpty { return }
-        admit(installation)
-        projects.mapNotNull { runCatching { if (action == "closed") app.previews.close(it, request.number) else app.previews.open(it, request) }.exceptionOrNull() }
+        val admitted = lazy { admit("$installation:$headRepo") }
+        app.projects.forRepo(installation, repo).filter { action == "closed" || it.previewsEnabled }
+            .mapNotNull { runCatching { if (action == "closed") app.previews.close(it, request.number) { admitted.value } else app.previews.open(it, request) { admitted.value } }.exceptionOrNull() }
             .firstOrNull()?.let { throw it }
     }
 

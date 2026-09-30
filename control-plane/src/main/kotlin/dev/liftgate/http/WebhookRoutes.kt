@@ -20,12 +20,11 @@ fun Route.webhookRoutes(app: App) {
         val secret = app.config.githubWebhookSecret ?: notFound("webhook")
         val body = call.receive<ByteArray>()
         if (!Webhooks.verify(secret, body, call.request.header("X-Hub-Signature-256"))) unauthorized()
-        val handle = when (call.request.header("X-GitHub-Event")) {
-            "push" -> handler::handlePush
-            "pull_request" -> handler::handlePullRequest
-            else -> null
+        val payload = json.parseToJsonElement(body.decodeToString()).jsonObject
+        when (call.request.header("X-GitHub-Event")) {
+            "push" -> handler.handlePush(payload) { call.limit(app, "webhook", WEBHOOKS_PER_MINUTE, it.toString()) }
+            "pull_request" -> handler.handlePullRequest(payload) { call.limit(app, "webhook-pull-request", WEBHOOKS_PER_MINUTE, it) }
         }
-        handle?.invoke(json.parseToJsonElement(body.decodeToString()).jsonObject) { call.limit(app, "webhook", WEBHOOKS_PER_MINUTE, it.toString()) }
         call.respond(HttpStatusCode.NoContent)
     }.install(RequestBodyLimit) { bodyLimit { WEBHOOK_BODY_LIMIT } }
 }

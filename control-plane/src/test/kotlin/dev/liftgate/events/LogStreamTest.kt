@@ -2,16 +2,20 @@ package dev.liftgate.events
 
 import dev.liftgate.TestNats
 import io.nats.client.api.StorageType
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import java.lang.management.ManagementFactory
 import java.time.Duration
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -57,6 +61,20 @@ class LogStreamTest {
         publish("building")
         ended.set(true)
         assertEquals(listOf("cloning", "building"), withTimeout(10.seconds) { lines.await() })
+    }
+
+    @Test
+    fun `five hundred live viewers add fewer than ten threads`() = runBlocking {
+        publish("cloning")
+        val threads = ManagementFactory.getThreadMXBean()
+        val before = threads.threadCount
+        val viewers = List(500) {
+            val first = CompletableDeferred<Unit>()
+            launch { logs.follow(build) { false }.collect { first.complete(Unit) } }.also { withTimeout(10.seconds) { first.await() } }
+        }
+        val added = threads.threadCount - before
+        viewers.forEach { it.cancel() }
+        assertTrue(added < 10, "500 viewers added $added threads")
     }
 
     @Test

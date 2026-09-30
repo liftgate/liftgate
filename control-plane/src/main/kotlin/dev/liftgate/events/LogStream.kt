@@ -8,10 +8,11 @@ import io.nats.client.api.StorageType
 import io.nats.client.api.StreamConfiguration
 import io.nats.client.impl.Headers
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.awaitClose
-import kotlinx.coroutines.channels.trySendBlocking
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
@@ -27,6 +28,7 @@ private const val END = "Liftgate-End"
  */
 class LogStream(private val connection: Connection, private val config: Config) {
     private val jetStream = connection.jetStream()
+    private val dispatcher by lazy { connection.createDispatcher() }
 
     fun ensureStream() {
         val management = connection.jetStreamManagement()
@@ -55,21 +57,16 @@ class LogStream(private val connection: Connection, private val config: Config) 
             close()
             return@callbackFlow
         }
-        val dispatcher = connection.createDispatcher()
-        try {
-            val consumer = stream.createOrderedConsumer(OrderedConsumerConfiguration().filterSubject(subject).deliverPolicy(DeliverPolicy.All))
-                .consume(dispatcher) { message ->
-                    trySendBlocking(String(message.data))
-                    if (message.headers?.containsKey(END) == true || done && message.metaData().pendingCount() == 0L) close()
-                }
-            if (!done) launch {
-                while (!finished()) delay(recheck.toMillis())
-                delay(recheck.toMillis())
-                close()
+        val consumer = stream.createOrderedConsumer(OrderedConsumerConfiguration().filterSubject(subject).deliverPolicy(DeliverPolicy.All))
+            .consume(dispatcher) { message ->
+                trySend(String(message.data))
+                if (message.headers?.containsKey(END) == true || done && message.metaData().pendingCount() == 0L) close()
             }
-            awaitClose { consumer.close() }
-        } finally {
-            connection.closeDispatcher(dispatcher)
+        if (!done) launch {
+            while (!finished()) delay(recheck.toMillis())
+            delay(recheck.toMillis())
+            close()
         }
-    }.flowOn(Dispatchers.IO)
+        awaitClose { consumer.close() }
+    }.buffer(Channel.UNLIMITED).flowOn(Dispatchers.IO)
 }

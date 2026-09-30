@@ -7,6 +7,7 @@ import { api, ApiError } from "@/lib/api";
 import { useAction, useApi, useRole } from "@/lib/hooks";
 import type { GitHubRepository, Project, Usage } from "@/lib/types";
 import { formValues } from "@/lib/util";
+import { DocsLink } from "@/components/docs-link";
 import { Loaded } from "@/components/loaded";
 import { NameSlugFields } from "@/components/name-slug-fields";
 import { PageHeader } from "@/components/page-header";
@@ -71,7 +72,12 @@ export function Projects({ org, opening }: { org: string; opening: boolean }) {
           list.length === 0 ? (
             <EmptyState
               title="No projects yet"
-              description={admin ? "Connect a GitHub repository to start deploying." : "An admin of this organization connects repositories."}
+              description={
+                <>
+                  {admin ? "Connect a GitHub repository to start deploying." : "An admin of this organization connects repositories."}{" "}
+                  <DocsLink page="getting-started">Getting started</DocsLink>
+                </>
+              }
               action={newProject}
             />
           ) : (
@@ -121,7 +127,11 @@ function UsageCard({ org }: { org: string }) {
     <Card>
       <CardHeader
         title="Usage"
-        description="What this organization uses against its plan"
+        description={
+          <>
+            What this organization uses against its plan. <DocsLink page="plans-and-limits">Plans and limits</DocsLink>
+          </>
+        }
         actions={usage.data && <Badge>{usage.data.plan} plan</Badge>}
       />
       <div className="p-6">

@@ -68,7 +68,10 @@ on the chart.
 ## Not covered
 
 A container registry for build output (`registry` in the chart; [`registry/`](registry) has
-a token-auth configuration), DNS records, the object store for PostgreSQL backups, and backups
-of JetStream volumes. PostgreSQL backup, restore and the upgrade procedure are in
+a token-auth configuration), DNS records, the wildcard certificate for the deploy domain
+([`cert-manager/wildcard.yaml`](cert-manager/wildcard.yaml) is a DNS-01 recipe), the object store
+for PostgreSQL backups, and backups of JetStream volumes.
+[`documentation/self-hosting.md`](../documentation/self-hosting.md) sets up the registry, the DNS
+records and the certificate on a fresh VM. PostgreSQL backup, restore and the upgrade procedure are in
 [`cnpg/README.md`](cnpg/README.md) and [`UPGRADE.md`](UPGRADE.md). What to do when an alert
 fires is in [`RUNBOOK.md`](RUNBOOK.md).

@@ -86,6 +86,15 @@ class DomainsTest {
     }
 
     @Test
+    fun `a service named like its project gets the project hostname and one issued before keeps its own`() = runBlocking {
+        val shop = project("acme", "shop")
+        assertEquals("shop-acme.liftgate.app", claim(production(shop), "shop"))
+        val legacy = web(staging(shop), "shop")
+        val issued = issue(legacy.id, "shop-staging-shop-acme.liftgate.app")
+        assertEquals(issued, domains.ensurePlatform(requireNotNull(services.scope(legacy.id))))
+    }
+
+    @Test
     fun `a service whose readable and suffix names are both taken gets its hyphen-free id`() = runBlocking {
         val shop = project("acme", "shop")
         val holder = web(staging(shop))

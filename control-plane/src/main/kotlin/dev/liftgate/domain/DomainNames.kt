@@ -19,7 +19,7 @@ object DomainNames {
 
     fun platform(scope: ServiceScope, deployDomain: String): List<String> {
         val (service, environment, project, org) = scope
-        val readable = listOfNotNull(service.slug, environment.slug.takeUnless { it == "production" }, project.slug, org.slug).joinToString("-")
+        val readable = listOfNotNull(service.slug.takeUnless { it == project.slug }, environment.slug.takeUnless { it == "production" }, project.slug, org.slug).joinToString("-")
         val suffix = BigInteger(1, MessageDigest.getInstance("SHA-256").digest(service.id.toString().toByteArray())).toString(36).takeLast(SUFFIX)
         val fallback = "${service.slug}-${project.slug}".take(MAX_LABEL - SUFFIX - 1).trimEnd('-') + "-$suffix"
         val unique = service.id.toString().replace("-", "")

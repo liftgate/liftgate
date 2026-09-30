@@ -77,7 +77,7 @@ export const findService = (tree: ProjectTree, environmentSlug: string, serviceS
 export const servesHttp = (kind: ServiceKind) => kind === "web" || kind === "static";
 
 export const platformHost = (labels: { service: string; environment: string; project: string; org: string }, deployDomain: string) => {
-  const label = [labels.service, labels.environment === "production" ? "" : labels.environment, labels.project, labels.org].filter(Boolean).join("-");
+  const label = [labels.service === labels.project ? "" : labels.service, labels.environment === "production" ? "" : labels.environment, labels.project, labels.org].filter(Boolean).join("-");
   return label.length <= 63 ? `${label}.${deployDomain}` : undefined;
 };
 

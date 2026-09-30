@@ -88,7 +88,8 @@ https://<service>-<project>-<org>.<deploy domain>
 ```
 
 for example `https://web-hello-acme.liftgate.app` on Liftgate Cloud. Services in an environment other
-than `production` add the environment's slug after the service's. A name longer than 63 characters, or
+than `production` add the environment's slug after the service's, and a service named like its project
+leaves its own name out, as in `https://shop-acme.liftgate.app`. A name longer than 63 characters, or
 one another service already holds, gets a shorter form ending in a suffix derived from the service.
 
 From now on every push to the branch builds and deploys the service. If the release fails, the error on

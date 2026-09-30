@@ -159,7 +159,7 @@ echo "database main was ready $elapsed s after it was requested"
 test "$(kubectl get namespace "$ns" --output jsonpath='{.metadata.labels.pod-security\.kubernetes\.io/enforce}')" = restricted
 if kubectl -n "$ns" get events --output jsonpath='{range .items[*]}{.message}{"\n"}{end}' | grep -i "violates PodSecurity"; then fail "a database pod violated the restricted profile"; fi
 runtime="$(kubectl -n "$ns" get pod main-1 --output jsonpath='{.spec.runtimeClassName}')"
-echo "database pods run under the restricted profile and the runtime class ${runtime:-of the node default}"
+echo "database pods run under the restricted profile with runtime class ${runtime:-none, so the node's default runtime}"
 
 within 180 running "$app_release"
 want=204 expect --request POST --data "{\"serviceId\":\"$app\"}" "http://localhost:8080/api/v1/databases/$database/links"

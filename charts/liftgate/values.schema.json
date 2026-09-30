@@ -323,7 +323,8 @@
       "additionalProperties": false,
       "properties": {
         "nodeSelector": { "$ref": "#/definitions/nodeSelector" },
-        "tolerations": { "$ref": "#/definitions/tolerations" }
+        "tolerations": { "$ref": "#/definitions/tolerations" },
+        "storageClass": { "type": "string" }
       }
     },
     "plans": { "type": "object", "minProperties": 1, "propertyNames": { "not": { "const": "default" } }, "additionalProperties": { "$ref": "#/definitions/plan" } },
@@ -340,6 +341,41 @@
       },
       "if": { "properties": { "enabled": { "const": true } } },
       "then": { "properties": { "clusterIP": { "minLength": 1 } } }
+    },
+    "databases": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "backup": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "endpointUrl": { "type": "string", "pattern": "^(https?://.*)?$" },
+            "destinationPath": { "type": "string", "pattern": "^(s3://[^/]+.*)?$" },
+            "accessKeyId": { "type": "string" },
+            "secretAccessKey": { "type": "string" },
+            "region": { "type": "string", "minLength": 1 },
+            "retention": { "type": "string", "pattern": "^[1-9][0-9]*[dwm]$" },
+            "schedule": { "type": "string", "minLength": 1 },
+            "allowedEgress": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["cidr", "port"],
+                "properties": {
+                  "cidr": { "type": "string", "pattern": "^((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\\.){3}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])/([1-9]|[12][0-9]|3[0-2])$" },
+                  "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
+                }
+              }
+            }
+          },
+          "if": { "properties": { "enabled": { "const": true } } },
+          "then": { "properties": { "destinationPath": { "minLength": 1 }, "accessKeyId": { "minLength": 1 }, "secretAccessKey": { "minLength": 1 } } }
+        }
+      }
     }
   },
   "definitions": {
@@ -368,7 +404,8 @@
         "egressBandwidth": { "type": "string", "pattern": "^[0-9]+[kMG]?$" },
         "udp": { "type": "boolean" },
         "cronTimeoutSeconds": { "type": "integer", "minimum": 1 },
-        "previewEnvironments": { "$ref": "#/definitions/limit" }
+        "previewEnvironments": { "$ref": "#/definitions/limit" },
+        "storageGb": { "$ref": "#/definitions/limit" }
       },
       "dependencies": { "concurrentBuilds": ["buildsPerHour"] }
     }

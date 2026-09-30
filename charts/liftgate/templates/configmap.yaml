@@ -132,6 +132,26 @@ data:
   LIFTGATE_DENIED_EGRESS_CIDRS: {{ join "," . | quote }}
   {{- end }}
   LIFTGATE_LOG_FORMAT: {{ .Values.controlPlane.logFormat | quote }}
+  {{- with .Values.workloads.storageClass }}
+  LIFTGATE_STORAGE_CLASS: {{ . | quote }}
+  {{- end }}
+  LIFTGATE_DATABASE_READER_ROLE: {{ printf "%s-database-reader" (include "liftgate.fullname" .) | quote }}
+  {{- with .Values.databases.backup }}
+  {{- if .enabled }}
+  LIFTGATE_DATABASE_BACKUP_DESTINATION: {{ .destinationPath | quote }}
+  {{- with .endpointUrl }}
+  LIFTGATE_DATABASE_BACKUP_ENDPOINT_URL: {{ . | quote }}
+  {{- end }}
+  LIFTGATE_DATABASE_BACKUP_REGION: {{ .region | quote }}
+  LIFTGATE_DATABASE_BACKUP_RETENTION: {{ .retention | quote }}
+  LIFTGATE_DATABASE_BACKUP_SCHEDULE: {{ .schedule | quote }}
+  {{- with .allowedEgress }}
+  {{- $egress := list }}
+  {{- range . }}{{ $egress = append $egress (printf "%s:%d" .cidr (int .port)) }}{{ end }}
+  LIFTGATE_DATABASE_BACKUP_EGRESS: {{ join "," $egress | quote }}
+  {{- end }}
+  {{- end }}
+  {{- end }}
 {{- with include "liftgate.sharedSite" . }}
 {{- if not $.Values.allowSharedSite }}
 {{- fail (printf "deployDomain %s shares the site %s with publicUrl or dashboardUrl, so tenant apps would be same-site with the dashboard; use a separate registrable domain, or set allowSharedSite=true if %s is a public suffix such as co.uk" $.Values.deployDomain . .) }}

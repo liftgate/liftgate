@@ -227,6 +227,47 @@ kubectl -n liftgate-system get backups
 Restoring, the point-in-time drill and key escrow are in
 [`infra/cnpg/README.md`](../../infra/cnpg/README.md).
 
+## Databases and volumes
+
+A service can keep one volume, `volume: {mountPath, sizeGb}` in its spec. The reconciler creates
+the PersistentVolumeClaim `<service>-data` (ReadWriteOnce, in `workloads.storageClass` or the
+cluster's default class), mounts it and switches the Deployment to the `Recreate` strategy, so a
+service with a volume runs at most one replica. Redeploys and rollbacks keep the claim. A volume can
+grow when its storage class allows expansion, but cannot shrink or be removed; deleting the service
+deletes the claim, and with the usual `Delete` reclaim policy its data.
+
+`POST /api/v1/environments/<id>/databases` creates a CloudNativePG `Cluster` named after the
+database in the environment's namespace: one instance with the database `app` owned by the role
+`app`. A service linked to it gets the `uri` of the operator's `<database>-app` Secret as a
+variable through a `secretKeyRef`, so the password never reaches Liftgate's own database. Database
+pods count toward the plan's `replicas`, `cpuMillis`, `memoryMb` and `storageGb` and run under the
+namespace's `restricted` Pod Security profile. The CloudNativePG `Cluster` has no runtime class
+field, so with gVisor the database pods run under the node's default runtime; tenant code still
+runs only in `runtimeClass` pods and reaches PostgreSQL over the network as `app`, which is not a
+superuser.
+
+Pods in the same environment reach a database on port 5432 and other environments cannot. The
+reconciler adds the NetworkPolicy `allow-databases`, which admits the CloudNativePG operator and
+lets database pods reach `databases.backup.allowedEgress`. Database pods also call the Kubernetes
+API: on Cilium the chart's CiliumClusterwideNetworkPolicy `<fullname>-databases-to-apiserver`
+allows it, and with another CNI you have to allow egress from pods labelled
+`liftgate.dev/database-id` to the API server yourself.
+
+With `databases.backup.enabled`, each database archives its WAL through the Barman Cloud plugin, as
+in [Backups](#backups), to `<destinationPath>/<namespace>/<database id>`, and takes a base backup
+when it is created and on `databases.backup.schedule`. The reconciler writes `accessKeyId` and
+`secretAccessKey` into the Secret `liftgate-backup` of every environment namespace with a
+database, so give tenant databases a bucket and key of their own rather than those of
+`postgres.backup`. When the object store has a private address, list it in `allowedEgress`;
+without that, database pods reach only public addresses. `POST /api/v1/databases/<id>/restore` with
+`{"slug": ..., "pointInTime": ...}` creates a new database recovered from that archive to the point
+in time, and the original keeps running.
+
+The API reads database status, backups and the `-app` Secret through the ClusterRole
+`<fullname>-database-reader`, which the reconciler binds to the API's ServiceAccount in every
+environment namespace. Deleting an environment deletes its namespace with the clusters and their
+volumes; the archives stay in the bucket.
+
 ## Sign-in providers
 
 GitHub sign-in always works through the GitHub App above. Every other method is optional and
@@ -468,6 +509,14 @@ other than 2xx is retried with a growing delay for an hour.
 | `postgres.backup.serverName` | `""` | Folder under `destinationPath` the cluster archives to; empty means the Cluster name. Give each restored cluster a new one |
 | `postgres.backup.recoverFrom` | `""` | Folder to restore from when the Cluster is created; empty creates an empty database |
 | `postgres.backup.recoverTo` | `""` | RFC 3339 time to stop the restore at; empty replays all archived WAL |
+| `databases.backup.enabled` | `false` | WAL archiving and daily base backups of tenant databases, see [Databases and volumes](#databases-and-volumes) |
+| `databases.backup.endpointUrl` | `""` | S3 endpoint; empty means AWS S3 |
+| `databases.backup.destinationPath` | `""` | `s3://<bucket>/<optional prefix>`, one folder per environment namespace below it; required when `enabled` |
+| `databases.backup.accessKeyId`, `databases.backup.secretAccessKey` | `""` | Key for that bucket; required when `enabled`. Only the reconciler gets it |
+| `databases.backup.region` | `us-east-1` | Region the store signs for (Garage: its `s3_region`) |
+| `databases.backup.retention` | `30d` | Recovery window: `<n>d`, `<n>w` or `<n>m` |
+| `databases.backup.schedule` | `0 0 3 * * *` | Base backup schedule, cron with a leading seconds field |
+| `databases.backup.allowedEgress` | `[]` | `{cidr, port}` entries database pods may reach, for an object store on a private address |
 | `nats.managed` | `true` | Install the `nats` subchart and a Prometheus exporter for it |
 | `nats.externalUrl` | `""` | NATS URL when not managed |
 | `nats.config.*` | JetStream on, 5Gi | Passed through to the nats chart |
@@ -512,6 +561,7 @@ other than 2xx is retried with a growing delay for an hour.
 | `allowUnsandboxedTenants` | `false` | With an empty `runtimeClass`, renders `LIFTGATE_ALLOW_RUNC=true` so tenant pods run under runc on the node kernel. Only for clusters where every tenant is trusted |
 | `workloads.nodeSelector` | `{}` | `LIFTGATE_WORKLOAD_NODE_SELECTOR`; node labels for tenant pods, `nodeSelector` when empty |
 | `workloads.tolerations` | `[]` | `LIFTGATE_WORKLOAD_TOLERATIONS`; taints tenant pods tolerate, written as for `kubectl taint`: `key=value:Effect`, `key:Effect` or `key` |
+| `workloads.storageClass` | `""` | `LIFTGATE_STORAGE_CLASS`; storage class of service volumes and tenant databases, the cluster default when empty |
 | `nodeSelector` | `{}` | Node labels that pin the control plane, dashboard and CloudNativePG cluster; rendered into `LIFTGATE_NODE_SELECTOR` as `key=value,key=value`, which tenant pods and build jobs use when `workloads.nodeSelector` or `build.nodeSelector` is empty. See [Node pools](#node-pools) for NATS |
 | `registryInsecure` | `false` | `LIFTGATE_REGISTRY_INSECURE`; build jobs push to `registry` over plain HTTP |
 | `registryAuth` | `shared` | `LIFTGATE_REGISTRY_AUTH`: `shared` or `token`, see [Registry authentication](#registry-authentication) |
@@ -546,7 +596,8 @@ is the release name when it contains `liftgate`, otherwise `<release>-liftgate`)
 `LIFTGATE_NATS_REPLICAS` is `3` when the managed NATS cluster is enabled and `1` otherwise,
 `LIFTGATE_HAZELCAST_KUBERNETES` is `true` in `ha`, `LIFTGATE_GATEWAY_NAMESPACE` is the release
 namespace, `LIFTGATE_LEADER_ELECTION` is `kubernetes`, `LIFTGATE_HTTP_PORT` is `8080`,
-`LIFTGATE_LOG_READER_ROLE` is `<fullname>-log-reader`, `LIFTGATE_LOG_READER_ACCOUNT` is the
+`LIFTGATE_LOG_READER_ROLE` is `<fullname>-log-reader`, `LIFTGATE_DATABASE_READER_ROLE` is
+`<fullname>-database-reader`, `LIFTGATE_LOG_READER_ACCOUNT` is the
 ServiceAccount of `api` (of `all` in `single`) and, in `ha`, `LIFTGATE_INTERNAL_URL` is the
 control-plane Service, which the builder asks for registry tokens.
 Empty optional values are left out of the ConfigMap and Secret so the control plane reports
@@ -563,7 +614,8 @@ A limit that is left out is unlimited, so `unlimited: {}` limits nothing.
 | `projects`, `services`, `customDomains` | Per organization |
 | `previewEnvironments` | Pull request previews per organization, outside `environmentsPerProject` |
 | `environmentsPerProject` | Per project |
-| `replicas`, `cpuMillis`, `memoryMb` | Sums of pods, pods × `cpuMillis` and pods × `memoryMb` over the organization's services, where a service's pods are its `replicas` and a cron service counts as one pod |
+| `replicas`, `cpuMillis`, `memoryMb` | Sums of pods, pods × `cpuMillis` and pods × `memoryMb` over the organization's services and databases, where a service's pods are its `replicas`, a cron service counts as one pod and so does a database |
+| `storageGb` | Sum of the organization's service volumes and database storage |
 | `concurrentBuilds` | Running builds per organization; further builds wait in the queue. Needs `buildsPerHour` |
 | `buildsPerHour` | Builds per organization started in the last hour or waiting in the queue; further builds fail |
 | `cpuRequestRatio` | CPU request as a share of the limit (default `1`) |
@@ -614,8 +666,8 @@ The `ha` profile gives each role its own ServiceAccount and Secret:
 
 | Role | Kubernetes access | Secret values |
 |---|---|---|
-| `api` | Role in the release namespace: leases, endpoints, endpoint slices; in each managed namespace, a RoleBinding to ClusterRole `<fullname>-log-reader` (pods and their logs) that the reconciler creates | master key, GitHub App key and webhook secret, OAuth client secrets, SMTP URL, registry signing key, pull password and janitor password |
-| `reconciler` | ClusterRole `<fullname>`, the release namespace Role, and `bind` on ClusterRole `<fullname>-log-reader` | master key |
+| `api` | Role in the release namespace: leases, endpoints, endpoint slices; in each managed namespace, RoleBindings that the reconciler creates to ClusterRoles `<fullname>-log-reader` (pods and their logs) and `<fullname>-database-reader` (secrets, CloudNativePG clusters and backups) | master key, GitHub App key and webhook secret, OAuth client secrets, SMTP URL, registry signing key, pull password and janitor password |
+| `reconciler` | ClusterRole `<fullname>`, the release namespace Role, and `bind` on ClusterRoles `<fullname>-log-reader` and `<fullname>-database-reader` | master key; the tenant database backup key |
 | `builder` | Role `<fullname>-builder` in `build.namespace` (jobs, secrets, pods and their logs), the release namespace Role | master key, to open the service variables it hands to each build; GitHub App key; registry janitor password |
 | `meter` | ClusterRole `<fullname>-meter` (list pods), the release namespace Role | none |
 

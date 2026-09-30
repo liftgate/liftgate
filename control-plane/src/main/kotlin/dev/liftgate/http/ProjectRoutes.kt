@@ -2,8 +2,10 @@ package dev.liftgate.http
 
 import dev.liftgate.App
 import dev.liftgate.auth.OrgRole
+import dev.liftgate.build.Previews
 import dev.liftgate.project.Environment
 import dev.liftgate.project.EnvironmentKind
+import dev.liftgate.project.PreviewSettings
 import dev.liftgate.project.Project
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
@@ -12,11 +14,17 @@ import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
+import io.ktor.server.routing.patch
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.decodeFromJsonElement
+import kotlinx.serialization.json.encodeToJsonElement
+import kotlinx.serialization.json.jsonObject
 
 private val repoPattern = Regex("[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
+private val previewSlug = Regex("pr-[0-9]+")
 
 /**
  * @author Dean
@@ -55,8 +63,26 @@ fun Route.projectRoutes(app: App) {
     }
     route("/projects/{id}") {
         get { call.respond(call.project(app)) }
+        patch {
+            val project = call.project(app, OrgRole.ADMIN)
+            val current = json.encodeToJsonElement(PreviewSettings(project.previewsEnabled, project.previewBaseEnvironmentId)).jsonObject
+            val settings = json.decodeFromJsonElement<PreviewSettings>(JsonObject(current + call.receive<JsonObject>()))
+            settings.previewBaseEnvironmentId?.let { id ->
+                app.projects.environment(id)?.takeIf { it.projectId == project.id && it.pullRequest == null }
+                    ?: invalid("the base environment must be one of the project's environments", "previewBaseEnvironmentId")
+            }
+            call.respond(app.projects.update(project.id, settings))
+        }
         delete {
             app.projects.delete(call.project(app, OrgRole.ADMIN).id)
+            call.respond(HttpStatusCode.NoContent)
+        }
+        get("/previews") { call.respond(app.previews.status(call.project(app))) }
+        post("/previews/approve") {
+            val project = call.project(app, OrgRole.ADMIN)
+            val approval = call.receive<Previews.Approval>()
+            call.auditDetails("pullRequest" to approval.number.toString(), "sha" to approval.sha)
+            app.previews.approve(project, approval.number, approval.sha)
             call.respond(HttpStatusCode.NoContent)
         }
         route("/environments") {
@@ -65,10 +91,15 @@ fun Route.projectRoutes(app: App) {
                 val project = call.project(app, OrgRole.ADMIN)
                 val body = call.receive<CreateEnvironment>()
                 requireSlug(body.slug, reservedProjectSlugs)
+                if (previewSlug.matches(body.slug)) invalid("${body.slug} is kept for the preview of pull request #${body.slug.drop(3)}", "slug")
                 if (body.name.isBlank() || body.branch.isBlank()) invalid("name and branch are required")
                 call.respond(HttpStatusCode.Created, app.projects.createEnvironment(project.id, body.slug, body.name.trim(), body.kind, body.branch.trim()))
             }
         }
+    }
+    delete("/environments/{id}") {
+        app.projects.deleteEnvironment(call.environment(app, OrgRole.ADMIN).id)
+        call.respond(HttpStatusCode.NoContent)
     }
 }
 

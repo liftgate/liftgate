@@ -105,6 +105,6 @@ private fun ServiceSpec.validated(): ServiceSpec {
 
 private fun String.isRepoPath() = repoPath.matches(this) && ".." !in split('/')
 
-private suspend fun App.claimPlatformDomain(scope: ServiceScope) {
+suspend fun App.claimPlatformDomain(scope: ServiceScope) {
     if (scope.service.kind.servesHttp) domains.ensurePlatform(scope)
 }

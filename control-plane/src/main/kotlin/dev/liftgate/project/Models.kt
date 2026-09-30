@@ -22,6 +22,8 @@ data class Project(
     val repoDefaultBranch: String,
     val installationId: Long,
     val importedByLogin: String? = null,
+    val previewsEnabled: Boolean = false,
+    val previewBaseEnvironmentId: UUID? = null,
 )
 
 /**
@@ -47,4 +49,5 @@ data class Environment(
     val kind: EnvironmentKind,
     val branch: String,
     val namespace: String,
+    val pullRequest: Int? = null,
 )

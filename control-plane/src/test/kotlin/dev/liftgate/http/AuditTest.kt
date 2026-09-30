@@ -10,6 +10,7 @@ import dev.liftgate.auth.Sessions
 import dev.liftgate.auth.Sso
 import dev.liftgate.auth.SsoSettings
 import dev.liftgate.build.GitHubApp
+import dev.liftgate.build.Previews
 import dev.liftgate.db.AuditLog
 import dev.liftgate.db.Memberships
 import dev.liftgate.db.sql
@@ -34,6 +35,7 @@ import dev.liftgate.org.Orgs
 import dev.liftgate.org.insertUser
 import dev.liftgate.project.Environment
 import dev.liftgate.project.EnvironmentKind
+import dev.liftgate.project.PreviewSettings
 import dev.liftgate.project.Project
 import dev.liftgate.project.Projects
 import dev.liftgate.service.BuildStrategy
@@ -111,6 +113,9 @@ class AuditTest {
             "POST /orgs/{slug}/notifications/{id}/test",
             "DELETE /projects/{id}",
             "POST /projects/{id}/environments",
+            "PATCH /projects/{id}",
+            "POST /projects/{id}/previews/approve",
+            "DELETE /environments/{id}",
             "POST /environments/{id}/services",
             "PATCH /services/{id}",
             "DELETE /services/{id}",
@@ -159,7 +164,10 @@ class AuditTest {
             coEvery { create(acme.id, "web", "Web", "acme/web", 42, "dean") } returns project
             coEvery { delete(project.id) } just Runs
             coEvery { createEnvironment(project.id, "staging", "Staging", EnvironmentKind.PRODUCTION, "dev") } returns environment
+            coEvery { update(project.id, PreviewSettings(previewsEnabled = true)) } returns project
+            coEvery { deleteEnvironment(environment.id) } just Runs
         }
+        every { it.previews } returns mockk<Previews> { coEvery { approve(project, 12, sha) } just Runs }
         every { it.services } returns mockk<Services> {
             coEvery { scope(service.id, any()) } coAnswers { ServiceScope(service, environment, project, requireNotNull(orgs.bySlug("acme", secondArg()))) }
             coEvery { create(environment.id, any()) } returns service
@@ -241,6 +249,9 @@ class AuditTest {
         "POST /orgs/{slug}/notifications/{id}/test" to Call("/orgs/acme/notifications/${channel.id}/test", expected = acme("notifications", channel.id)),
         "DELETE /projects/{id}" to Call("/projects/${project.id}", expected = acme("projects", project.id)),
         "POST /projects/{id}/environments" to Call("/projects/${project.id}/environments", """{"slug":"staging","name":"Staging","branch":"dev"}""", expected = acme("projects", project.id)),
+        "PATCH /projects/{id}" to Call("/projects/${project.id}", """{"previewsEnabled":true}""", expected = acme("projects", project.id)),
+        "POST /projects/{id}/previews/approve" to Call("/projects/${project.id}/previews/approve", """{"number":12,"sha":"$sha"}""", expected = acme("projects", project.id)),
+        "DELETE /environments/{id}" to Call("/environments/${environment.id}", expected = acme("environments", environment.id)),
         "POST /environments/{id}/services" to Call("/environments/${environment.id}/services", """{"slug":"api","name":"API","kind":"worker"}""", expected = acme("environments", environment.id)),
         "PATCH /services/{id}" to Call("/services/${service.id}", """{"replicas":2}""", expected = acme("services", service.id)),
         "DELETE /services/{id}" to Call("/services/${service.id}", expected = acme("services", service.id)),

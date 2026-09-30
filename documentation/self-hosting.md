@@ -180,9 +180,9 @@ settings, GitHub Apps, New GitHub App, and fill in:
 | Request user authorization (OAuth) during installation | Unchecked |
 | Setup URL | `https://liftgate.example.com/dashboard?installed=1`, with Redirect on update checked |
 | Webhook | Active, URL `https://liftgate.example.com/api/v1/webhooks/github`, and a secret from `openssl rand -hex 32` |
-| Repository permissions | Contents: Read-only; Metadata: Read-only; Commit statuses: Read and write |
+| Repository permissions | Contents: Read-only; Metadata: Read-only; Commit statuses: Read and write; Pull requests: Read-only; Issues: Read and write |
 | Account permissions | Email addresses: Read-only |
-| Subscribe to events | Push |
+| Subscribe to events | Push; Pull request |
 | Where can this GitHub App be installed? | Any account, unless every repository you deploy belongs to the App's owner |
 
 Create the App. On its page, note the App ID and the Client ID, generate a client secret, and generate a
@@ -190,7 +190,9 @@ private key, which downloads a `.pem` file. Copy that file to the VM as
 `github-app.private-key.pem` in the `liftgate` directory.
 
 The Setup URL brings people who install the App from the dashboard back to it. The Commit statuses
-permission lets Liftgate report each build on its commit; without it, builds still work.
+permission lets Liftgate report each build on its commit; without it, builds still work. The Pull
+request event and the Pull requests and Issues permissions run pull request previews and their comment;
+without them, pushes still build.
 
 ## 7. Install Liftgate
 
@@ -607,6 +609,11 @@ From 0.2.0-alpha.4 to the release after it:
 - The chart can run the registry inside the cluster, which this guide now uses. Nothing changes until
   `inClusterRegistry.enabled` is set; [Moving to the in-cluster registry](#moving-to-the-in-cluster-registry)
   switches an installation with a registry on another machine.
+- Migration V31 adds preview columns to `projects` and `environments` and a `pull_requests` table. A
+  `helm rollback` does not undo it.
+- Pull request previews are off until a project turns them on. They need the App changes in
+  [step 6](#6-the-github-app): the Pull request event, Pull requests: Read-only and Issues: Read and write,
+  which each installation of the App has to accept. The plan field `previewEnvironments` is optional.
 
 From 0.2.0 to the release after it:
 

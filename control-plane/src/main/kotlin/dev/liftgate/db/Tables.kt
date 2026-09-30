@@ -233,6 +233,8 @@ object Projects : Table("projects") {
     val installationId = fk("installation_id", GitHubInstallations.id)
     val createdAt = createdAtColumn()
     val importedByLogin = text("imported_by_login").nullable()
+    val previewsEnabled = bool("previews_enabled").default(false)
+    val previewBaseEnvironmentId = javaUUID("preview_base_environment_id").nullable()
     override val primaryKey = PrimaryKey(id)
 
     init {
@@ -254,10 +256,12 @@ object Environments : Table("environments") {
     val branch = text("branch")
     val namespace = text("namespace").uniqueIndex()
     val createdAt = createdAtColumn()
+    val pullRequest = integer("pull_request").nullable()
     override val primaryKey = PrimaryKey(id)
 
     init {
         uniqueIndex(projectId, slug)
+        index("environments_pull_request", true, projectId, pullRequest)
     }
 }
 
@@ -489,4 +493,22 @@ object Invitations : Table("invitations") {
         index("invitations_org", false, orgId)
         index("invitations_created_by", false, createdBy)
     }
+}
+
+/**
+ * @author Dean
+ * @date 9/30/2026
+ */
+object PullRequests : Table("pull_requests") {
+    val projectId = fk("project_id", Projects.id, CASCADE)
+    val number = integer("number")
+    val title = text("title")
+    val headRef = text("head_ref")
+    val headSha = text("head_sha")
+    val fork = bool("fork")
+    val approvedSha = text("approved_sha").nullable()
+    val commentId = long("comment_id").nullable()
+    val error = text("error").nullable()
+    val updatedAt = timestampWithTimeZone("updated_at")
+    override val primaryKey = PrimaryKey(projectId, number)
 }

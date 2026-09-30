@@ -2,6 +2,7 @@ package dev.liftgate.notify
 
 import dev.liftgate.App
 import dev.liftgate.build.GitHubApp
+import dev.liftgate.build.rateLimited
 import dev.liftgate.deploy.Build
 import dev.liftgate.deploy.BuildStatus
 import dev.liftgate.deploy.Deployment
@@ -10,8 +11,6 @@ import dev.liftgate.events.Subject
 import dev.liftgate.events.changed
 import dev.liftgate.events.uuid
 import io.ktor.client.plugins.ClientRequestException
-import io.ktor.http.HttpHeaders
-import io.ktor.http.HttpStatusCode
 import org.slf4j.LoggerFactory
 import java.util.UUID
 
@@ -29,7 +28,7 @@ class CommitStatuses(private val app: App) {
         app.nats.consume(Subject.BUILD_REQUESTED, "api-status-build-requested", app.scope) { post(it.uuid("buildId")) }
         app.nats.consume(Subject.BUILD_COMPLETED, "api-status-build-completed", app.scope) { post(it.uuid("buildId")) }
         app.nats.consume(Subject.DEPLOYMENT_UPDATED, "api-status-deployment-updated", app.scope) {
-            if (it.changed) app.deployments.byId(it.uuid("deploymentId"))?.let { deployment -> post(deployment.buildId) }
+            if (it.changed) app.deployments.byId(it.uuid("deploymentId"))?.let { deployment -> post(deployment.buildId); app.previews.comment(deployment.serviceId) }
         }
     }
 
@@ -47,13 +46,9 @@ class CommitStatuses(private val app: App) {
             val status = GitHubApp.CommitStatus(state, scope.buildUrl(app.config.dashboardUrl, build.id), description.take(MAX_DESCRIPTION), context)
             if (status == posted) return
             try {
-                val project = scope.project
-                val token = github.installationToken(project.installationId, project.repoFullName.substringAfter('/'), mapOf("statuses" to "write", "metadata" to "read"))
-                if (project.importedByLogin?.let { github.canPush(token, project.repoFullName, it) } == false) return
-                github.postStatus(token, project.repoFullName, build.commitSha, status)
+                github.asImporter(scope.project, "statuses" to "write") { github.postStatus(it, scope.project.repoFullName, build.commitSha, status) } ?: return
             } catch (e: ClientRequestException) {
-                val headers = e.response.headers
-                if (e.response.status == HttpStatusCode.TooManyRequests || headers["x-ratelimit-remaining"] == "0" || headers[HttpHeaders.RetryAfter] != null) throw e
+                if (e.rateLimited) throw e
                 return log.warn("GitHub refused the commit status of build {}: {}", build.id, e.response.status)
             }
             posted = status

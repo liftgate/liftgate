@@ -64,7 +64,7 @@ class DatabasesTest {
         services.create(environment.id, spec("cache-rw"))
         assertEquals("slug", assertFailsWith<LiftgateException> { databases.create(environment.id, DatabaseSpec("cache")) }.field)
         databases.create(environment.id, DatabaseSpec("main"))
-        listOf("main-rw", "main-ro", "main-r").forEach { assertEquals("slug", assertFailsWith<LiftgateException> { services.create(environment.id, spec(it)) }.field) }
+        listOf("main-rw", "main-ro", "main-r", "main-any").forEach { assertEquals("slug", assertFailsWith<LiftgateException> { services.create(environment.id, spec(it)) }.field) }
         assertEquals(listOf("main-web", "main"), listOf("main-web", "main").map { services.create(environment.id, spec(it)).slug })
     }
 }

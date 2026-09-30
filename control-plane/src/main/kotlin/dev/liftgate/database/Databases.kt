@@ -32,7 +32,7 @@ import java.time.Instant
 import java.time.ZoneOffset
 import java.util.UUID
 
-private val clusterServices = listOf("-rw", "-ro", "-r")
+private val clusterServices = listOf("-rw", "-ro", "-r", "-any")
 
 fun ResultRow.toDatabase() = Database(
     this[DatabasesTable.id],

@@ -196,6 +196,21 @@ class ReconcilerTest {
     }
 
     @Test
+    fun `a rejected apply that lands after a newer release re-applies the newer one and is superseded`() = runBlocking {
+        server.expect().patch().withPath(routePath + apply).andReturn(422, StatusBuilder().withCode(422).withMessage("the route was rejected").build()).once()
+        acceptAll()
+        val newer = testDeployment.copy(id = UUID.randomUUID(), status = DeploymentStatus.RUNNING, createdAt = testDeployment.createdAt.plusSeconds(1))
+        coEvery { deployments.forService(testService.id, 1) } returnsMany listOf(listOf(testDeployment), listOf(newer))
+        Reconciler(app, client).release(testDeployment.id)
+
+        val labels = sent().filter { it.method == "PATCH" && it.path.startsWith(deploymentPath) }
+            .map { client.kubernetesSerialization.unmarshal(it.utf8Body, KubeDeployment::class.java).metadata.labels[DEPLOYMENT_LABEL] }
+        assertEquals(listOf(testDeployment.id, newer.id).map { it.toString() }, labels)
+        coVerify { deployments.transition(testDeployment.id, DeploymentStatus.SUPERSEDED) }
+        coVerify(exactly = 0) { deployments.transition(testDeployment.id, DeploymentStatus.FAILED, any(), any()) }
+    }
+
+    @Test
     fun `an older deployment is superseded without touching the cluster`() = runBlocking {
         coEvery { deployments.forService(testService.id, 1) } returns listOf(testDeployment.copy(id = UUID.randomUUID()))
         Reconciler(app, client).release(testDeployment.id)

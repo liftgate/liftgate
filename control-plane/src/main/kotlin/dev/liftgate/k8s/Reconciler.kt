@@ -51,6 +51,7 @@ class Reconciler(private val app: App, private val kube: KubernetesClient) {
         } catch (e: KubernetesClientException) {
             if (e.retryable) throw e
             log.warn("release of deployment {} failed", deployment.id, e)
+            if (converge(deployment)) return app.deployments.transition(deployment.id, DeploymentStatus.SUPERSEDED)
             return app.deployments.transition(deployment.id, DeploymentStatus.FAILED, error = e.status?.message ?: e.message)
         }
         if (converge(deployment)) return app.deployments.transition(deployment.id, DeploymentStatus.SUPERSEDED)

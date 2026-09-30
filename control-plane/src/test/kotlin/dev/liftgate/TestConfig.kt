@@ -3,9 +3,14 @@ package dev.liftgate
 import dev.liftgate.cache.Cache
 import dev.liftgate.config.Config
 import dev.liftgate.db.Db
+import dev.liftgate.db.Outbox
+import dev.liftgate.events.Subject
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.serialization.json.jsonPrimitive
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.jdbc.selectAll
 import java.util.Base64
 
 val minimalEnv = mapOf(
@@ -19,3 +24,5 @@ fun testConfig(overrides: Map<String, String> = emptyMap()) = Config.fromEnv(min
 val unlimitedCache = mockk<Cache> { every { allow(any(), any(), any()) } returns true }
 
 val discardingDb = mockk<Db> { coEvery { tx<Any?>(any()) } returns null }
+
+suspend fun Db.teardowns() = tx { Outbox.selectAll().where { Outbox.subject eq Subject.TEARDOWN_REQUESTED.value }.map { it[Outbox.payload].getValue("namespace").jsonPrimitive.content } }

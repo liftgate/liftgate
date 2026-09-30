@@ -6,9 +6,7 @@ import dev.liftgate.auth.Access
 import dev.liftgate.auth.GitConnections
 import dev.liftgate.auth.Sessions
 import dev.liftgate.build.GitHubApp
-import dev.liftgate.db.Outbox
 import dev.liftgate.db.Projects as ProjectsTable
-import dev.liftgate.events.Subject
 import dev.liftgate.org.Limits
 import dev.liftgate.org.Orgs
 import dev.liftgate.org.Plan
@@ -18,6 +16,7 @@ import dev.liftgate.project.EnvironmentKind
 import dev.liftgate.project.Project
 import dev.liftgate.project.Projects
 import dev.liftgate.discardingDb
+import dev.liftgate.teardowns
 import dev.liftgate.testConfig
 import dev.liftgate.unlimitedCache
 import io.ktor.client.request.delete
@@ -35,8 +34,6 @@ import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
-import kotlinx.serialization.json.jsonPrimitive
-import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -119,8 +116,7 @@ class ProjectRoutesTest {
         application { liftgate(app) }
         assertEquals(HttpStatusCode.NoContent, client.delete("/api/v1/environments/${staging.id}") { session() }.status)
         assertEquals(listOf("production"), app.projects.environments(project.id).map { it.slug })
-        val teardowns = db.tx { Outbox.selectAll().where { Outbox.subject eq Subject.TEARDOWN_REQUESTED.value }.map { it[Outbox.payload].getValue("namespace").jsonPrimitive.content } }
-        assertEquals(listOf(staging.namespace), teardowns)
+        assertEquals(listOf(staging.namespace), db.teardowns())
     }
 
     @Test

@@ -14,15 +14,14 @@ import dev.liftgate.config.Signup
 import dev.liftgate.db.Identities
 import dev.liftgate.db.Memberships
 import dev.liftgate.db.Organizations
-import dev.liftgate.db.Outbox
 import dev.liftgate.db.Passkeys
 import dev.liftgate.db.Sessions as SessionsTable
 import dev.liftgate.db.Users
 import dev.liftgate.db.now
-import dev.liftgate.events.Subject
 import dev.liftgate.org.Orgs
 import dev.liftgate.org.insertUser
 import dev.liftgate.project.Projects
+import dev.liftgate.teardowns
 import dev.liftgate.testConfig
 import dev.liftgate.unlimitedCache
 import io.ktor.client.request.HttpRequestBuilder
@@ -43,7 +42,6 @@ import io.micrometer.prometheusmetrics.PrometheusMeterRegistry
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
-import kotlinx.serialization.json.jsonPrimitive
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
@@ -80,8 +78,6 @@ class AccountRoutesTest {
     private suspend fun user(login: String) = db.tx { insertUser(login, null, null, null) }.id
 
     private suspend fun HttpResponse.error() = json.decodeFromString(ErrorBody.serializer(), bodyAsText()).error
-
-    private suspend fun teardowns() = db.tx { Outbox.selectAll().where { Outbox.subject eq Subject.TEARDOWN_REQUESTED.value }.map { it[Outbox.payload].getValue("namespace").jsonPrimitive.content } }
 
     @Test
     fun `a pending user gets account_pending creating an organization and 201 once approved`() = testApplication {
@@ -161,7 +157,7 @@ class AccountRoutesTest {
             assertEquals(listOf("member"), Users.selectAll().map { it[Users.login] })
             assertTrue(Organizations.selectAll().empty())
         }
-        assertEquals(listOf(namespace), teardowns())
+        assertEquals(listOf(namespace), db.teardowns())
         assertEquals(HttpStatusCode.Unauthorized, client.get("/api/v1/me") { session("s") }.status)
 
         session("m", member)
@@ -196,7 +192,7 @@ class AccountRoutesTest {
         Admin(db).run(listOf("unsuspend", "acme"))
         assertEquals(HttpStatusCode.NoContent, delete { session("owner") }.status)
         assertNull(orgs.bySlug("acme"))
-        assertEquals(listOf(namespace), teardowns())
+        assertEquals(listOf(namespace), db.teardowns())
     }
 
     @Test

@@ -59,12 +59,14 @@ private fun pullRequestKey(projectId: UUID, number: Int) = (PullRequests.project
 private fun previewKey(projectId: UUID, number: Int) = (Environments.projectId eq projectId) and (Environments.pullRequest eq number)
 
 fun JdbcTransaction.removePreview(projectId: UUID, number: Int) {
+    PullRequests.select(PullRequests.number).where { pullRequestKey(projectId, number) }.forUpdate().toList()
     deleteEnvironments { previewKey(projectId, number) }
     PullRequests.deleteWhere { pullRequestKey(projectId, number) }
 }
 
 fun JdbcTransaction.removeIdlePreviews() = PullRequests.select(PullRequests.projectId, PullRequests.number)
     .where { PullRequests.updatedAt less now().minusDays(IDLE_DAYS) }
+    .forUpdate()
     .toList()
     .forEach { removePreview(it[PullRequests.projectId], it[PullRequests.number]) }
 
@@ -135,12 +137,15 @@ class Previews(private val app: App) {
         publish(scope.project, pull, render(pull, scope.environment))
     }
 
-    private suspend fun deploy(project: Project, pull: PullRequest) {
-        val environment = try {
-            app.db.tx { Environments.selectAll().where { previewKey(project.id, pull.number) }.singleOrNull()?.toEnvironment() ?: clone(project, pull) }
+    private suspend fun deploy(project: Project, request: PullRequest) {
+        val (pull, environment) = try {
+            app.db.tx {
+                val pull = find(project.id, request.number, lock = true)?.takeIf { it.trusted } ?: return@tx null
+                pull to (Environments.selectAll().where { previewKey(project.id, pull.number) }.singleOrNull()?.toEnvironment() ?: clone(project, pull))
+            } ?: return
         } catch (e: LiftgateException) {
-            app.db.tx { PullRequests.update({ pullRequestKey(project.id, pull.number) }) { it[error] = e.message } }
-            quietly { publish(project, pull, "$HEADING\n\nNo preview was deployed: ${e.message}") }
+            app.db.tx { PullRequests.update({ pullRequestKey(project.id, request.number) }) { it[error] = e.message } }
+            quietly { publish(project, request, "$HEADING\n\nNo preview was deployed: ${e.message}") }
             throw e
         }
         app.services.forEnvironment(environment.id).forEach { service ->
@@ -192,7 +197,8 @@ class Previews(private val app: App) {
         log.warn("the preview comment could not be posted", it)
     }
 
-    private fun find(projectId: UUID, number: Int) = PullRequests.selectAll().where { pullRequestKey(projectId, number) }.singleOrNull()?.toPullRequest()
+    private fun find(projectId: UUID, number: Int, lock: Boolean = false) =
+        PullRequests.selectAll().where { pullRequestKey(projectId, number) }.apply { if (lock) forUpdate() }.singleOrNull()?.toPullRequest()
 
     @Serializable
     data class Status(val missing: List<String>?, val pullRequests: List<PullRequest>)

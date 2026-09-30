@@ -8,13 +8,11 @@ import dev.liftgate.cache.Cache
 import dev.liftgate.config.GitHubConfig
 import dev.liftgate.db.Builds as BuildsTable
 import dev.liftgate.db.Housekeeping
-import dev.liftgate.db.Outbox
 import dev.liftgate.db.PullRequests
 import dev.liftgate.db.now
 import dev.liftgate.deploy.BuildStatus
 import dev.liftgate.deploy.Builds
 import dev.liftgate.domain.Domains
-import dev.liftgate.events.Subject
 import dev.liftgate.http.ErrorBody
 import dev.liftgate.http.WEBHOOKS_PER_MINUTE
 import dev.liftgate.http.json
@@ -29,12 +27,14 @@ import dev.liftgate.project.Environment
 import dev.liftgate.project.EnvironmentKind
 import dev.liftgate.project.PreviewSettings
 import dev.liftgate.project.Projects
+import dev.liftgate.project.PullRequest
 import dev.liftgate.secret.SecretBox
 import dev.liftgate.service.EnvVar
 import dev.liftgate.service.EnvVars
 import dev.liftgate.service.ServiceKind
 import dev.liftgate.service.ServiceSpec
 import dev.liftgate.service.Services
+import dev.liftgate.teardowns
 import dev.liftgate.testConfig
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
@@ -152,10 +152,6 @@ class PreviewsTest {
         service.slug to builds.forService(service.id).filter { it.status == BuildStatus.QUEUED }.map { it.commitSha }
     }
 
-    private suspend fun teardowns() = db.tx {
-        Outbox.selectAll().where { Outbox.subject eq Subject.TEARDOWN_REQUESTED.value }.map { it[Outbox.payload].getValue("namespace").jsonPrimitive.content }
-    }
-
     private fun sent(method: HttpMethod, path: String) = requests.filter { it.method == method && it.url.encodedPath == path }.map { (it.body as TextContent).text }
 
     @Test
@@ -198,9 +194,16 @@ class PreviewsTest {
         val environment = requireNotNull(preview())
         assertEquals(HttpStatusCode.NoContent, deliver(event("closed")).status)
         assertNull(preview())
-        assertEquals(listOf(environment.namespace), teardowns())
+        assertEquals(listOf(environment.namespace), db.teardowns())
         assertEquals(0L, db.tx { PullRequests.selectAll().count() })
         assertTrue("removed" in sent(HttpMethod.Patch, "/repos/acme/shop/issues/comments/7").single())
+    }
+
+    @Test
+    fun `a close that lands between an open's upsert and its deploy leaves no preview behind`() = runBlocking {
+        app.previews.open(project, PullRequest(12, "Add checkout", "checkout", "abc123", false)) { runBlocking { app.previews.close(project, 12) {} } }
+        assertNull(preview())
+        assertEquals(0L, db.tx { PullRequests.selectAll().count() })
     }
 
     @Test
@@ -262,7 +265,7 @@ class PreviewsTest {
         db.tx { PullRequests.update { it[updatedAt] = now().minusDays(15) } }
         Housekeeping(db).runOnce()
         assertNull(preview())
-        assertEquals(listOf(environment.namespace), teardowns())
+        assertEquals(listOf(environment.namespace), db.teardowns())
     }
 
     @Test

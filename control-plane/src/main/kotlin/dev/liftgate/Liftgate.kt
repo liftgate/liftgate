@@ -96,7 +96,7 @@ class App(val config: Config) : AutoCloseable {
         install(UserAgent) { agent = "liftgate" }
     }
     val kube = KubernetesClientBuilder().build()
-    private val limits = Limits(config.plans, config.customDomainsMax)
+    private val limits = Limits(config.plans, config.customDomainsMax, backups = config.databaseBackup != null)
     val orgs = Orgs(db, limits)
     val sessions by lazy { Sessions(db, cache, orgs) }
     val apiTokens by lazy { ApiTokens(db, cache) }

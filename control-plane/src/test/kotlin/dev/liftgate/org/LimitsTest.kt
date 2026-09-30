@@ -184,4 +184,19 @@ class LimitsTest {
         )
         assertEquals(Usage("free", free, 1, 1, 0, 2, 500, 512, 10), orgs.usage(requireNotNull(orgs.bySlug("acme")).id))
     }
+
+    @Test
+    fun `with backups a database also reserves its backup sidecar, so the quota still fits a surge pod`() = runBlocking {
+        val production = production("acme")
+        val backups = Limits(Plans(mapOf("free" to free), "free"), backups = true)
+        val services = Services(db, backups)
+        val web = services.create(production, spec("web", cpuMillis = 250, memoryMb = 768))
+        assertEquals(
+            "the free plan's memory limit is 1024 MB across the organization, and this change needs 1536 MB",
+            refused { Databases(db, backups).create(production, DatabaseSpec("main", cpuMillis = 100, memoryMb = 256)) },
+        )
+        services.update(web.id, spec("web", cpuMillis = 250, memoryMb = 256))
+        Databases(db, backups).create(production, DatabaseSpec("main", cpuMillis = 100, memoryMb = 256))
+        assertEquals(Usage("free", free, 1, 1, 0, 2, 550, 1024, 1), Orgs(db, backups).usage(requireNotNull(orgs.bySlug("acme")).id))
+    }
 }

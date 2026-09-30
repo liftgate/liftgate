@@ -125,8 +125,10 @@ object Resources {
     private const val CRON_START_DEADLINE_SECONDS = 300L
     private const val POSTGRES_PORT = 5432
     private const val INSTANCE_STATUS_PORT = 8000
+    const val SIDECAR_CPU_MILLIS = 200
+    const val SIDECAR_MEMORY_MB = 512
     private val sidecarRequests = mapOf("cpu" to "50m", "memory" to "256Mi", "ephemeral-storage" to "256Mi")
-    private val sidecarLimits = sidecarRequests + mapOf("cpu" to "200m", "memory" to "512Mi")
+    private val sidecarLimits = sidecarRequests + mapOf("cpu" to "${SIDECAR_CPU_MILLIS}m", "memory" to "${SIDECAR_MEMORY_MB}Mi")
     val privateRanges = listOf("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "169.254.0.0/16")
     private val tcpWithoutSmtp = listOf(1 to 24, 26 to 464, 466 to 586, 588 to 2524, 2526 to MAX_PORT)
 

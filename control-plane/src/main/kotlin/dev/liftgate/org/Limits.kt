@@ -13,6 +13,7 @@ import dev.liftgate.db.Users
 import dev.liftgate.db.sql
 import dev.liftgate.domain.DomainKind
 import dev.liftgate.http.planLimit
+import dev.liftgate.k8s.Resources
 import dev.liftgate.service.ServiceKind
 import dev.liftgate.service.ServiceSpec
 import dev.liftgate.service.toService
@@ -34,7 +35,7 @@ private val resources = listOf(Triple("replicas", "replicas", ""), Triple("cpuMi
  * @author Dean
  * @date 9/27/2026
  */
-class Limits(private val plans: Plans = Plans(), private val customDomainsMax: Int? = null) {
+class Limits(private val plans: Plans = Plans(), private val customDomainsMax: Int? = null, private val backups: Boolean = false) {
     fun ownedOrgs(ownerId: UUID) {
         Users.select(Users.id).where { Users.id eq ownerId }.forUpdate().toList()
         val owned = Memberships.selectAll().where { (Memberships.userId eq ownerId) and (Memberships.role eq OrgRole.OWNER.sql) }.count().toInt()
@@ -75,7 +76,7 @@ class Limits(private val plans: Plans = Plans(), private val customDomainsMax: I
     fun database(environmentId: UUID, spec: DatabaseSpec) {
         val orgId = orgOfEnvironment(environmentId)
         val (name, plan) = lock(orgId)
-        reserve(name, plan, footprints(orgId), UUID.randomUUID(), listOf(1, spec.cpuMillis, spec.memoryMb, spec.storageGb))
+        reserve(name, plan, footprints(orgId), UUID.randomUUID(), databaseFootprint(spec.cpuMillis, spec.memoryMb, spec.storageGb))
     }
 
     fun customDomain(serviceId: UUID) {
@@ -118,7 +119,10 @@ class Limits(private val plans: Plans = Plans(), private val customDomainsMax: I
     private fun footprints(orgId: UUID, specs: Map<UUID, ServiceSpec> = specs(orgId)) = specs.mapValues { it.value.footprint } +
         (Databases innerJoin Environments innerJoin Projects).select(Databases.id, Databases.cpuMillis, Databases.memoryMb, Databases.storageGb)
             .where { Projects.orgId eq orgId }
-            .associate { it[Databases.id] to listOf(1, it[Databases.cpuMillis], it[Databases.memoryMb], it[Databases.storageGb]) }
+            .associate { it[Databases.id] to databaseFootprint(it[Databases.cpuMillis], it[Databases.memoryMb], it[Databases.storageGb]) }
+
+    private fun databaseFootprint(cpuMillis: Int, memoryMb: Int, storageGb: Int) =
+        if (backups) listOf(1, cpuMillis + Resources.SIDECAR_CPU_MILLIS, memoryMb + Resources.SIDECAR_MEMORY_MB, storageGb) else listOf(1, cpuMillis, memoryMb, storageGb)
 
     private val ServiceSpec.footprint get() = (if (kind == ServiceKind.CRON) 1 else replicas).let { listOf(it, it * cpuMillis, it * memoryMb, volume?.sizeGb ?: 0) }
 

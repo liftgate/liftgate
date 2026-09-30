@@ -90,3 +90,18 @@ spec:
         {{- end }}
       {{- end }}
     {{- end }}
+    {{- if .Values.inClusterRegistry.enabled }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+          podSelector:
+            matchLabels:
+              {{- include "liftgate.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: registry
+      ports:
+        - protocol: TCP
+          port: 5000
+        - protocol: TCP
+          port: 5001
+    {{- end }}

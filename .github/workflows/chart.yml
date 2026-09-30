@@ -43,8 +43,8 @@ jobs:
           if helm template liftgate charts/liftgate ${{ matrix.args }} --set runtimeClass= 2> render.err; then exit 1; fi
           grep "runtimeClass is empty" render.err
           helm template liftgate charts/liftgate ${{ matrix.args }} --set runtimeClass= --set allowUnsandboxedTenants=true --show-only templates/configmap.yaml | grep 'LIFTGATE_ALLOW_RUNC: "true"'
-          helm template liftgate charts/liftgate ${{ matrix.args }} --set-json 'build.allowedEgressCidrs=[{"cidr":"10.200.0.1/32","ports":[5050]}]' --show-only templates/networkpolicy.yaml \
-            | yq -e 'select(.metadata.name == "build-isolation") | .spec.egress | (length == 3 and .[1].to[0].ipBlock.except[0] == "10.0.0.0/8" and .[2].to[0].ipBlock.cidr == "10.200.0.1/32" and (.[2].ports | length) == 1 and .[2].ports[0].protocol == "TCP" and .[2].ports[0].port == 5050)'
+          helm template liftgate charts/liftgate ${{ matrix.args }} --set-json 'build.allowedEgressCidrs=[{"cidr":"192.168.100.3/32","ports":[5000]}]' --show-only templates/networkpolicy.yaml \
+            | yq -e 'select(.metadata.name == "build-isolation") | .spec.egress | (length == 3 and .[1].to[0].ipBlock.except[0] == "10.0.0.0/8" and .[2].to[0].ipBlock.cidr == "192.168.100.3/32" and (.[2].ports | length) == 1 and .[2].ports[0].protocol == "TCP" and .[2].ports[0].port == 5000)'
       - name: build egress ports, denied cidrs and platform resources
         run: |
           set -o pipefail
@@ -95,6 +95,23 @@ jobs:
             | [.[] | select(.kind == "Deployment" and .metadata.labels["liftgate.dev/role"] == "builder") | .spec.template.spec.containers[0].envFrom[].secretRef.name // empty | $secrets[.].stringData // {} | has("LIFTGATE_SECRETS_MASTER_KEY")]
             | all' rendered.json
           jq -e '.[] | select(.kind == "HTTPRoute" and .metadata.name == "liftgate-control-plane") | .spec.rules[0].matches == [{path: {type: "PathPrefix", value: "/api"}}]' rendered.json
+      - name: in-cluster registry
+        run: |
+          set -o pipefail
+          render() { helm template liftgate charts/liftgate ${{ matrix.args }} --api-versions cilium.io/v2/CiliumNetworkPolicy "$@"; }
+          if render | grep -e liftgate-registry -e "component: registry"; then exit 1; fi
+          on="--set inClusterRegistry.enabled=true --set inClusterRegistry.clusterIP=10.43.0.50 --set registryTokenKey=key --set registryTokenCertificate=certificate --set registryPullPassword=pull --set registryJanitorPassword=janitor"
+          render $on | yq ea -o json '[.]' > rendered.json
+          jq -e '.[] | select(.kind == "ConfigMap" and .metadata.name == "liftgate") | .data | .LIFTGATE_REGISTRY == "10.43.0.50:5000" and .LIFTGATE_REGISTRY_AUTH == "token" and .LIFTGATE_REGISTRY_INSECURE == "true"' rendered.json
+          jq -e '.[] | select(.kind == "Service" and .metadata.name == "liftgate-registry") | .spec.clusterIP == "10.43.0.50"' rendered.json
+          jq -e '.[] | select(.metadata.name == "build-isolation") | .spec.egress[-1] | .to[0].podSelector.matchLabels["app.kubernetes.io/component"] == "registry" and (.ports | map(.port)) == [5000, 5001]' rendered.json
+          jq -e '.[] | select(.kind == "NetworkPolicy" and .metadata.name == "liftgate-registry") | .spec.ingress == [{from: [{namespaceSelector: {matchLabels: {"kubernetes.io/metadata.name": "liftgate-build"}}}], ports: [{protocol: "TCP", port: 5000}, {protocol: "TCP", port: 5001}]}]' rendered.json
+          jq -e '.[] | select(.kind == "CiliumNetworkPolicy") | .spec.ingress == [{fromEntities: ["host", "remote-node"], toPorts: [{ports: [{port: "5000", protocol: "TCP"}, {port: "5001", protocol: "TCP"}]}]}]' rendered.json
+          jq -e '[.[] | select(.kind == "StatefulSet" and .metadata.name == "liftgate-registry") | .spec.template.spec.containers[].image | test("@sha256:")] == [true, true]' rendered.json
+          if render --set inClusterRegistry.enabled=true --set inClusterRegistry.clusterIP=10.43.0.50 2> render.err; then exit 1; fi
+          grep "/registryTokenKey" render.err
+          if render $on --set inClusterRegistry.clusterIP= 2> render.err; then exit 1; fi
+          grep "/inClusterRegistry/clusterIP" render.err
       - name: custom domain edge mode
         run: |
           set -o pipefail

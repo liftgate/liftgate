@@ -19,6 +19,10 @@ Tenant pods run under RuntimeClass {{ .Values.runtimeClass }}. Every node that r
 
 WARNING: allowUnsandboxedTenants is true and runtimeClass is empty, so tenant code runs under runc on the node kernel. Use this only when every tenant is trusted.
 {{- end }}
+{{- if .Values.inClusterRegistry.enabled }}
+
+Builds push to the in-cluster registry at {{ .Values.inClusterRegistry.clusterIP }}:5000. Nodes pull from it as pull with registryPullPassword: add it to /etc/rancher/k3s/registries.yaml on every node and restart k3s, as "In-cluster registry" in the chart README shows.
+{{- end }}
 {{- range .Values.build.allowedEgressCidrs }}
 {{- if kindIs "string" . }}
 

@@ -40,7 +40,7 @@ data:
   {{- with .Values.passkeys.rpName }}
   LIFTGATE_WEBAUTHN_RP_NAME: {{ . | quote }}
   {{- end }}
-  LIFTGATE_REGISTRY: {{ .Values.registry | quote }}
+  LIFTGATE_REGISTRY: {{ .Values.inClusterRegistry.enabled | ternary (printf "%s:5000" .Values.inClusterRegistry.clusterIP) .Values.registry | quote }}
   LIFTGATE_BUILD_IMAGE: {{ .Values.build.image | default (printf "ghcr.io/liftgate/build-image:%s" .Chart.AppVersion) | quote }}
   LIFTGATE_BUILD_NAMESPACE: {{ .Values.build.namespace | quote }}
   {{- if .Values.runtimeClass }}
@@ -53,7 +53,7 @@ data:
   {{- with .Values.nodeSelector }}
   LIFTGATE_NODE_SELECTOR: {{ include "liftgate.nodeSelector" . | quote }}
   {{- end }}
-  {{- if .Values.registryInsecure }}
+  {{- if or .Values.registryInsecure .Values.inClusterRegistry.enabled }}
   LIFTGATE_REGISTRY_INSECURE: "true"
   {{- end }}
   LIFTGATE_GATEWAY_NAMESPACE: {{ include "liftgate.gatewayNamespace" . | quote }}
@@ -98,7 +98,7 @@ data:
   {{- with .Values.workloads.tolerations }}
   LIFTGATE_WORKLOAD_TOLERATIONS: {{ join "," . | quote }}
   {{- end }}
-  {{- with .Values.registryAuth }}
+  {{- with .Values.inClusterRegistry.enabled | ternary "token" .Values.registryAuth }}
   LIFTGATE_REGISTRY_AUTH: {{ . | quote }}
   {{- end }}
   {{- with .Values.registryTokenCertificate }}

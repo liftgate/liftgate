@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 import { useAction, useApi, useRole } from "@/lib/hooks";
 import type { AuthProviders, ProjectTree, Service, ServiceSpec } from "@/lib/types";
 import { formValues, platformHost } from "@/lib/util";
+import { DatabaseCard } from "@/components/database-card";
 import { EnvironmentCard } from "@/components/environment-card";
 import { Loaded } from "@/components/loaded";
 import { NameSlugFields } from "@/components/name-slug-fields";
@@ -97,15 +98,20 @@ export function Overview({ org, projectSlug, onboarding }: { org: string; projec
               action={admin && <Button onClick={() => setDialog("environment")}>New environment</Button>}
             />
           ) : (
-            list.map((environment) => (
-              <EnvironmentCard
-                key={environment.id}
-                environment={environment}
-                services={services.filter((s) => s.environmentId === environment.id)}
-                href={`${href}/${environment.slug}`}
-                onNewService={admin ? () => newService(environment.id) : undefined}
-              />
-            ))
+            list.map((environment) => {
+              const inEnvironment = services.filter((s) => s.environmentId === environment.id);
+              return (
+                <EnvironmentCard
+                  key={environment.id}
+                  environment={environment}
+                  services={inEnvironment}
+                  href={`${href}/${environment.slug}`}
+                  onNewService={admin ? () => newService(environment.id) : undefined}
+                >
+                  <DatabaseCard environment={environment} services={inEnvironment} admin={admin} />
+                </EnvironmentCard>
+              );
+            })
           )
         }
       </Loaded>

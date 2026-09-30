@@ -66,6 +66,7 @@ export function demo(now = Date.now()) {
     healthCheckPath: null,
     internalHost: null,
     watchPaths: [],
+    volume: null,
     url: servesHttp(kind) ? `https://${id}-hello-dean.liftgate.app` : null,
     current: { deploymentId: id, status: "running", replicasReady: 1, commitSha: "4f2c9e1b7d03a58c6e21f94b0d7a3c85e1f6b209", createdAt: ago(10) },
   });

@@ -60,6 +60,7 @@ export type ServiceSpec = {
   startCommand: string | null;
   healthCheckPath: string | null;
   watchPaths: string[];
+  volume: Volume | null;
 };
 
 export type Service = ServiceSpec & { id: string; environmentId: string; internalHost: string | null; url: string | null; current: CurrentDeployment | null };
@@ -176,6 +177,7 @@ export type Plan = {
   buildsPerHour: number | null;
   egressBandwidth: string | null;
   udp: boolean;
+  storageGb: number | null;
 };
 
 export type Usage = {
@@ -187,6 +189,7 @@ export type Usage = {
   replicas: number;
   cpuMillis: number;
   memoryMb: number;
+  storageGb: number;
 };
 
 export type NotificationKind = "slack" | "discord" | "webhook";
@@ -254,3 +257,23 @@ export type PullRequest = {
 };
 
 export type PreviewStatus = { missing: string[] | null; pullRequests: PullRequest[] };
+
+export type Volume = { mountPath: string; sizeGb: number };
+
+export type ServiceLink = { serviceId: string; envName: string };
+
+export type Database = {
+  id: string;
+  environmentId: string;
+  slug: string;
+  storageGb: number;
+  cpuMillis: number;
+  memoryMb: number;
+  restoredFrom: string | null;
+  restoreTarget: string | null;
+  createdAt: string;
+  links: ServiceLink[];
+  ready: boolean;
+};
+
+export type Backup = { name: string; phase: string | null; startedAt: string | null; stoppedAt: string | null };

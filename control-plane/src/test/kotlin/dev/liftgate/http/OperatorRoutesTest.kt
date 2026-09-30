@@ -240,7 +240,8 @@ class OperatorRoutesTest {
         val pending = user("pending", status = UserStatus.PENDING)
         val suspended = user("suspended", status = UserStatus.SUSPENDED)
         val newest = user("newest")
-        listOf(oldest, pending, suspended, newest).forEachIndexed { minutes, id -> db.tx { Users.update({ Users.id eq id }) { it[createdAt] = now().plusMinutes(minutes.toLong()) } } }
+        val fresh = user("fresh", status = UserStatus.PENDING)
+        listOf(oldest, pending, suspended, newest, fresh).forEachIndexed { minutes, id -> db.tx { Users.update({ Users.id eq id }) { it[createdAt] = now().plusMinutes(minutes.toLong()) } } }
         identity(pending, GITHUB, null, false)
         identity(pending, "email", "pending@example.com", true)
         orgs.create("oldest", "Oldest", oldest)
@@ -248,14 +249,18 @@ class OperatorRoutesTest {
         suspend fun page(query: String) = json.decodeFromString<List<OperatorUser>>(client.send(HttpMethod.Get, "/operator/users?$query").bodyAsText()).map { it.user.login }
 
         val all = json.decodeFromString<List<OperatorUser>>(client.send(HttpMethod.Get, "/operator/users").bodyAsText())
-        assertEquals(listOf("pending", "newest", "suspended", "oldest", "dean"), all.map { it.user.login })
-        assertEquals(listOf("email", "github") to 1L, all.first().providers to all.single { it.user.login == "oldest" }.orgs)
-        assertEquals(listOf("pending", "newest"), page("limit=2"))
+        assertEquals(listOf("fresh", "pending", "newest", "suspended", "oldest", "dean"), all.map { it.user.login })
+        assertEquals(listOf("email", "github") to 1L, all[1].providers to all.single { it.user.login == "oldest" }.orgs)
+        assertEquals(listOf("fresh", "pending"), page("limit=2"))
+        assertEquals(listOf("newest", "suspended"), page("limit=2&before=$pending"))
         assertEquals(listOf("suspended", "oldest"), page("limit=2&before=$newest"))
         assertEquals(listOf("newest", "oldest", "dean"), page("status=active"))
         assertEquals(listOf("oldest", "dean"), page("status=active&before=$newest"))
         assertEquals(HttpStatusCode.UnprocessableEntity, client.send(HttpMethod.Get, "/operator/users?status=banned").status)
         assertEquals(HttpStatusCode.UnprocessableEntity, client.send(HttpMethod.Get, "/operator/users?limit=500").status)
-        assertEquals(OperatorSummary(1, listOf("free", "unlimited", "default")), json.decodeFromString<OperatorSummary>(client.send(HttpMethod.Get, "/operator/summary").bodyAsText()))
+        assertEquals(OperatorSummary(2, listOf("free", "unlimited", "default")), json.decodeFromString<OperatorSummary>(client.send(HttpMethod.Get, "/operator/summary").bodyAsText()))
+        assertEquals(listOf("fresh"), page("status=pending&limit=1"))
+        app.admin.approve(fresh.toString())
+        assertEquals(listOf("pending"), page("status=pending&limit=1&before=$fresh"))
     }
 }

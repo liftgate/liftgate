@@ -44,7 +44,7 @@ export function useAction<A extends unknown[]>(fn: (...args: A) => Promise<void>
         setFailure({ error: describe(e), field: e instanceof ApiError ? e.field : undefined });
       }
     });
-  return { pending, error: failure?.error, field: failure?.field, run };
+  return { pending, error: failure?.error, field: failure?.field, run, reset: () => setFailure(undefined) };
 }
 
 export function usePages<T>(path: string, cursor: (item: T) => string | number, size = 50) {

@@ -48,6 +48,8 @@ import org.jetbrains.exposed.v1.core.exists
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.inSubQuery
 import org.jetbrains.exposed.v1.core.innerJoin
+import org.jetbrains.exposed.v1.core.isNotNull
+import org.jetbrains.exposed.v1.core.isNull
 import org.jetbrains.exposed.v1.core.less
 import org.jetbrains.exposed.v1.core.lowerCase
 import org.jetbrains.exposed.v1.core.not
@@ -122,11 +124,11 @@ class Admin(
     suspend fun suspendOrg(slug: String, reason: String, actor: UUID? = null): String {
         val owners = db.tx {
             val org = org(slug)
-            if (org.suspendedAt != null) conflict("$slug is already suspended")
-            Organizations.update({ Organizations.id eq org.id }) {
+            val suspended = Organizations.update({ (Organizations.id eq org.id) and Organizations.suspendedAt.isNull() }) {
                 it[suspendedAt] = now()
                 it[suspendedReason] = reason
             }
+            if (suspended == 0) conflict("$slug is already suspended")
             Builds.update({ (Builds.status eq BuildStatus.QUEUED.sql) and (Builds.serviceId inSubQuery orgServiceIds(org.id)) }) {
                 it[status] = BuildStatus.CANCELLED.sql
                 it[finishedAt] = now()
@@ -141,11 +143,11 @@ class Admin(
 
     suspend fun unsuspendOrg(slug: String, actor: UUID? = null) = db.tx {
         val org = org(slug)
-        if (org.suspendedAt == null) conflict("$slug is not suspended")
-        Organizations.update({ Organizations.id eq org.id }) {
+        val resumed = Organizations.update({ (Organizations.id eq org.id) and Organizations.suspendedAt.isNotNull() }) {
             it[suspendedAt] = null
             it[suspendedReason] = null
         }
+        if (resumed == 0) conflict("$slug is not suspended")
         record(Subject.ORG_UNSUSPENDED, "org.unsuspend", "org", org.id, actor, emptyMap())
         "$slug is active"
     }
@@ -180,7 +182,13 @@ class Admin(
         before?.let { id ->
             val cursor = Users.select(Users.status, Users.createdAt).where { Users.id eq id }.singleOrNull() ?: invalid("before must be a user id", "before")
             val older = older(Users.createdAt, Users.id, cursor[Users.createdAt], id)
-            query.andWhere { if (cursor[Users.status] == UserStatus.PENDING.sql) not(pending) or (pending and older) else not(pending) and older }
+            query.andWhere {
+                when {
+                    status != null -> older
+                    cursor[Users.status] == UserStatus.PENDING.sql -> not(pending) or (pending and older)
+                    else -> not(pending) and older
+                }
+            }
         }
         val rows = query.toList()
         val ids = rows.map { it[Users.id] }
@@ -213,8 +221,7 @@ class Admin(
 
     private suspend fun setStatus(ref: String, from: Set<UserStatus>, to: UserStatus, action: String, actor: UUID?, reason: String? = null): User = db.tx {
         val user = user(ref)
-        if (user.status !in from) conflict("${user.login} is ${user.status.sql}")
-        Users.update({ Users.id eq user.id }) { it[Users.status] = to.sql }
+        if (Users.update({ (Users.id eq user.id) and (Users.status inList from.map { it.sql }) }) { it[Users.status] = to.sql } == 0) conflict("${user.login} is ${user.status.sql}")
         if (to == UserStatus.SUSPENDED) {
             Sessions.deleteWhere { Sessions.userId eq user.id }
             ApiTokens.deleteWhere { ApiTokens.createdBy eq user.id }

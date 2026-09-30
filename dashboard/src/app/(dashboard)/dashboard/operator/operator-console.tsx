@@ -103,6 +103,10 @@ export function OperatorConsole({ view: initial }: { view?: string | string[] })
     done(message);
   });
   if (summary.error?.status === 404) return <NotFound />;
+  const ask = (next: Action) => {
+    confirm.reset();
+    setAction(next);
+  };
   const show = (id: View) => {
     setView(id);
     window.history.replaceState(null, "", `${pathname}?view=${id}`);
@@ -136,7 +140,7 @@ export function OperatorConsole({ view: initial }: { view?: string | string[] })
               label="Operator views"
               onChange={show}
             >
-              {view === "orgs" ? <Organizations key={round} plans={plans} act={setAction} done={done} /> : <Accounts key={`${view}-${round}`} pending={view === "pending"} act={setAction} />}
+              {view === "orgs" ? <Organizations key={round} plans={plans} act={ask} done={done} /> : <Accounts key={`${view}-${round}`} pending={view === "pending"} act={ask} />}
             </Tabs>
           </>
         )}

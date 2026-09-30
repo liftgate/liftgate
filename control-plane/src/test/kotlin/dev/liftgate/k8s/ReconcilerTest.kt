@@ -136,14 +136,18 @@ class ReconcilerTest {
     }
 
     @Test
-    fun `release binds the log reader role to the api account inside the environment namespace`() = runBlocking {
-        every { app.config } returns testConfig(mapOf("LIFTGATE_LOG_READER_ROLE" to "liftgate-log-reader", "LIFTGATE_LOG_READER_ACCOUNT" to "liftgate-api"))
+    fun `release binds the log reader role, and not the database reader, to the api account inside the environment namespace`() = runBlocking {
+        every { app.config } returns testConfig(
+            mapOf("LIFTGATE_LOG_READER_ROLE" to "liftgate-log-reader", "LIFTGATE_DATABASE_READER_ROLE" to "liftgate-database-reader", "LIFTGATE_LOG_READER_ACCOUNT" to "liftgate-api"),
+        )
         val bindingPath = "/apis/rbac.authorization.k8s.io/v1/$namespaced/rolebindings/liftgate-log-reader"
         acceptAll()
         accept(bindingPath, Resources.readerBinding(release, "liftgate-log-reader", "liftgate-api", client.namespace))
         Reconciler(app, client).release(testDeployment.id)
 
-        val binding = client.kubernetesSerialization.unmarshal(sent().single { it.path == bindingPath + apply }.utf8Body, RoleBinding::class.java)
+        val sent = sent()
+        assertEquals(listOf(bindingPath + apply), sent.map { it.path }.filter { "/rolebindings/" in it })
+        val binding = client.kubernetesSerialization.unmarshal(sent.single { it.path == bindingPath + apply }.utf8Body, RoleBinding::class.java)
         assertEquals(release.namespace, binding.metadata.namespace)
         assertEquals("ClusterRole" to "liftgate-log-reader", binding.roleRef.kind to binding.roleRef.name)
         assertEquals(listOf(Triple("ServiceAccount", client.namespace, "liftgate-api")), binding.subjects.map { Triple(it.kind, it.namespace, it.name) })
@@ -360,9 +364,41 @@ class ReconcilerTest {
     }
 
     @Test
-    fun `a database applies its environment, policy, backup store, cluster and schedule, and once deleted loses its cluster`() = runBlocking {
+    fun `a rollback to a deployment from before the volume keeps the volume mounted with one replica`() = runBlocking {
+        acceptAll()
+        val volumed = testRelease(testService.copy(replicas = 1, volume = Volume("/data", 5)))
+        serve(volumed.service)
+        accept("/api/v1/$namespaced/persistentvolumeclaims/api-data", requireNotNull(Resources.volumeClaim(volumed, null)))
+        coEvery { deployments.byId(testDeployment.id) } returns testDeployment.copy(config = testService.spec())
+        Reconciler(app, client).release(testDeployment.id)
+
+        val deployment = client.kubernetesSerialization.unmarshal(sent().single { it.method == "PATCH" && it.path.startsWith(deploymentPath) }.utf8Body, KubeDeployment::class.java)
+        assertEquals("Recreate" to 1, deployment.spec.strategy.type to deployment.spec.replicas)
+        assertEquals("api-data", deployment.spec.template.spec.volumes.single().persistentVolumeClaim.claimName)
+        assertEquals("/data", deployment.spec.template.spec.containers.single().volumeMounts.single().mountPath)
+    }
+
+    @Test
+    fun `a volume its storage class cannot grow keeps its size and the release still applies the workload`() = runBlocking {
+        acceptAll()
+        val volumed = testRelease(testService.copy(replicas = 1, volume = Volume("/data", 5)))
+        serve(volumed.service)
+        val claimPath = "/api/v1/$namespaced/persistentvolumeclaims/api-data"
+        server.expect().get().withPath(claimPath).andReturn(200, requireNotNull(Resources.volumeClaim(volumed.copy(service = volumed.service.copy(volume = Volume("/data", 2))), "standard"))).always()
+        server.expect().patch().withPath(claimPath + apply)
+            .andReturn(403, StatusBuilder().withCode(403).withMessage("only dynamically provisioned pvc can be resized and the storageclass that provisions the pvc must support resize").build()).always()
+        Reconciler(app, client).release(testDeployment.id)
+
+        val patched = paths("PATCH")
+        assertTrue(claimPath in patched && deploymentPath in patched, patched.toString())
+        coVerify(exactly = 0) { deployments.transition(testDeployment.id, DeploymentStatus.FAILED, any(), any()) }
+    }
+
+    @Test
+    fun `a database applies its environment, policy, reader binding, backup store, cluster and schedule, and once deleted loses its cluster`() = runBlocking {
         every { app.config } returns testConfig(
             mapOf(
+                "LIFTGATE_DATABASE_READER_ROLE" to "liftgate-database-reader",
                 "LIFTGATE_DATABASE_BACKUP_DESTINATION" to "s3://tenants",
                 "LIFTGATE_DATABASE_BACKUP_ACCESS_KEY_ID" to "key",
                 "LIFTGATE_DATABASE_BACKUP_SECRET_ACCESS_KEY" to "secret",
@@ -375,6 +411,7 @@ class ReconcilerTest {
         acceptAll()
         val objects = listOf(
             "/apis/networking.k8s.io/v1/$namespaced/networkpolicies/allow-databases",
+            "/apis/rbac.authorization.k8s.io/v1/$namespaced/rolebindings/liftgate-database-reader",
             "/api/v1/$namespaced/secrets/liftgate-backup",
             "/apis/barmancloud.cnpg.io/v1/$namespaced/objectstores/liftgate-backup",
             "/apis/postgresql.cnpg.io/v1/$namespaced/clusters/main",

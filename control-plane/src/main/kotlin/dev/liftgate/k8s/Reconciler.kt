@@ -96,8 +96,9 @@ class Reconciler(private val app: App, private val kube: KubernetesClient) {
     private suspend fun apply(d: DatabaseScope) = withContext(Dispatchers.IO) {
         val config = app.config
         val backup = config.databaseBackup
+        val reader = config.databaseReaderRole?.let { Resources.readerBinding(d, it, config.logReaderAccount, kube.namespace) }
         try {
-            (environment(d) + Resources.databasePolicy(d, backup?.egress.orEmpty()) + listOfNotNull(backup?.let { Resources.backupSecret(d, it) }))
+            (environment(d) + Resources.databasePolicy(d, backup?.egress.orEmpty()) + listOfNotNull(reader, backup?.let { Resources.backupSecret(d, it) }))
                 .forEach { kube.resource(it).apply() }
             listOfNotNull(
                 backup?.let { objectStoreContext to Resources.objectStore(d, it) },
@@ -129,8 +130,10 @@ class Reconciler(private val app: App, private val kube: KubernetesClient) {
     private suspend fun load(deployment: Deployment): Release? {
         val scope = app.services.scope(deployment.serviceId) ?: return null
         val build = app.builds.byId(deployment.buildId) ?: return null
+        val volume = scope.service.volume
+        val spec = deployment.config?.let { it.copy(volume = volume, replicas = if (volume == null) it.replicas else minOf(it.replicas, 1)) }
         return Release(
-            deployment, build, deployment.config?.service(scope.service.id, scope.service.environmentId) ?: scope.service, scope.environment, scope.project, scope.org,
+            deployment, build, spec?.service(scope.service.id, scope.service.environmentId) ?: scope.service, scope.environment, scope.project, scope.org,
             deployment.env?.let(app.envVars::open) ?: app.envVars.list(scope.service.id, reveal = true),
             app.domains.forService(scope.service.id).filter { it.verifiedAt != null },
             app.config.plans.of(scope.org.plan),
@@ -168,14 +171,21 @@ class Reconciler(private val app: App, private val kube: KubernetesClient) {
 
     private fun environment(r: Tenancy): List<HasMetadata> = with(app.config) {
         listOf(Resources.namespace(r), Resources.resourceQuota(r)) + Resources.networkPolicies(r, gatewayNamespace, deniedEgressCidrs) +
-            listOfNotNull(logReaderRole, databaseReaderRole).map { Resources.readerBinding(r, it, logReaderAccount, kube.namespace) }
+            listOfNotNull(logReaderRole?.let { Resources.readerBinding(r, it, logReaderAccount, kube.namespace) })
     }
 
     private fun claim(r: Release): PersistentVolumeClaim? {
         val wanted = Resources.volumeClaim(r, app.config.storageClass) ?: return null
         val live = kube.persistentVolumeClaims().inNamespace(r.namespace).withName(wanted.metadata.name).get() ?: return wanted
         fun PersistentVolumeClaim.size() = spec.resources.requests.getValue("storage").numericalAmount
-        return wanted.takeIf { live.size() < it.size() }?.also { it.spec.storageClassName = live.spec.storageClassName }
+        if (live.size() < wanted.size()) try {
+            wanted.spec.storageClassName = live.spec.storageClassName
+            kube.resource(wanted).apply()
+        } catch (e: KubernetesClientException) {
+            if (e.retryable) throw e
+            log.warn("the volume of service {} keeps its size because it could not grow", r.service.id, e)
+        }
+        return null
     }
 
     private fun stop(r: Release, workload: HasMetadata) {

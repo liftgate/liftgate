@@ -151,6 +151,13 @@ within 180 running "$second"
 test "$(kubectl -n "$ns" get pods --selector liftgate.dev/service=files --field-selector status.phase=Running --output name)" != "$before"
 test "$(kubectl -n "$ns" exec deploy/files -- cat /data/proof)" = kept
 echo "a file written before a redeploy is readable after it"
+want=200 expect --request PATCH --data '{"volume":{"mountPath":"/data","sizeGb":2}}' "http://localhost:8080/api/v1/services/$files"
+grown="$(redeploy "$files")"
+within 180 running "$grown"
+test "$(kubectl -n "$ns" exec deploy/files -- cat /data/proof)" = kept
+class="$(kubectl -n "$ns" get pvc files-data --output jsonpath='{.spec.storageClassName}')"
+expands="$(kubectl get storageclass "$class" --output jsonpath='{.allowVolumeExpansion}')"
+echo "a volume grown in storage class $class (allowVolumeExpansion ${expands:-unset}) still deploys, with a claim of $(kubectl -n "$ns" get pvc files-data --output jsonpath='{.spec.resources.requests.storage}')"
 
 within 180 ready main
 elapsed=$(($(date +%s) - created))
@@ -160,6 +167,9 @@ test "$(kubectl get namespace "$ns" --output jsonpath='{.metadata.labels.pod-sec
 if kubectl -n "$ns" get events --output jsonpath='{range .items[*]}{.message}{"\n"}{end}' | grep -i "violates PodSecurity"; then fail "a database pod violated the restricted profile"; fi
 runtime="$(kubectl -n "$ns" get pod main-1 --output jsonpath='{.spec.runtimeClassName}')"
 echo "database pods run under the restricted profile with runtime class ${runtime:-none, so the node's default runtime}"
+test "$(kubectl auth can-i get secrets --namespace "$ns" --as="system:serviceaccount:$system:liftgate")" = yes
+test "$(kubectl auth can-i get secrets --namespace env-e2e --as="system:serviceaccount:$system:liftgate")" = no || fail "the api reads secrets in an environment without a database"
+echo "the api reads secrets only in environments with a database"
 
 within 180 running "$app_release"
 want=204 expect --request POST --data "{\"serviceId\":\"$app\"}" "http://localhost:8080/api/v1/databases/$database/links"

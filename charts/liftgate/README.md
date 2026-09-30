@@ -232,9 +232,10 @@ Restoring, the point-in-time drill and key escrow are in
 A service can keep one volume, `volume: {mountPath, sizeGb}` in its spec. The reconciler creates
 the PersistentVolumeClaim `<service>-data` (ReadWriteOnce, in `workloads.storageClass` or the
 cluster's default class), mounts it and switches the Deployment to the `Recreate` strategy, so a
-service with a volume runs at most one replica. Redeploys and rollbacks keep the claim. A volume can
-grow when its storage class allows expansion, but cannot shrink or be removed; deleting the service
-deletes the claim, and with the usual `Delete` reclaim policy its data.
+service with a volume runs at most one replica. Redeploys and rollbacks keep the claim mounted,
+including a rollback to a deployment from before the volume was added. A volume grows when its
+storage class allows expansion and otherwise keeps its size; it cannot shrink or be removed.
+Deleting the service deletes the claim, and with the usual `Delete` reclaim policy its data.
 
 `POST /api/v1/environments/<id>/databases` creates a CloudNativePG `Cluster` named after the
 database in the environment's namespace: one instance with the database `app` owned by the role
@@ -264,9 +265,11 @@ without that, database pods reach only public addresses. `POST /api/v1/databases
 in time, and the original keeps running.
 
 The API reads database status, backups and the `-app` Secret through the ClusterRole
-`<fullname>-database-reader`, which the reconciler binds to the API's ServiceAccount in every
-environment namespace. Deleting an environment deletes its namespace with the clusters and their
-volumes; the archives stay in the bucket.
+`<fullname>-database-reader`, which the reconciler binds to the API's ServiceAccount in each
+environment namespace where a database has been created. That role reads every Secret in those
+namespaces, so in the `ha` profile the `api` role can also read `liftgate-backup`, and with it the
+archives of every tenant in the bucket. Deleting an environment deletes its namespace with the
+clusters and their volumes; the archives stay in the bucket.
 
 ## Sign-in providers
 
@@ -512,7 +515,7 @@ other than 2xx is retried with a growing delay for an hour.
 | `databases.backup.enabled` | `false` | WAL archiving and daily base backups of tenant databases, see [Databases and volumes](#databases-and-volumes) |
 | `databases.backup.endpointUrl` | `""` | S3 endpoint; empty means AWS S3 |
 | `databases.backup.destinationPath` | `""` | `s3://<bucket>/<optional prefix>`, one folder per environment namespace below it; required when `enabled` |
-| `databases.backup.accessKeyId`, `databases.backup.secretAccessKey` | `""` | Key for that bucket; required when `enabled`. Only the reconciler gets it |
+| `databases.backup.accessKeyId`, `databases.backup.secretAccessKey` | `""` | Key for that bucket; required when `enabled`. Only the reconciler's Secret carries it, and the reconciler copies it into `liftgate-backup` in each namespace with a database, where the `api` role can read it |
 | `databases.backup.region` | `us-east-1` | Region the store signs for (Garage: its `s3_region`) |
 | `databases.backup.retention` | `30d` | Recovery window: `<n>d`, `<n>w` or `<n>m` |
 | `databases.backup.schedule` | `0 0 3 * * *` | Base backup schedule, cron with a leading seconds field |
@@ -666,7 +669,7 @@ The `ha` profile gives each role its own ServiceAccount and Secret:
 
 | Role | Kubernetes access | Secret values |
 |---|---|---|
-| `api` | Role in the release namespace: leases, endpoints, endpoint slices; in each managed namespace, RoleBindings that the reconciler creates to ClusterRoles `<fullname>-log-reader` (pods and their logs) and `<fullname>-database-reader` (secrets, CloudNativePG clusters and backups) | master key, GitHub App key and webhook secret, OAuth client secrets, SMTP URL, registry signing key, pull password and janitor password |
+| `api` | Role in the release namespace: leases, endpoints, endpoint slices; in each managed namespace, a RoleBinding that the reconciler creates to ClusterRole `<fullname>-log-reader` (pods and their logs), and in each namespace where a database has been created one to `<fullname>-database-reader` (CloudNativePG clusters and backups, and every Secret there, including the tenant database backup key in `liftgate-backup`) | master key, GitHub App key and webhook secret, OAuth client secrets, SMTP URL, registry signing key, pull password and janitor password |
 | `reconciler` | ClusterRole `<fullname>`, the release namespace Role, and `bind` on ClusterRoles `<fullname>-log-reader` and `<fullname>-database-reader` | master key; the tenant database backup key |
 | `builder` | Role `<fullname>-builder` in `build.namespace` (jobs, secrets, pods and their logs), the release namespace Role | master key, to open the service variables it hands to each build; GitHub App key; registry janitor password |
 | `meter` | ClusterRole `<fullname>-meter` (list pods), the release namespace Role | none |

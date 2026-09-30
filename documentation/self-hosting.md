@@ -373,6 +373,24 @@ The Prometheus from step 4 comes with Alertmanager and the alert rules in
 connects it to Discord or ntfy, and [`infra/RUNBOOK.md`](../infra/RUNBOOK.md) says what to do for each
 alert.
 
+### A proxy in front of Liftgate
+
+Every dashboard page and every `/api` response carries `Content-Security-Policy`,
+`Strict-Transport-Security`, `Referrer-Policy` and `X-Content-Type-Options`. A proxy or CDN in front of
+`publicUrl` must pass them through unchanged, neither removing them nor adding its own: a browser
+enforces every `Content-Security-Policy` a response carries, so a second one can block the dashboard.
+Check a page and an API response through the proxy; each of the four headers appears once:
+
+```sh
+curl -s -o /dev/null -D - https://liftgate.example.com/login
+curl -s -o /dev/null -D - https://liftgate.example.com/api/v1/auth/providers
+```
+
+The policy forbids showing the dashboard in a frame, and `Strict-Transport-Security` tells browsers to
+reach the dashboard's and the API's hosts only over HTTPS for two years. A proxy also changes how the
+control plane finds a client's address for rate limits; set `controlPlane.trustedProxies` as Client IP
+in the [chart README](../charts/liftgate/README.md#client-ip) describes.
+
 ## Backups and restore
 
 The chart runs PostgreSQL without backups until you turn them on, and the install notes warn about it.
@@ -475,11 +493,24 @@ From 0.2.0-alpha.2 to 0.2.0-alpha.3:
   App has to accept it. Until then builds work without statuses.
 - Build images move from `<org>/<project>-<service>` to `<org>/<project>/<environment>/<service>`. The
   first build of each service after the upgrade has no layer cache.
-- With `registryAuth: token`, let builds that started before this upgrade finish before the next one.
+- Let builds that started before this upgrade finish before the next one.
 - Apps pick up the new rollout strategy and probes at their next deployment. Deployments made before the
   upgrade stored no settings, so a rollback to one uses the current settings.
 - Run `helm upgrade` on the Prometheus release with the new `infra/prometheus/values.yaml` to give it
   resource requests.
+
+From 0.2.0-alpha.3 to the release after it:
+
+- Run `helm upgrade` on the Prometheus release with the new `infra/prometheus/values.yaml`, as Upgrading
+  in [`infra/prometheus/README.md`](../infra/prometheus/README.md#upgrading) shows, to raise its memory
+  request to 1Gi.
+- The dashboard and the API send security headers. A proxy in front of them must pass them through, as
+  [A proxy in front of Liftgate](#a-proxy-in-front-of-liftgate) says.
+
+Upgrading straight from 0.2.0-alpha.2 or older to a release after 0.2.0-alpha.3 skips the move of build
+images to their new names, so builds that run during the upgrade may need a retry.
+[Upgrading from v0.2.0-alpha.2 or older](../infra/UPGRADE.md#upgrading-from-v020-alpha2-or-older) says
+which ones.
 
 ## Uninstalling
 

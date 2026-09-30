@@ -18,6 +18,7 @@ const routes: { path: string; title: string; parent?: string; setup?: (api: Api)
   { path: "/acme/settings/sso", title: "SAML SSO · acme · Liftgate" },
   { path: "/acme/settings/notifications", title: "Notifications · acme · Liftgate" },
   { path: "/acme/shop", title: "shop · acme · Liftgate", parent: "/acme" },
+  { path: "/acme/shop/settings", title: "Settings · shop · acme · Liftgate", parent: "/acme/shop" },
   ...["deployments", "logs", "metrics", "builds", "env", "domains", "settings"].map((tab) => ({ path: `${servicePath}?tab=${tab}`, title: service, parent: "/acme/shop" })),
   { path: `${servicePath}/missing`, title: "Page not found · Liftgate" },
 ];

@@ -9,6 +9,7 @@ export const environment: Environment = {
   kind: "production",
   branch: "main",
   namespace: "env-7c1e04b9a2d3",
+  pullRequest: null,
 };
 
 export const envVars: EnvVar[] = [

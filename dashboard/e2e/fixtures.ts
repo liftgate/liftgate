@@ -24,7 +24,7 @@ const sha = "4f2a9c1e7b3d5a6f8e9c0b1a2d3e4f5a6b7c8d9e";
 
 export const user: User = { id: "user-ada", login: "ada", name: "Ada Lovelace", email: "ada@example.com", avatarUrl: null, status: "active" };
 export const org: Organization = { id: "org-acme", slug: "acme", name: "Acme", plan: "free", suspendedAt: null, suspendedReason: null, role: "owner" };
-export const project: Project = { id: "project-shop", orgId: org.id, slug: "shop", name: "Shop", repoFullName: "acme/shop", repoDefaultBranch: "main", installationId: 1 };
+export const project: Project = { id: "project-shop", orgId: org.id, slug: "shop", name: "Shop", repoFullName: "acme/shop", repoDefaultBranch: "main", installationId: 1, previewsEnabled: false, previewBaseEnvironmentId: null };
 export const environment: Environment = {
   id: "environment-production",
   projectId: project.id,
@@ -33,6 +33,7 @@ export const environment: Environment = {
   kind: "production",
   branch: "main",
   namespace: "env-acme-shop",
+  pullRequest: null,
 };
 export const build: Build = {
   id: "build-1",
@@ -181,6 +182,7 @@ export class Api {
       "GET /orgs/acme/sso": failure(404, "not_found", "organization has no sso connection"),
       "GET /orgs/acme/sso/sp": { entityId: "https://liftgate.example.com/api/v1/auth/sso/acme/metadata", acsUrl: "https://liftgate.example.com/api/v1/auth/sso/acme/acs" },
       "GET /orgs/acme/projects/shop/tree": tree,
+      [`GET /projects/${project.id}/previews`]: { missing: [], pullRequests: [] },
       [`GET /services/${service.id}/deployments`]: [deployment],
       [`GET /services/${service.id}/builds`]: [build],
       [`GET /services/${service.id}/env`]: storedEnv,

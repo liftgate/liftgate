@@ -39,3 +39,9 @@ deniedEgressCidrs:
 plans:
   rollout:
     cronTimeoutSeconds: 20
+  data:
+    cpuMillis: 4000
+    memoryMb: 4096
+    replicas: 10
+    ephemeralMb: 1024
+    storageGb: 10

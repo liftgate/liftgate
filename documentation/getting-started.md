@@ -12,8 +12,29 @@ there is one, and with [Railpack](https://railpack.com) otherwise. Your app has 
 the `PORT` environment variable, 8080 unless you set another; the [runtime contract](runtime-contract.md)
 lists everything else a container can rely on.
 
-To try Liftgate with a known-good app, fork [liftgate/hello](https://github.com/liftgate/hello), a
-small Node server built from its Dockerfile.
+To try Liftgate with a known-good app, create a repository that holds these two files. It has no
+Dockerfile, so Railpack detects Node, runs `npm install` and starts the server with `npm run start`.
+
+`package.json`:
+
+```json
+{
+  "scripts": {
+    "start": "node server.js"
+  }
+}
+```
+
+`server.js`:
+
+```js
+require("node:http")
+  .createServer((request, response) => response.end("hello from liftgate\n"))
+  .listen(process.env.PORT);
+```
+
+For a Dockerfile build instead, fork [liftgate/hello](https://github.com/liftgate/hello), a small Node
+server built from its Dockerfile.
 
 ## 1. Sign in
 

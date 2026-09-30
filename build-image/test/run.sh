@@ -11,7 +11,7 @@ token="secret-$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
 greeting="Hello from build time $$"
 
 cleanup() {
-  docker rm -f "$run-registry" "$run-next" > /dev/null 2>&1 || true
+  docker rm -f "$run-registry" "$run-next" "$run-hello" > /dev/null 2>&1 || true
   docker network rm "$run" > /dev/null 2>&1 || true
   rm -rf "$work"
 }
@@ -73,5 +73,9 @@ case "$page" in
   *"$greeting"*) ;;
   *) echo "the Next.js page does not render NEXT_PUBLIC_GREETING: $page" >&2; exit 1 ;;
 esac
+
+build hello hello --env LIFTGATE_BUILD_STRATEGY=auto
+docker run --detach --name "$run-hello" --user 1000:1000 --cap-drop ALL --env PORT=8080 --publish 127.0.0.1::8080 "$registry/test/hello:latest" > /dev/null
+expect "the getting-started sample" "$(curl --silent --show-error --retry 60 --retry-all-errors --retry-delay 1 "http://$(docker port "$run-hello" 8080/tcp | head -n 1)/")" "hello from liftgate"
 
 echo "build variables reach Railpack and Dockerfile builds, and secrets stay out of the image"

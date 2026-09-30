@@ -12,7 +12,7 @@ const columns: { title: string; note: string; rows: [string, ReactNode][]; actio
     title: "Liftgate Cloud",
     note: "Run by us",
     rows: [
-      ["Price", <>{strong("Free while Liftgate is pre-alpha.")} No card and no billing.</>],
+      ["Price", <>{strong("Free during the beta.")} No card and no billing.</>],
       ["Web addresses", "A liftgate.app address with HTTPS for every web and static service."],
       ["Sign-in", "GitHub, passkeys and SAML single sign-on."],
       ["New accounts", "Approved by hand. You can sign in right away and deploy once approved."],

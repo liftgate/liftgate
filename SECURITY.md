@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Liftgate is pre-alpha. Security fixes land on `main` and in the next tagged release; earlier tags are not patched.
+Liftgate is in public beta. Security fixes land on `main` and in the next tagged release; earlier tags are not patched.
 
 ## Reporting a vulnerability
 

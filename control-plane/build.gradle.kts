@@ -26,6 +26,7 @@ dependencies {
     implementation(libs.ktor.server.cors)
     implementation(libs.ktor.server.body.limit)
     implementation(libs.ktor.server.metrics.micrometer)
+    implementation(libs.ktor.server.default.headers)
     implementation(libs.ktor.serialization.kotlinx.json)
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.cio)

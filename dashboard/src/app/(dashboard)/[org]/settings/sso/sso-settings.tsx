@@ -11,6 +11,7 @@ import { StatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { CopyField } from "@/components/ui/copy-field";
+import { ConfirmDialog } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Field, FormError, Input, Textarea } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -29,6 +30,7 @@ export function SsoSettings({ org }: { org: string }) {
     }),
   );
   const [saved, setSaved] = useState(false);
+  const [removing, setRemoving] = useState(false);
   const save = useAction(async (form: HTMLFormElement) => {
     setSaved(false);
     const v = formValues(form);
@@ -46,8 +48,8 @@ export function SsoSettings({ org }: { org: string }) {
     connection.reload();
   });
   const remove = useAction(async () => {
-    if (!window.confirm("Remove SAML SSO? Members can no longer sign in through your identity provider.")) return;
     await api(path, { method: "DELETE" });
+    setRemoving(false);
     setSaved(false);
     connection.reload();
   });
@@ -107,7 +109,7 @@ export function SsoSettings({ org }: { org: string }) {
                     className="font-mono text-xs"
                   />
                 </Field>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-4 sm:grid-cols-2">
                   <Field label="Email domains" hint="Separate with commas, for example acme.com, acme.io">
                     <Input name="emailDomains" required defaultValue={current?.emailDomains.join(", ")} className="font-mono" />
                   </Field>
@@ -170,21 +172,26 @@ export function SsoSettings({ org }: { org: string }) {
                   title={<span className="text-danger">Remove SSO</span>}
                   description="Deletes the connection to your identity provider."
                   actions={
-                    <Button variant="danger" pending={remove.pending} onClick={() => remove.run()}>
+                    <Button variant="danger" onClick={() => setRemoving(true)}>
                       Remove SSO
                     </Button>
                   }
                 />
-                {remove.error && (
-                  <div className="px-6 py-4">
-                    <FormError message={remove.error} />
-                  </div>
-                )}
               </Card>
             )}
           </>
         )}
       </Loaded>
+      <ConfirmDialog
+        open={removing}
+        title="Remove SSO"
+        pending={remove.pending}
+        error={remove.error}
+        onConfirm={() => remove.run()}
+        onClose={() => setRemoving(false)}
+      >
+        Members can no longer sign in through your identity provider.
+      </ConfirmDialog>
     </div>
   );
 }

@@ -10,7 +10,7 @@ import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button, Spinner } from "@/components/ui/button";
 import { CopyField } from "@/components/ui/copy-field";
-import { Dialog } from "@/components/ui/dialog";
+import { ConfirmDialog, Dialog } from "@/components/ui/dialog";
 import { Field, FormError, Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { TableSkeleton } from "@/components/ui/skeleton";
@@ -161,29 +161,22 @@ export function Members({ org }: { org: string }) {
           </form>
         )}
       </Dialog>
-      <Dialog open={!!removing} title={leaving ? `Leave ${org}` : "Remove member"} onClose={() => setRemoving(undefined)}>
-        {removing && (
-          <div className="flex flex-col gap-4">
-            <p className="text-sm text-graphite-200">
-              {leaving ? (
-                "You lose access to its projects and your API tokens for it stop working. An admin can invite you back."
-              ) : (
-                <>
-                  <span className="font-medium text-white">{removing.user.login}</span> loses access to {org}, and the API tokens they created for it stop
-                  working.
-                </>
-              )}
-            </p>
-            <FormError message={remove.error} />
-            <div className="flex justify-end gap-2">
-              <Button onClick={() => setRemoving(undefined)}>Cancel</Button>
-              <Button variant="danger" pending={remove.pending} onClick={() => remove.run(removing)}>
-                {leaving ? "Leave organization" : "Remove member"}
-              </Button>
-            </div>
-          </div>
+      <ConfirmDialog
+        open={!!removing}
+        title={leaving ? `Leave ${org}` : "Remove member"}
+        pending={remove.pending}
+        error={remove.error}
+        onConfirm={() => removing && remove.run(removing)}
+        onClose={() => setRemoving(undefined)}
+      >
+        {leaving ? (
+          "You lose access to its projects and your API tokens for it stop working. An admin can invite you back."
+        ) : (
+          <>
+            <span className="font-medium text-white">{removing?.user.login}</span> loses access to {org}, and the API tokens they created for it stop working.
+          </>
         )}
-      </Dialog>
+      </ConfirmDialog>
     </div>
   );
 }

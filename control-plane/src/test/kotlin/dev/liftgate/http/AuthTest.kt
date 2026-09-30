@@ -55,6 +55,17 @@ class AuthTest {
     }
 
     @Test
+    fun `api responses forbid framing and sniffing and name no server version`() = testApplication {
+        application { liftgate(app) }
+        val headers = client.get("/api/v1/me").headers
+        assertEquals("default-src 'none'; frame-ancestors 'none'", headers["Content-Security-Policy"])
+        assertEquals("nosniff", headers["X-Content-Type-Options"])
+        assertEquals("strict-origin-when-cross-origin", headers["Referrer-Policy"])
+        assertEquals("max-age=63072000", headers[HttpHeaders.StrictTransportSecurity])
+        assertEquals("Liftgate", headers[HttpHeaders.Server])
+    }
+
+    @Test
     fun `a session cookie resolves the user`() = testApplication {
         val user = User(UUID.randomUUID(), "dean", "Dean", null, "https://avatars.example/dean")
         coEvery { sessions.resolve("session-1") } returns user

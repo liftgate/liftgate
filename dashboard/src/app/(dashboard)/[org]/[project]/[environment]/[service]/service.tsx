@@ -26,7 +26,7 @@ const tabs = [
   { id: "logs", label: "Logs" },
   { id: "metrics", label: "Metrics" },
   { id: "builds", label: "Builds" },
-  { id: "env", label: "Environment variables" },
+  { id: "env", label: "Variables" },
   { id: "domains", label: "Domains" },
   { id: "settings", label: "Settings" },
 ] as const;

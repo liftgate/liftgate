@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Button } from "./button";
+import { Field, FormError, Input } from "./input";
 
 export function Dialog({ open, title, onClose, children }: { open: boolean; title: string; onClose: () => void; children: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -14,7 +16,7 @@ export function Dialog({ open, title, onClose, children }: { open: boolean; titl
     <dialog
       ref={ref}
       onClose={onClose}
-      className="m-auto w-full max-w-lg rounded-lg border border-graphite-700 bg-graphite-900 p-0 text-white shadow-2xl backdrop:bg-black/60"
+      className="inset-x-4 m-auto w-auto max-w-lg rounded-lg border border-graphite-700 bg-graphite-900 p-0 text-white shadow-2xl backdrop:bg-black/60"
     >
       {open && (
         <div className="flex flex-col gap-6 p-6">
@@ -23,5 +25,56 @@ export function Dialog({ open, title, onClose, children }: { open: boolean; titl
         </div>
       )}
     </dialog>
+  );
+}
+
+export function ConfirmDialog({
+  open,
+  title,
+  typed,
+  pending,
+  error,
+  onConfirm,
+  onClose,
+  children,
+}: {
+  open: boolean;
+  title: string;
+  typed?: string;
+  pending: boolean;
+  error?: string;
+  onConfirm: () => void;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  const [value, setValue] = useState("");
+  const close = () => {
+    setValue("");
+    onClose();
+  };
+  return (
+    <Dialog open={open} title={title} onClose={close}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          onConfirm();
+        }}
+        className="flex flex-col gap-4"
+      >
+        <p className="text-sm text-graphite-200">{children}</p>
+        {typed && (
+          <Field label={`Type ${typed} to confirm`}>
+            <Input value={value} onChange={(e) => setValue(e.target.value)} required autoComplete="off" autoFocus className="font-mono" />
+          </Field>
+        )}
+        <FormError message={error} />
+        <div className="flex justify-end gap-2">
+          <Button onClick={close}>Cancel</Button>
+          <Button type="submit" variant="danger" pending={pending} disabled={!!typed && value !== typed}>
+            {title}
+          </Button>
+        </div>
+      </form>
+    </Dialog>
   );
 }

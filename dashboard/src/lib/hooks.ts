@@ -60,7 +60,7 @@ export function usePolling(active: boolean, fn: () => void, ms = 5000) {
   const tick = useEffectEvent(fn);
   useEffect(() => {
     if (!active) return;
-    const id = setInterval(tick, ms);
+    const id = setInterval(() => document.hidden || tick(), ms);
     return () => clearInterval(id);
   }, [active, ms]);
 }

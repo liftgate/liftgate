@@ -14,7 +14,8 @@ import { Select } from "./ui/select";
 
 export function Nav({ actions }: { actions?: ReactNode }) {
   const router = useRouter();
-  const onLogin = usePathname().startsWith("/login");
+  const pathname = usePathname();
+  const onLogin = pathname.startsWith("/login");
   const { org, project, environment, service } = useParams<{ org?: string; project?: string; environment?: string; service?: string }>();
   const inApp = !onLogin && !actions;
   const me = useApi<User>(inApp && "/me");
@@ -27,31 +28,32 @@ export function Nav({ actions }: { actions?: ReactNode }) {
   const suspended = orgs.data?.find((o) => o.slug === org && o.suspendedAt);
   const segments = [org, project, service && `${environment}/${service}`].filter((s): s is string => !!s);
   const crumbs = segments.map((label, i) => ({ label, href: `/${segments.slice(0, i + 1).join("/")}` }));
+  const parent = crumbs.findLast((crumb) => crumb.href !== pathname);
   return (
     <header className="border-b border-graphite-700 bg-graphite-900">
-      <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-6 px-6">
+      <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-6 sm:gap-6">
         <nav className="flex min-w-0 items-center gap-2 text-sm">
-          <Link href={inApp ? "/dashboard" : "/"} className="flex items-center gap-2 font-semibold">
+          <Link href={inApp ? "/dashboard" : "/"} className="flex shrink-0 items-center gap-2 font-semibold">
             <Mark />
-            Liftgate
+            <span className={crumbs.length ? "max-sm:sr-only" : undefined}>Liftgate</span>
           </Link>
           {crumbs.map((crumb) => (
-            <span key={crumb.href} className="flex min-w-0 items-center gap-2">
+            <span key={crumb.href} className={`flex min-w-0 items-center gap-2 ${crumb === parent ? "" : "max-sm:hidden"}`}>
               <span className="text-graphite-600">/</span>
-              <Link href={crumb.href} className="truncate text-graphite-200 hover:text-white">
+              <Link href={crumb.href} className="min-w-0 truncate text-graphite-200 hover:text-white">
                 {crumb.label}
               </Link>
             </span>
           ))}
         </nav>
         {!onLogin && (
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
             {org && orgs.data && (
               <Select
                 aria-label="Organization"
                 value={org}
                 onChange={(e) => (e.target.value ? router.push(`/${e.target.value}`) : setCreating(true))}
-                className="max-w-40"
+                className="max-w-24 sm:max-w-40"
               >
                 {orgs.data.map((o) => (
                   <option key={o.slug} value={o.slug}>

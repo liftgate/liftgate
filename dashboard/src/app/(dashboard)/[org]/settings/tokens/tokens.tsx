@@ -10,7 +10,7 @@ import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CopyField } from "@/components/ui/copy-field";
-import { Dialog } from "@/components/ui/dialog";
+import { ConfirmDialog, Dialog } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Field, FormError, Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -136,22 +136,16 @@ export function Tokens({ org }: { org: string }) {
           </form>
         )}
       </Dialog>
-      <Dialog open={!!revoking} title="Revoke token" onClose={() => setRevoking(undefined)}>
-        {revoking && (
-          <div className="flex flex-col gap-4">
-            <p className="text-sm text-graphite-200">
-              Anything still using <span className="font-medium text-white">{revoking.name}</span> is rejected from its next request. This cannot be undone.
-            </p>
-            <FormError message={revoke.error} />
-            <div className="flex justify-end gap-2">
-              <Button onClick={() => setRevoking(undefined)}>Cancel</Button>
-              <Button variant="danger" pending={revoke.pending} onClick={() => revoke.run(revoking)}>
-                Revoke token
-              </Button>
-            </div>
-          </div>
-        )}
-      </Dialog>
+      <ConfirmDialog
+        open={!!revoking}
+        title="Revoke token"
+        pending={revoke.pending}
+        error={revoke.error}
+        onConfirm={() => revoking && revoke.run(revoking)}
+        onClose={() => setRevoking(undefined)}
+      >
+        Anything still using <span className="font-medium text-white">{revoking?.name}</span> is rejected from its next request. This cannot be undone.
+      </ConfirmDialog>
     </div>
   );
 }

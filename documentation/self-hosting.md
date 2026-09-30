@@ -58,7 +58,7 @@ Let's Encrypt checks the first name over HTTP before it issues the dashboard's c
 Every build pushes an image to a container registry, and k3s pulls it from there to run the app. Step 7
 turns on the registry the chart runs inside the cluster:
 
-- It answers at `10.43.0.50`, an address the chart pins in the range k3s gives Services
+- It answers at `10.43.0.50`, a fixed address that step 7 gives it in the range k3s uses for Services
   (`10.43.0.0/16`), so k3s pulls from it without the cluster's DNS. Port 5000 is the registry, and port
   5001 passes login requests to the control plane.
 - Each build gets a login for its own images only, k3s pulls with a login that can only read, and the

@@ -108,6 +108,7 @@ jobs:
           jq -e '.[] | select(.kind == "NetworkPolicy" and .metadata.name == "liftgate-registry") | .spec.ingress == [{from: [{namespaceSelector: {matchLabels: {"kubernetes.io/metadata.name": "liftgate-build"}}}], ports: [{protocol: "TCP", port: 5000}, {protocol: "TCP", port: 5001}]}]' rendered.json
           jq -e '.[] | select(.kind == "CiliumNetworkPolicy") | .spec.ingress == [{fromEntities: ["host", "remote-node"], toPorts: [{ports: [{port: "5000", protocol: "TCP"}, {port: "5001", protocol: "TCP"}]}]}]' rendered.json
           jq -e '[.[] | select(.kind == "StatefulSet" and .metadata.name == "liftgate-registry") | .spec.template.spec.containers[].image | test("@sha256:")] == [true, true]' rendered.json
+          if render $on --set build.registryCredentials=config | grep "name: registry-credentials"; then exit 1; fi
           if render --set inClusterRegistry.enabled=true --set inClusterRegistry.clusterIP=10.43.0.50 2> render.err; then exit 1; fi
           grep "/registryTokenKey" render.err
           if render $on --set inClusterRegistry.clusterIP= 2> render.err; then exit 1; fi
@@ -183,12 +184,45 @@ jobs:
       - name: k3s as in infra/k3s/install.md, without the podman CNI config the runner ships
         run: |
           sudo rm -f /etc/cni/net.d/87-podman-bridge.conflist
+          sudo mkdir -p /etc/rancher/k3s
+          printf 'mirrors:\n  "10.43.0.50:5000":\n    endpoint:\n      - "http://10.43.0.50:5000"\n' | sudo tee /etc/rancher/k3s/registries.yaml
           curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.34.8+k3s1 INSTALL_K3S_EXEC='server --flannel-backend=none --disable-network-policy --disable-kube-proxy --disable=traefik --disable=servicelb --write-kubeconfig-mode=644' sh -
           for attempt in $(seq 60); do
             kubectl get nodes -o jsonpath='{.items[*].status.conditions[?(@.type=="Ready")].message}' | grep -q NetworkReady=false && break
             sleep 2
           done
       - run: sh infra/install.sh
+      - name: k3s pulls through registries.yaml from a registry at a fixed ClusterIP, as documentation/self-hosting.md sets it up
+        run: |
+          kubectl create namespace registry-pull
+          kubectl -n registry-pull apply -f - <<EOF
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: registry
+            labels:
+              app: registry
+          spec:
+            containers:
+              - name: registry
+                image: registry:2.8.3@sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373
+          ---
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: registry
+          spec:
+            clusterIP: 10.43.0.50
+            selector:
+              app: registry
+            ports:
+              - port: 5000
+          EOF
+          kubectl -n registry-pull wait pod/registry --for=condition=Ready --timeout=2m
+          skopeo copy --dest-tls-verify=false docker://busybox:1.36 docker://10.43.0.50:5000/busybox:1.36
+          kubectl -n registry-pull run pulled --image=10.43.0.50:5000/busybox:1.36 --restart=Never --command -- sleep 600
+          kubectl -n registry-pull wait pod/pulled --for=condition=Ready --timeout=2m
+          kubectl delete namespace registry-pull
       - name: a second run changes no release
         run: |
           before="$(helm list --all-namespaces --output json)"

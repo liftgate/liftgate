@@ -28,33 +28,18 @@ expect() {
   [ "$2" = "$3" ] || { echo "$1: expected $3, got $2" >&2; exit 1; }
 }
 
-probe() {
-  kubectl -n $ns exec probe -- "$@"
-}
-
 token_status() {
   probe curl -s -o /dev/null -w '%{http_code}' -u "$1:$2" "$realm?service=$registry&scope=repository:$3"
 }
 
-token() {
-  probe curl -sS --fail -u "$1:$2" "$realm?service=$registry&scope=repository:$3" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p'
-}
+. e2e/registry.sh
 
-registry_status() {
-  probe curl -s -o /dev/null -w '%{http_code}' -X "$1" -H "Authorization: Bearer $3" "http://$registry/v2/$2"
-}
-
-. e2e/build-pod.sh
-
-openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=liftgate-registry-token \
-  -keyout "$work/token.key" -out "$work/token.crt" 2> /dev/null
+signing_key
 docker buildx build --load --quiet --tag liftgate/build-image:e2e build-image
 kind load docker-image --name liftgate liftgate/build-image:e2e
 
 kubectl create namespace $ns
 kubectl -n $ns create configmap registry --from-file=config.yml=infra/registry/config.yml --from-file=token.crt="$work/token.crt"
-printf '[registry."%s"]\n  http = true\n' "$registry" > "$work/buildkitd.toml"
-kubectl -n $ns create configmap buildkit --from-file=buildkitd.toml="$work/buildkitd.toml"
 kubectl apply -f - <<EOF
 apiVersion: apps/v1
 kind: Deployment
@@ -107,25 +92,7 @@ helm upgrade liftgate charts/liftgate --namespace liftgate-system --reuse-values
 kubectl -n liftgate-system rollout status deployment/liftgate-control-plane --timeout=10m
 kubectl -n $ns rollout status deployment/registry --timeout=5m
 
-for build in $own $rival; do
-  kubectl apply -f - <<EOF
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: build-$build
-  namespace: liftgate-build
-  labels:
-    liftgate.dev/build: $build
-spec:
-  suspend: true
-  template:
-    spec:
-      restartPolicy: Never
-      containers:
-        - name: build
-          image: busybox:1.36
-EOF
-done
+for build in $own $rival; do job $build; done
 
 kubectl -n liftgate-system exec -i liftgate-postgres-1 -c postgres -- psql --username postgres --dbname liftgate --set ON_ERROR_STOP=1 \
   --set own="$own_password" --set rival="$rival_password" <<'EOF'

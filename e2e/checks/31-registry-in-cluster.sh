@@ -20,7 +20,7 @@ janitor_password=$(openssl rand -hex 16)
 node=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
 work=$(mktemp -d)
 
-. e2e/build-pod.sh
+. e2e/registry.sh
 
 report() {
   code=$?
@@ -33,7 +33,7 @@ report() {
     docker exec liftgate-control-plane journalctl -u containerd --no-pager -n 40 || true
   fi
   kubectl -n $system delete httproute registry-edge --ignore-not-found
-  kubectl -n $ns delete pod registry-probe --ignore-not-found --wait=false
+  kubectl -n $ns delete pod probe --ignore-not-found --wait=false
   kubectl -n default delete pod registry-outsider --ignore-not-found --wait=false
   rm -rf "$work"
   exit "$code"
@@ -47,18 +47,6 @@ expect() {
 
 sql() {
   kubectl -n $system exec -i liftgate-postgres-1 -c postgres -- psql --username postgres --dbname liftgate --set ON_ERROR_STOP=1 "$@"
-}
-
-probe() {
-  kubectl -n $ns exec registry-probe -- "$@"
-}
-
-token() {
-  probe curl -sS --fail --retry 10 --retry-delay 1 -u "$1:$2" "$realm?service=$registry&scope=repository:$3" | jq -er .token
-}
-
-status() {
-  probe curl -s -o /dev/null -w '%{http_code}' -X "$1" -H "Authorization: Bearer $3" "http://$registry/v2/$2"
 }
 
 blob() {
@@ -87,8 +75,7 @@ docker exec -i liftgate-control-plane sh -c "mkdir -p /etc/containerd/certs.d/$r
 EOF
 for attempt in $(seq 30); do docker exec liftgate-control-plane crictl info > /dev/null 2>&1 && break; sleep 2; done
 
-openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=liftgate-registry-token \
-  -keyout "$work/token.key" -out "$work/token.crt" 2> /dev/null
+signing_key
 helm upgrade liftgate charts/liftgate --namespace $system --reuse-values \
   --set inClusterRegistry.enabled=true --set inClusterRegistry.clusterIP="$address" \
   --set registryPullPassword="$pull_password" --set registryJanitorPassword="$janitor_password" \
@@ -96,9 +83,9 @@ helm upgrade liftgate charts/liftgate --namespace $system --reuse-values \
 kubectl -n $system rollout status statefulset/liftgate-registry --timeout=5m
 kubectl -n $system rollout status deployment/liftgate-control-plane --timeout=10m
 
-kubectl -n $ns run registry-probe --image=liftgate/build-image:e2e --image-pull-policy=Never --restart=Never --command -- sleep 1800
+kubectl -n $ns run probe --image=liftgate/build-image:e2e --image-pull-policy=Never --restart=Never --command -- sleep 1800
 kubectl -n default run registry-outsider --image=busybox:1.36 --restart=Never --command -- sleep 1800
-kubectl -n $ns wait pod/registry-probe --for=condition=Ready --timeout=2m
+kubectl -n $ns wait pod/probe --for=condition=Ready --timeout=2m
 kubectl -n default wait pod/registry-outsider --for=condition=Ready --timeout=2m
 
 pod=$(kubectl -n $system get pod liftgate-registry-0 -o jsonpath='{.status.podIP}')
@@ -145,28 +132,10 @@ insert into builds (id, service_id, commit_sha, branch, status, started_at, regi
     ('$own', '$service', '$shipped', 'main', 'running', now(),
      '$(printf %s "$own_password" | openssl dgst -sha256 -binary | base64 | tr '+/' '-_' | tr -d '=')');
 EOF
-kubectl apply -f - <<EOF
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: build-$own
-  namespace: $ns
-  labels:
-    liftgate.dev/build: $own
-spec:
-  suspend: true
-  template:
-    spec:
-      restartPolicy: Never
-      containers:
-        - name: build
-          image: busybox:1.36
-EOF
+job $own
 
-printf '[registry."%s"]\n  http = true\n' "$registry" > "$work/buildkitd.toml"
 printf 'FROM busybox:1.36\nRUN head -c 64 /dev/urandom > /doomed\n' > "$work/doomed"
 printf 'FROM busybox:1.36\nRUN mkdir /www && echo in-cluster-registry > /www/index.html\nCMD ["httpd", "-f", "-p", "8080", "-h", "/www"]\n' > "$work/app"
-kubectl -n $ns create configmap buildkit --from-file=buildkitd.toml="$work/buildkitd.toml"
 kubectl -n $ns create configmap registry-doomed --from-file=Dockerfile="$work/doomed"
 kubectl -n $ns create configmap registry-rival --from-file=Dockerfile="$work/doomed"
 kubectl -n $ns create configmap registry-app --from-file=Dockerfile="$work/app"
@@ -180,8 +149,8 @@ expect "build of the app" "$(finished registry-app)" Succeeded
 
 mine=$(token "build-$own" "$own_password" "$repository:pull")
 theirs=$(token "build-$own" "$own_password" "$rival:pull")
-expect "build pull of its own repository" "$(status GET $repository/tags/list "$mine")" 200
-expect "build pull of another org's repository" "$(status GET $rival/tags/list "$theirs")" 401
+expect "build pull of its own repository" "$(registry_status GET $repository/tags/list "$mine")" 200
+expect "build pull of another org's repository" "$(registry_status GET $rival/tags/list "$theirs")" 401
 
 sql <<EOF
 update builds set status = 'succeeded', image_ref = '$image', finished_at = now() where id = '$own';

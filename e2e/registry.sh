@@ -1,3 +1,40 @@
+probe() {
+  kubectl -n $ns exec probe -- "$@"
+}
+
+token() {
+  probe curl -sS --fail --retry 10 --retry-delay 1 -u "$1:$2" "$realm?service=$registry&scope=repository:$3" | jq -er .token
+}
+
+registry_status() {
+  probe curl -s -o /dev/null -w '%{http_code}' -X "$1" -H "Authorization: Bearer $3" "http://$registry/v2/$2"
+}
+
+signing_key() {
+  openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=liftgate-registry-token \
+    -keyout "$work/token.key" -out "$work/token.crt" 2> /dev/null
+}
+
+job() {
+  kubectl apply -f - <<EOF
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: build-$1
+  namespace: liftgate-build
+  labels:
+    liftgate.dev/build: $1
+spec:
+  suspend: true
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: build
+          image: busybox:1.36
+EOF
+}
+
 finished() {
   for attempt in $(seq 120); do
     phase=$(kubectl -n $ns get pod "$1" -o jsonpath='{.status.phase}')
@@ -11,6 +48,8 @@ build() {
   auth=$(printf 'build-%s:%s' "$2" "$3" | base64 -w0)
   kubectl -n $ns create secret generic "build-$2" --from-literal=token=ghs_e2e_git_token \
     --from-literal=.dockerconfigjson="{\"auths\":{\"$registry\":{\"auth\":\"$auth\"}}}" --dry-run=client --output yaml | kubectl apply -f -
+  printf '[registry."%s"]\n  http = true\n' "$registry" > "$work/buildkitd.toml"
+  kubectl -n $ns create configmap buildkit --from-file=buildkitd.toml="$work/buildkitd.toml" --dry-run=client --output yaml | kubectl apply -f -
   kubectl apply -f - <<EOF
 apiVersion: v1
 kind: Pod

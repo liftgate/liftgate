@@ -277,6 +277,7 @@
         "allow": { "type": "array", "items": { "type": "string", "pattern": "^(github:[A-Za-z0-9-]+|@[^@ ]+|[^@ ]+@[^@ ]+)$" } }
       }
     },
+    "operators": { "type": "array", "items": { "type": "string", "pattern": "^(github:[A-Za-z0-9-]+|[^@ ]+@[^@ ]+)$" } },
     "legal": {
       "type": "object",
       "additionalProperties": false,

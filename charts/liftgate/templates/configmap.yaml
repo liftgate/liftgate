@@ -67,6 +67,9 @@ data:
   {{- with .Values.signup.allow }}
   LIFTGATE_SIGNUP_ALLOW: {{ join "," . | quote }}
   {{- end }}
+  {{- with .Values.operators }}
+  LIFTGATE_OPERATORS: {{ join "," . | quote }}
+  {{- end }}
   {{- with .Values.legal.termsUrl }}
   LIFTGATE_TERMS_URL: {{ . | quote }}
   {{- end }}

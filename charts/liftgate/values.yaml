@@ -151,6 +151,8 @@ signup:
   mode: approval
   allow: []
 
+operators: []
+
 legal:
   termsUrl: ""
   privacyUrl: ""

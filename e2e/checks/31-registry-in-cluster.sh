@@ -54,7 +54,7 @@ probe() {
 }
 
 token() {
-  probe curl -sS --fail --retry 10 --retry-delay 1 -u "$1:$2" "$realm?service=$registry&scope=repository:$3" | jq -r .token
+  probe curl -sS --fail --retry 10 --retry-delay 1 -u "$1:$2" "$realm?service=$registry&scope=repository:$3" | jq -er .token
 }
 
 status() {
@@ -178,8 +178,10 @@ expect "build pushing to another org's repository" "$(finished registry-rival)" 
 kubectl -n $ns logs pod/registry-rival -c build | grep -i -E '401|403|insufficient_scope|unauthorized'
 expect "build of the app" "$(finished registry-app)" Succeeded
 
-expect "build pull of its own repository" "$(status GET $repository/tags/list "$(token "build-$own" "$own_password" "$repository:pull")")" 200
-expect "build pull of another org's repository" "$(status GET $rival/tags/list "$(token "build-$own" "$own_password" "$rival:pull")")" 401
+mine=$(token "build-$own" "$own_password" "$repository:pull")
+theirs=$(token "build-$own" "$own_password" "$rival:pull")
+expect "build pull of its own repository" "$(status GET $repository/tags/list "$mine")" 200
+expect "build pull of another org's repository" "$(status GET $rival/tags/list "$theirs")" 401
 
 sql <<EOF
 update builds set status = 'succeeded', image_ref = '$image', finished_at = now() where id = '$own';

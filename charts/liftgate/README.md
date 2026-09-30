@@ -698,6 +698,9 @@ their own, such as a single machine. It is off by default.
   `<clusterIP>:5000`, over plain HTTP and with `registryAuth: token`; `registry`, `registryInsecure`,
   `registryAuth` and `build.registryCredentials` are ignored. `registryTokenKey`,
   `registryTokenCertificate`, `registryPullPassword` and `registryJanitorPassword` are required.
+  Between nodes, images and logins cross the node network unencrypted, because
+  [`infra/cilium/values.yaml`](../../infra/cilium/values.yaml) turns on no Cilium encryption, so use
+  the in-cluster registry on one machine or on a node network you trust.
 - The token realm is port 5001 at the same address, where an nginx container in the registry pod passes
   only `/api/v1/registry/token` to the control plane and answers 404 to everything else. Build jobs and
   nodes reach it wherever they reach the registry, and it serves nothing that `publicUrl` does not.

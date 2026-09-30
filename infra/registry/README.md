@@ -104,7 +104,7 @@ addresses either; run the in-cluster registry there.
    ```
 
    Expect 401 with `Bearer realm="https://liftgate.example.com/api/v1/registry/token"`, then 200 for
-   the tag list and 401 for the upload. Then deploy a service and restart a running one with
+   the tag list, or 404 before the service's first build, and 401 for the upload. Then deploy a service and restart a running one with
    `kubectl rollout restart` so a node pulls with the pull account.
 
 A registry that builds already use and that allows anonymous access keeps serving builds and nodes

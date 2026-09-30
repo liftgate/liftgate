@@ -91,8 +91,8 @@ class PodWatcherTest {
     @Test
     fun `a crash loop fails its deployment only while the deployment is unreleased`() {
         val deployments = mockk<Deployments>(relaxUnitFun = true)
-        client.resource(pod(crashing())).create()
         PodWatcher(app(deployments), client).start().use {
+            client.resource(pod(crashing())).create()
             coVerify(timeout = 10_000) { deployments.transition(testDeployment.id, DeploymentStatus.FAILED, 0, "CrashLoopBackOff, exit code 1", unreleasedOnly = true) }
         }
     }
@@ -102,8 +102,8 @@ class PodWatcherTest {
         val deployments = mockk<Deployments> {
             coEvery { transition(testDeployment.id, DeploymentStatus.FAILED, 0, "CrashLoopBackOff, exit code 1", unreleasedOnly = true) } throws SQLTransientConnectionException("connection refused") andThen Unit
         }
-        client.resource(pod(crashing())).create()
         PodWatcher(app(deployments), client).start().use {
+            client.resource(pod(crashing())).create()
             coVerify(timeout = 15_000, exactly = 2) { deployments.transition(testDeployment.id, DeploymentStatus.FAILED, 0, "CrashLoopBackOff, exit code 1", unreleasedOnly = true) }
         }
     }

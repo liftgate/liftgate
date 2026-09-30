@@ -16,6 +16,6 @@ export default defineConfig({
     command: "npm run start -- --port 3100",
     url: `${origin}/login`,
     reuseExistingServer: !process.env.CI,
-    env: { LIFTGATE_LANDING: "true", LIFTGATE_DASHBOARD_URL: origin, LIFTGATE_API_URL: "http://localhost:3102" },
+    env: { LIFTGATE_LANDING: "true", LIFTGATE_DASHBOARD_URL: origin },
   },
 });

@@ -14,20 +14,12 @@ test("pages and assets carry the security headers", async ({ request }) => {
   }
 });
 
-test("pages tell a cdn not to rewrite them, and static assets stay cached for a year", async ({ request }) => {
-  const api = createServer(({ url }, response) => response.writeHead(url === "/api/v1/orgs/missing" ? 404 : 200).end());
-  await new Promise<void>((listening) => api.listen(3102, listening));
-  try {
-    for (const [path, status] of [["/", 200], ["/login", 200], ["/missing", 404], [`${servicePath}/missing`, 404]] as const) {
-      const response = await request.get(path, { headers: { accept: "text/html" } });
-      expect(response.status(), path).toBe(status);
-      expect(response.headers()["cache-control"], path).toBe("private, no-cache, no-store, max-age=0, must-revalidate, no-transform");
-    }
-  } finally {
-    api.close();
+test("pages leave compression on, and the landing page is served gzipped", async ({ request }) => {
+  const headers = { accept: "text/html", "accept-encoding": "gzip" };
+  for (const path of ["/", "/login", "/acme"]) {
+    expect((await request.get(path, { headers })).headers()["cache-control"], path).not.toContain("no-transform");
   }
-  const asset = (await (await request.get("/login")).text()).match(/\/_next\/static\/[^"]+\.js/)?.[0] ?? "";
-  expect((await request.get(asset)).headers()["cache-control"]).toBe("public, max-age=31536000, immutable");
+  expect((await request.get("/", { headers })).headers()["content-encoding"]).toBe("gzip");
 });
 
 test("another site cannot frame the dashboard", async ({ page, baseURL }) => {

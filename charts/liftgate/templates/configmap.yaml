@@ -145,9 +145,9 @@ data:
   LIFTGATE_DATABASE_BACKUP_REGION: {{ .region | quote }}
   LIFTGATE_DATABASE_BACKUP_RETENTION: {{ .retention | quote }}
   LIFTGATE_DATABASE_BACKUP_SCHEDULE: {{ .schedule | quote }}
-  {{- with .allowedEgress }}
+  {{- with .allowedEgressCidrs }}
   {{- $egress := list }}
-  {{- range . }}{{ $egress = append $egress (printf "%s:%d" .cidr (int .port)) }}{{ end }}
+  {{- range . }}{{ $cidr := .cidr }}{{ range .ports }}{{ $egress = append $egress (printf "%s:%d" $cidr (int .)) }}{{ end }}{{ end }}
   LIFTGATE_DATABASE_BACKUP_EGRESS: {{ join "," $egress | quote }}
   {{- end }}
   {{- end }}

@@ -100,8 +100,8 @@ helm upgrade liftgate charts/liftgate --namespace "$system" --reuse-values \
   --set databases.backup.accessKeyId="$access" \
   --set databases.backup.secretAccessKey="$secret" \
   --set databases.backup.region=garage \
-  --set "databases.backup.allowedEgress[0].cidr=$garage/32" \
-  --set "databases.backup.allowedEgress[0].port=3900"
+  --set "databases.backup.allowedEgressCidrs[0].cidr=$garage/32" \
+  --set "databases.backup.allowedEgressCidrs[0].ports[0]=3900"
 kubectl -n "$system" rollout status deployment/liftgate-control-plane --timeout=10m
 
 sql <<EOF

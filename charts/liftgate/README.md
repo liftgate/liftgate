@@ -249,7 +249,7 @@ superuser.
 
 Pods in the same environment reach a database on port 5432 and other environments cannot. The
 reconciler adds the NetworkPolicy `allow-databases`, which admits the CloudNativePG operator and
-lets database pods reach `databases.backup.allowedEgress`. Database pods also call the Kubernetes
+lets database pods reach `databases.backup.allowedEgressCidrs`. Database pods also call the Kubernetes
 API: on Cilium the chart's CiliumClusterwideNetworkPolicy `<fullname>-databases-to-apiserver`
 allows it, and with another CNI you have to allow egress from pods labelled
 `liftgate.dev/database-id` to the API server yourself.
@@ -259,7 +259,7 @@ in [Backups](#backups), to `<destinationPath>/<namespace>/<database id>`, and ta
 when it is created and on `databases.backup.schedule`. The reconciler writes `accessKeyId` and
 `secretAccessKey` into the Secret `liftgate-backup` of every environment namespace with a
 database, so give tenant databases a bucket and key of their own rather than those of
-`postgres.backup`. When the object store has a private address, list it in `allowedEgress`;
+`postgres.backup`. When the object store has a private address, list it in `allowedEgressCidrs`;
 without that, database pods reach only public addresses. `POST /api/v1/databases/<id>/restore` with
 `{"slug": ..., "pointInTime": ...}` creates a new database recovered from that archive to the point
 in time, and the original keeps running.
@@ -519,7 +519,7 @@ other than 2xx is retried with a growing delay for an hour.
 | `databases.backup.region` | `us-east-1` | Region the store signs for (Garage: its `s3_region`) |
 | `databases.backup.retention` | `30d` | Recovery window: `<n>d`, `<n>w` or `<n>m` |
 | `databases.backup.schedule` | `0 0 3 * * *` | Base backup schedule, cron with a leading seconds field |
-| `databases.backup.allowedEgress` | `[]` | `{cidr, port}` entries database pods may reach, for an object store on a private address |
+| `databases.backup.allowedEgressCidrs` | `[]` | Private addresses database pods may reach, such as an object store, each as `{cidr: 192.0.2.10/32, ports: [3900]}` (TCP, IPv4) |
 | `nats.managed` | `true` | Install the `nats` subchart and a Prometheus exporter for it |
 | `nats.externalUrl` | `""` | NATS URL when not managed |
 | `nats.config.*` | JetStream on, 5Gi | Passed through to the nats chart |

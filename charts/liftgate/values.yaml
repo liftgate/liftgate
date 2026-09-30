@@ -212,4 +212,4 @@ databases:
     region: us-east-1
     retention: 30d
     schedule: "0 0 3 * * *"
-    allowedEgress: []
+    allowedEgressCidrs: []

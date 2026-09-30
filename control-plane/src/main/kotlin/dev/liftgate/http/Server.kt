@@ -2,6 +2,7 @@ package dev.liftgate.http
 
 import dev.liftgate.App
 import dev.liftgate.config.Role
+import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
@@ -20,6 +21,7 @@ import io.ktor.server.plugins.PayloadTooLargeException
 import io.ktor.server.plugins.bodylimit.RequestBodyLimit
 import io.ktor.server.plugins.calllogging.CallLogging
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.server.plugins.contentnegotiation.ContentTypeWithQuality
 import io.ktor.server.plugins.cors.routing.CORS
 import io.ktor.server.plugins.defaultheaders.DefaultHeaders
 import io.ktor.server.plugins.statuspages.StatusPages
@@ -39,7 +41,10 @@ private val tooLarge = ErrorBody("payload_too_large", "the request body is too l
 private val log = LoggerFactory.getLogger("dev.liftgate.http")
 
 fun Application.liftgate(app: App) {
-    install(ContentNegotiation) { json(json) }
+    install(ContentNegotiation) {
+        json(json)
+        accept { _, _ -> listOf(ContentTypeWithQuality(ContentType.Application.Json)) }
+    }
     install(CallLogging)
     install(MicrometerMetrics) { registry = app.metrics }
     install(WebSockets) { maxFrameSize = WEBSOCKET_FRAME_LIMIT }

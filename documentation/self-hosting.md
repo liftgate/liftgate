@@ -386,6 +386,23 @@ curl -s -o /dev/null -D - https://liftgate.example.com/login
 curl -s -o /dev/null -D - https://liftgate.example.com/api/v1/auth/providers
 ```
 
+A CDN must not rewrite the dashboard's HTML. Cloudflare's Web Analytics, Rocket Loader and Email Address
+Obfuscation add or rewrite scripts in each page, and the policy blocks the Web Analytics beacon, which
+loads from another origin, so the browser logs an error on every page. Turn those features off for the
+dashboard's host. On Cloudflare, a Configuration Rule for the host with Disable Real User Monitoring
+(RUM) on, Rocket Loader off and Email Obfuscation off does it; disabling the host's Web Analytics site
+also removes the beacon. Or have the proxy in front of the dashboard append `no-transform` to
+`Cache-Control` on pages after they are compressed; Cloudflare leaves a response carrying it as it is.
+In a Caddyfile site block:
+
+```caddy
+@pages not path /_next/static/*
+header @pages >Cache-Control "^(.+)$" "$1, no-transform"
+```
+
+Do not make the dashboard send `no-transform` itself: Next.js, Caddy's `encode` and Cloudflare skip
+compression for a response that carries it, so every page would load uncompressed.
+
 The policy forbids showing the dashboard in a frame, and `Strict-Transport-Security` tells browsers to
 reach the dashboard's and the API's hosts only over HTTPS for two years. A proxy also changes how the
 control plane finds a client's address for rate limits; set `controlPlane.trustedProxies` as Client IP
@@ -499,8 +516,14 @@ From 0.2.0-alpha.2 to 0.2.0-alpha.3:
 - Run `helm upgrade` on the Prometheus release with the new `infra/prometheus/values.yaml` to give it
   resource requests.
 
-From 0.2.0-alpha.3 to the release after it:
+From 0.2.0-alpha.3 to 0.2.0-alpha.4:
 
+- Migration V29 adds two columns to `domains`. A `helm rollback` does not undo it.
+- The new values `customDomains.cloudflare.zoneId`, `apiToken` and `gatewayServerName` are optional and
+  empty by default, which keeps gateway mode. Setting them turns on edge mode, as Custom domains in the
+  [chart README](../charts/liftgate/README.md#custom-domains) describes. In edge mode,
+  `customDomains.max` left at `null` means 100 instead of unlimited.
+- Set the GitHub App's Setup URL as in [step 6](#6-the-github-app), with Redirect on update checked.
 - Run `helm upgrade` on the Prometheus release with the new `infra/prometheus/values.yaml`, as Upgrading
   in [`infra/prometheus/README.md`](../infra/prometheus/README.md#upgrading) shows, to raise its memory
   request to 1Gi.

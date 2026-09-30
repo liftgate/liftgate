@@ -10,7 +10,16 @@ test("pages and assets carry the security headers", async ({ request }) => {
     expect(headers["x-content-type-options"], path).toBe("nosniff");
     expect(headers["referrer-policy"], path).toBe("strict-origin-when-cross-origin");
     expect(headers["strict-transport-security"], path).toBe("max-age=63072000");
+    expect(headers["x-powered-by"], path).toBeUndefined();
   }
+});
+
+test("pages leave compression on, and the landing page is served gzipped", async ({ request }) => {
+  const headers = { accept: "text/html", "accept-encoding": "gzip" };
+  for (const path of ["/", "/login", "/acme"]) {
+    expect((await request.get(path, { headers })).headers()["cache-control"], path).not.toContain("no-transform");
+  }
+  expect((await request.get("/", { headers })).headers()["content-encoding"]).toBe("gzip");
 });
 
 test("another site cannot frame the dashboard", async ({ page, baseURL }) => {

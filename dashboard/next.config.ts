@@ -18,6 +18,7 @@ const csp = [
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  poweredByHeader: false,
   headers: async () => [
     {
       source: "/:path*",

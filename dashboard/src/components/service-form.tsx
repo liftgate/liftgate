@@ -14,7 +14,7 @@ const kinds: ServiceKind[] = ["web", "worker", "cron", "static"];
 const strategies: BuildStrategy[] = ["auto", "dockerfile"];
 const insideRepo = String.raw`(?!(.*\/)?\.\.(\/|$))[A-Za-z0-9._\/\-]*`;
 const buildFields = ["dockerfilePath", "port", "healthCheckPath", "watchPaths"];
-const resourceFields = ["replicas", "cpuMillis", "memoryMb", "volume"];
+const resourceFields = ["replicas", "cpuMillis", "memoryMb", "volume", "storageGb"];
 
 const toSpec = (v: Record<string, string>): ServiceSpec => ({
   slug: v.slug,
@@ -199,7 +199,7 @@ export function ServiceForm({
               />
             </Field>
           </div>
-          <Field label="Volume size (GB)">
+          <Field label="Volume size (GB)" error={at("storageGb")}>
             <Input name="volumeSizeGb" type="number" min={initial?.volume?.sizeGb ?? 1} max={100} required disabled={!volumePath} defaultValue={initial?.volume?.sizeGb ?? 1} />
           </Field>
         </div>

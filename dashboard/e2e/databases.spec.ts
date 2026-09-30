@@ -17,7 +17,12 @@ test("a database is added, linked with a redeploy, reveals its connection and re
   });
   api.on(`POST /services/${service.id}/redeploy`, new Reply(201, deployment));
   api.on(`GET /databases/${database.id}/connection`, { uri });
-  api.on(`POST /databases/${database.id}/restore`, new Reply(201, { ...database, id: "database-restored", slug: "main-restored" }));
+  const limit = "the free plan's CPU limit is 1000m across the organization, and this change needs 1500m";
+  api.on(`POST /databases/${database.id}/restore`, () =>
+    api.sent(`POST /databases/${database.id}/restore`).length === 1
+      ? new Reply(409, { error: "plan_limit", message: limit, field: "cpuMillis" })
+      : new Reply(201, { ...database, id: "database-restored", slug: "main-restored" }),
+  );
 
   await page.goto("/acme/shop");
   await page.getByRole("button", { name: "Add database" }).click();
@@ -40,8 +45,10 @@ test("a database is added, linked with a redeploy, reveals its connection and re
 
   await details.getByLabel("Restore to").fill("2026-09-30T12:00");
   await details.getByRole("button", { name: "Restore into a new database" }).click();
+  await expect(details.getByText(limit)).toBeVisible();
+  await details.getByRole("button", { name: "Restore into a new database" }).click();
   await expect(details).toBeHidden();
-  const restore = api.sent(`POST /databases/${database.id}/restore`)[0].body as { slug: string; pointInTime: string };
+  const restore = api.sent(`POST /databases/${database.id}/restore`)[1].body as { slug: string; pointInTime: string };
   expect(restore.slug).toBe("main-restored");
   expect(new Date(restore.pointInTime).getTime()).toBe(new Date("2026-09-30T12:00:00").getTime());
 });

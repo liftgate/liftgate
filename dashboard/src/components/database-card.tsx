@@ -247,7 +247,7 @@ function DatabaseDetails({
                 <Input name="slug" required maxLength={40} pattern={slugPattern} defaultValue={`${database.slug}-restored`.slice(0, 40)} className="font-mono" />
               </Field>
             </div>
-            <FormError message={restore.field ? undefined : restore.error} />
+            <FormError message={restore.field === "pointInTime" || restore.field === "slug" ? undefined : restore.error} />
             <div className="flex justify-end">
               <Button type="submit" pending={restore.pending}>
                 Restore into a new database

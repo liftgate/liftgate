@@ -164,7 +164,7 @@ expect "image the node pulled" "${pulled%@*}" "$registry/$repository"
 expect "app through the gateway" "$(curl --fail --silent --show-error --insecure --retry 30 --retry-all-errors --retry-delay 2 \
   --resolve registry-hello-e2e.liftgate.app:443:$node https://registry-hello-e2e.liftgate.app)" in-cluster-registry
 
-layer=$(manifest "$doomed" | jq -r '.layers[-1].digest')
+layer=$(jq -nr --argjson doomed "$(manifest "$doomed")" --argjson app "$(manifest "$shipped")" '[$doomed.layers[].digest] - [$app.layers[].digest] | .[0]')
 old=$(kubectl -n $system get pods -l app.kubernetes.io/component=control-plane -o name)
 kubectl -n $system rollout restart deployment/liftgate-control-plane
 kubectl -n $system rollout status deployment/liftgate-control-plane --timeout=10m

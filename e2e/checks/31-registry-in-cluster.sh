@@ -32,6 +32,7 @@ report() {
     kubectl -n env-e2e describe pods -l liftgate.dev/service=registry || true
     docker exec liftgate-control-plane journalctl -u containerd --no-pager -n 40 || true
   fi
+  kubectl -n $system delete httproute registry-edge --ignore-not-found
   kubectl -n $ns delete pod registry-probe --ignore-not-found --wait=false
   kubectl -n default delete pod registry-outsider --ignore-not-found --wait=false
   rm -rf "$work"
@@ -110,6 +111,30 @@ done
 for port in 5000 5001; do
   expect "tcp from outside the cluster to the node's port $port" "$(timeout 5 bash -c "< /dev/tcp/$node/$port" 2> /dev/null && echo open || echo closed)" closed
 done
+kubectl apply -f - <<EOF
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: registry-edge
+  namespace: $system
+spec:
+  parentRefs:
+    - name: liftgate
+      sectionName: https-apps
+  hostnames:
+    - registry-edge.liftgate.app
+  rules:
+    - backendRefs:
+        - name: liftgate-registry
+          port: 5000
+EOF
+for attempt in $(seq 60); do
+  edge=$(curl -s -k -o /dev/null -w '%{http_code}' --max-time 20 --resolve registry-edge.liftgate.app:443:$node https://registry-edge.liftgate.app/v2/ || true)
+  case "$edge" in 401 | 503) break ;; esac
+  sleep 2
+done
+expect "gateway route to the registry" "$edge" 503
+kubectl -n $system delete httproute registry-edge
 
 sql <<EOF
 insert into services (id, environment_id, slug, name, kind, port, cpu_millis, memory_mb) values

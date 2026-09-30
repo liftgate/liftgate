@@ -10,16 +10,18 @@ import org.testcontainers.utility.DockerImageName
  * @date 9/27/2026
  */
 object TestDatabase {
-    val postgres = PostgreSQLContainer<Nothing>(DockerImageName.parse("postgres:16-alpine")).apply { start() }
-    private val db = Db(
-        testConfig(
-            mapOf(
-                "LIFTGATE_DATABASE_URL" to postgres.jdbcUrl,
-                "LIFTGATE_DATABASE_USER" to postgres.username,
-                "LIFTGATE_DATABASE_PASSWORD" to postgres.password,
-            ),
+    val postgres = PostgreSQLContainer<Nothing>(DockerImageName.parse("postgres:16-alpine")).apply {
+        setCommand("postgres", "-c", "fsync=off", "-c", "shared_preload_libraries=pg_stat_statements", "-c", "pg_stat_statements.track_utility=off")
+        start()
+    }
+    val config = testConfig(
+        mapOf(
+            "LIFTGATE_DATABASE_URL" to postgres.jdbcUrl,
+            "LIFTGATE_DATABASE_USER" to postgres.username,
+            "LIFTGATE_DATABASE_PASSWORD" to postgres.password,
         ),
-    ).also { it.migrate() }
+    )
+    private val db = Db(config).also { it.migrate() }
 
     fun clean(): Db = db.also {
         runBlocking {

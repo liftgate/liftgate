@@ -82,8 +82,8 @@ fun Route.serviceRoutes(app: App) {
 }
 
 suspend fun ApplicationCall.service(app: App, min: OrgRole = OrgRole.MEMBER, id: UUID = uuid("id")): ServiceScope {
-    val scope = app.services.scope(id) ?: notFound("service")
-    authorize(app, scope.org.id, min)
+    val scope = app.services.scope(id, principalOrNull?.user?.id) ?: notFound("service")
+    authorize(app, scope.org, min)
     return scope
 }
 

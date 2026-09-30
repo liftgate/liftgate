@@ -3,6 +3,7 @@ package dev.liftgate.http
 import dev.liftgate.App
 import dev.liftgate.auth.OrgRole
 import dev.liftgate.auth.audit
+import dev.liftgate.org.Organization
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.isSuccess
 import io.ktor.server.application.ApplicationCall
@@ -27,6 +28,11 @@ fun ApplicationCall.auditDetails(vararg names: Pair<String, String>) = attribute
 suspend fun ApplicationCall.authorize(app: App, orgId: UUID, min: OrgRole = OrgRole.MEMBER) {
     app.access.require(orgId, principal, min)
     auditOrg(orgId)
+}
+
+fun ApplicationCall.authorize(app: App, org: Organization, min: OrgRole = OrgRole.MEMBER) {
+    app.access.require(org, principal, min)
+    auditOrg(org.id)
 }
 
 fun Route.audit(app: App) {

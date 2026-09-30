@@ -83,9 +83,10 @@ class ServiceRoutesTest {
     }
 
     init {
-        coEvery { services.scope(any()) } returns null
-        coEvery { services.scope(service.id) } returns ServiceScope(service, environment, project, org)
+        coEvery { services.scope(any(), any()) } returns null
+        coEvery { services.scope(service.id, any()) } returns ServiceScope(service, environment, project, org)
         coEvery { access.require(org.id, any(), any()) } just Runs
+        every { access.require(org, any(), any()) } just Runs
     }
 
     private fun HttpRequestBuilder.jsonBody(body: String) {
@@ -106,7 +107,7 @@ class ServiceRoutesTest {
 
     @Test
     fun `non-members are forbidden`() = testApplication {
-        coEvery { access.require(org.id, any(), any()) } answers { forbidden() }
+        every { access.require(org, any(), any()) } answers { forbidden() }
         application { liftgate(app) }
         assertEquals(HttpStatusCode.Forbidden, client.get("/api/v1/services/${service.id}") { session() }.status)
     }
@@ -162,7 +163,7 @@ class ServiceRoutesTest {
         val web = service.copy(kind = ServiceKind.WEB)
         val build = testBuild.copy(serviceId = web.id, commitSha = "c".repeat(40), status = BuildStatus.QUEUED)
         coEvery { services.create(environment.id, any()) } returns web
-        coEvery { services.scope(service.id) } returns ServiceScope(web, environment, project, org)
+        coEvery { services.scope(service.id, any()) } returns ServiceScope(web, environment, project, org)
         coEvery { domains.ensurePlatform(any()) } returns mockk()
         every { app.github } returns mockk<GitHubApp> { coEvery { branchHead(42, "acme/shop", "master") } returns ("c".repeat(40) to "first commit") }
         every { app.builds } returns mockk<Builds> { coEvery { request(web.id, "c".repeat(40), "first commit", "master") } returns build }
@@ -190,7 +191,7 @@ class ServiceRoutesTest {
         var created = service
         val claimed = mutableListOf<ServiceKind>()
         coEvery { services.create(environment.id, any()) } answers { service.copy(kind = secondArg<ServiceSpec>().kind).also { created = it } }
-        coEvery { services.scope(service.id) } answers { ServiceScope(created, environment, project, org) }
+        coEvery { services.scope(service.id, any()) } answers { ServiceScope(created, environment, project, org) }
         coEvery { domains.ensurePlatform(any()) } answers { claimed += firstArg<ServiceScope>().service.kind; mockk() }
         application { liftgate(app) }
         ServiceKind.entries.forEach {
@@ -204,7 +205,7 @@ class ServiceRoutesTest {
     fun `a failed hostname claim removes the new service`() = testApplication {
         val web = service.copy(kind = ServiceKind.WEB)
         coEvery { services.create(environment.id, any()) } returns web
-        coEvery { services.scope(service.id) } returns ServiceScope(web, environment, project, org)
+        coEvery { services.scope(service.id, any()) } returns ServiceScope(web, environment, project, org)
         coEvery { domains.ensurePlatform(any()) } throws IllegalStateException("database unavailable")
         coEvery { services.delete(service.id) } just Runs
         application { liftgate(app) }

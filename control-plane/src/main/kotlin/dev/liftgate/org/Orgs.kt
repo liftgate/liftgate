@@ -17,6 +17,8 @@ import dev.liftgate.http.notFound
 import dev.liftgate.http.orgSuspended
 import dev.liftgate.project.enqueueTeardown
 import io.ktor.http.HttpStatusCode
+import org.jetbrains.exposed.v1.core.ColumnSet
+import org.jetbrains.exposed.v1.core.JoinType
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
@@ -46,9 +48,12 @@ fun ResultRow.toOrganization() = Organization(
     this[Organizations.plan],
     this[Organizations.suspendedAt]?.toInstant(),
     this[Organizations.suspendedReason],
+    getOrNull(Memberships.role)?.toEnum(),
 )
 
 fun ResultRow.toRole(): OrgRole = this[Memberships.role].toEnum()
+
+fun ColumnSet.withRole(userId: UUID?): ColumnSet = userId?.let { join(Memberships, JoinType.LEFT, Organizations.id, Memberships.orgId) { Memberships.userId eq it } } ?: this
 
 fun memberRole(orgId: UUID, userId: UUID): OrgRole? =
     Memberships.select(Memberships.role).where { (Memberships.orgId eq orgId) and (Memberships.userId eq userId) }.singleOrNull()?.toRole()
@@ -93,12 +98,16 @@ class Orgs(private val db: Db, private val limits: Limits = Limits()) {
         org
     }
 
-    suspend fun bySlug(slug: String): Organization? = db.tx {
-        Organizations.selectAll().where { Organizations.slug eq slug }.singleOrNull()?.toOrganization()
+    suspend fun bySlug(slug: String, userId: UUID? = null): Organization? = db.tx {
+        Organizations.withRole(userId).selectAll().where { Organizations.slug eq slug }.singleOrNull()?.toOrganization()
+    }
+
+    suspend fun byId(id: UUID, userId: UUID): Organization? = db.tx {
+        Organizations.withRole(userId).selectAll().where { Organizations.id eq id }.singleOrNull()?.toOrganization()
     }
 
     suspend fun forUser(userId: UUID): List<Organization> = db.tx {
-        (Organizations innerJoin Memberships).selectAll().where { Memberships.userId eq userId }.orderBy(Organizations.slug).map { it.toOrganization().copy(role = it.toRole()) }
+        (Organizations innerJoin Memberships).selectAll().where { Memberships.userId eq userId }.orderBy(Organizations.slug).map { it.toOrganization() }
     }
 
     suspend fun members(orgId: UUID): List<Pair<User, OrgRole>> = db.tx {
@@ -135,10 +144,6 @@ class Orgs(private val db: Db, private val limits: Limits = Limits()) {
     }
 
     suspend fun usage(orgId: UUID): Usage = db.tx { limits.usage(orgId) }
-
-    suspend fun suspended(orgId: UUID): Boolean = db.tx {
-        Organizations.select(Organizations.suspendedAt).where { Organizations.id eq orgId }.single()[Organizations.suspendedAt] != null
-    }
 
     suspend fun delete(orgId: UUID) = db.tx { deleteOrgs(listOf(orgId)) }
 

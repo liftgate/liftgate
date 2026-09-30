@@ -33,6 +33,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -45,7 +46,7 @@ import kotlin.test.assertTrue
 class DeployRoutesTest {
     private val builds = mockk<Builds> { coEvery { request(any(), any(), any(), any()) } returns testBuild }
     private val app = mockk<App> {
-        every { services } returns mockk<Services> { coEvery { scope(testService.id) } returns ServiceScope(testService, testEnvironment, testProject, testOrg) }
+        every { services } returns mockk<Services> { coEvery { scope(testService.id, any()) } returns ServiceScope(testService, testEnvironment, testProject, testOrg) }
         every { access } returns mockk<Access>(relaxUnitFun = true)
         every { sessions } returns mockk<Sessions> { coEvery { resolve("s") } returns User(UUID.randomUUID(), "dean", null, null, null) }
         every { metrics } returns PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
@@ -103,7 +104,7 @@ class DeployRoutesTest {
         val response = client.post("/api/v1/services/${testService.id}/redeploy") { session() }
         assertEquals(HttpStatusCode.Created, response.status)
         assertTrue(testDeployment.id.toString() in response.bodyAsText())
-        coVerify { access.require(testOrg.id, any(), OrgRole.ADMIN) }
+        verify { access.require(testOrg, any(), OrgRole.ADMIN) }
         coVerify(exactly = 0) { builds.request(any(), any(), any(), any()) }
     }
 }

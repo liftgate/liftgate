@@ -93,10 +93,7 @@ fun Route.orgRoutes(app: App) {
             call.respond(HttpStatusCode.Created, org.copy(role = OrgRole.OWNER))
         }
         route("/{slug}") {
-            get {
-                val org = call.org(app)
-                call.respond(org.copy(role = app.orgs.role(org.id, call.principal.user.id)))
-            }
+            get { call.respond(call.org(app)) }
             delete {
                 app.orgs.delete(call.sessionOrg(app, OrgRole.OWNER).id)
                 call.auditOrg(null)
@@ -173,8 +170,8 @@ fun requireSlug(slug: String, reserved: Set<String> = emptySet()) {
 fun requireName(name: String) = name.trim().takeIf { it.length in 1..100 } ?: invalid("name must be 1 to 100 characters")
 
 suspend fun ApplicationCall.org(app: App, min: OrgRole = OrgRole.MEMBER): Organization {
-    val org = app.orgs.bySlug(parameters["slug"]!!) ?: notFound("organization")
-    authorize(app, org.id, min)
+    val org = app.orgs.bySlug(parameters["slug"]!!, principalOrNull?.user?.id) ?: notFound("organization")
+    authorize(app, org, min)
     return org
 }
 

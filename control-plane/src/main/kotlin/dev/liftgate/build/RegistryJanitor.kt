@@ -117,10 +117,8 @@ class RegistryJanitor(private val app: App, private val kube: KubernetesClient) 
     private fun JdbcTransaction.images(): Pair<Set<String>, List<Build>> {
         val services = (ServicesTable innerJoin Environments innerJoin Projects innerJoin Organizations).selectAll()
             .associate { it[ServicesTable.id] to ServiceScope(it.toService(), it.toEnvironment(), it.toProject(), it.toOrganization()) }
-        val inFlight = BuildsTable.select(BuildsTable.serviceId, BuildsTable.commitSha).where { BuildsTable.status inList building }.flatMap { row ->
-            val sha = row[BuildsTable.commitSha]
-            services[row[BuildsTable.serviceId]]?.let { listOf(BuildJobs.imageRef(registry, it, sha), "$registry/${BuildJobs.previousRepository(it)}:$sha") }.orEmpty()
-        }
+        val inFlight = BuildsTable.select(BuildsTable.serviceId, BuildsTable.commitSha).where { BuildsTable.status inList building }
+            .mapNotNull { row -> services[row[BuildsTable.serviceId]]?.let { BuildJobs.imageRef(registry, it, row[BuildsTable.commitSha]) } }
         val succeeded = BuildsTable.selectAll()
             .where { (BuildsTable.status eq BuildStatus.SUCCEEDED.sql) and (BuildsTable.imagePruned eq false) and BuildsTable.imageRef.isNotNull() }
             .orderBy(BuildsTable.createdAt, SortOrder.DESC)

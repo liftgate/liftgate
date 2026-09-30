@@ -66,8 +66,6 @@ object BuildJobs {
 
     fun repository(scope: ServiceScope) = with(scope) { "${org.slug}/${project.slug}/${environment.slug}/${service.slug}" }
 
-    fun previousRepository(scope: ServiceScope) = with(scope) { "${org.slug}/${project.slug}-${service.slug}" }
-
     fun imageRef(registry: String, scope: ServiceScope, sha: String) = "$registry/${repository(scope)}:${sha.replace('/', '-')}"
 
     fun imageRef(job: Job): String = job.spec.template.spec.containers.single().env.single { it.name == "IMAGE" }.value

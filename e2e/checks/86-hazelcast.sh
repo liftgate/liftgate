@@ -23,5 +23,10 @@ profile ha liftgate-api
 replicas="$(kubectl -n $ns get deployment liftgate-api -o jsonpath='{.spec.replicas}')"
 for pod in $(kubectl -n $ns get pods -l liftgate.dev/role=api -o jsonpath='{.items[*].metadata.name}'); do
   expect "$pod" "$replicas"
+  logs="$(kubectl -n $ns logs "$pod")"
+  if printf '%s\n' "$logs" | grep 'without proper access to required Java packages'; then
+    echo "FAIL: $pod started Hazelcast without the Java module access it asks for"
+    exit 1
+  fi
 done
 profile single liftgate-control-plane

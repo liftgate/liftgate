@@ -597,8 +597,10 @@ nats:
 Every control plane pod first runs the `migrate` init container (`LIFTGATE_ROLE=migrate`), which
 applies pending database migrations with a 10 second `lock_timeout` and exits, so a long
 migration never trips a probe. Each role serves `/healthz`, which fails when a message consumer has
-not polled NATS for two minutes, and `/readyz`, which checks PostgreSQL, NATS and, for `api`,
-Hazelcast. On shutdown a pod reports unready for 5 seconds before it stops serving.
+not polled NATS for two minutes, and `/readyz`, which checks PostgreSQL and, for `api`, Hazelcast.
+A pod starts serving only after it has reached NATS, and a later NATS restart leaves it ready
+while its NATS client reconnects. On shutdown a pod reports unready for 5 seconds before it stops
+serving.
 
 The `ha` profile gives each role its own ServiceAccount and Secret:
 
@@ -649,10 +651,9 @@ with token authentication that points at Liftgate:
   longer mounts `registry-credentials`.
 - `<publicUrl>/api/v1/registry/token` answers the registry's token requests with a token valid
   for 5 minutes. It allows pull and push on the build's own repository,
-  `<org>/<project>/<environment>/<service>`, and on `<org>/<project>-<service>`, the name the
-  previous release used, so that a build running during the upgrade can finish. A preview build
-  may also pull the same service's production repository for its cache. Nothing else is
-  allowed. Build jobs reach it over their internet egress.
+  `<org>/<project>/<environment>/<service>`. A preview build may also pull the same service's
+  production repository for its cache. Nothing else is allowed. Build jobs reach it over their
+  internet egress.
 - Nodes pull as `pull` with `registryPullPassword`, which reads every repository and writes
   none. Add it to `/etc/rancher/k3s/registries.yaml` on every node.
 - The builder prunes images as `janitor` with `registryJanitorPassword`, which may pull and

@@ -68,7 +68,7 @@ class LogRoutesTest {
         every { cache } returns unlimitedCache
         every { sessions } returns mockk<Sessions> { coEvery { resolve("s") } returns user }
         every { builds } returns mockk<Builds> { coEvery { byId(testBuild.id) } returns testBuild }
-        every { services } returns mockk<Services> { coEvery { scope(testService.id) } returns ServiceScope(testService, testEnvironment, testProject, testOrg) }
+        every { services } returns mockk<Services> { coEvery { scope(testService.id, any()) } returns ServiceScope(testService, testEnvironment, testProject, testOrg) }
         every { access } returns guard
         every { nats } returns events
         every { podLogs } returns PodLogs(client, 100.milliseconds)
@@ -135,7 +135,7 @@ class LogRoutesTest {
     @Test
     fun `a user outside the org is closed with a policy violation`() = testApplication {
         application { liftgate(app()) }
-        coEvery { guard.require(testOrg.id, any(), any()) } throws LiftgateException(HttpStatusCode.Forbidden, "forbidden", "insufficient permissions")
+        every { guard.require(testOrg, any(), any()) } throws LiftgateException(HttpStatusCode.Forbidden, "forbidden", "insufficient permissions")
         listOf("services/${testService.id}", "builds/${testBuild.id}").forEach {
             assertEquals(CloseReason.Codes.VIOLATED_POLICY.code, open(it).closeReason.await()?.code)
         }

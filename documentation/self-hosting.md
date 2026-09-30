@@ -608,6 +608,17 @@ From 0.2.0-alpha.4 to the release after it:
   `inClusterRegistry.enabled` is set; [Moving to the in-cluster registry](#moving-to-the-in-cluster-registry)
   switches an installation with a registry on another machine.
 
+From 0.2.0 to the release after it:
+
+- Migration V30 adds thirteen indexes in one transaction. Writes to a table wait from the start of its
+  index until the migration commits. The indexes on `usage_records` and `audit_log`, which are never
+  pruned, come first. Writes to those two tables wait until the migration commits, which takes longer
+  when they are large, and writes to any other table wait only while its own index and the later ones
+  are built. A `helm rollback` does not undo it.
+- `controlPlane.javaOpts` now defaults to `-XX:+UseG1GC -XX:MaxRAMPercentage=75 -XX:ActiveProcessorCount=2`.
+  If you set your own `javaOpts`, add these flags to it.
+- The new values `controlPlane.logFormat` and `controlPlane.roleResources` are optional.
+
 Upgrading straight from 0.2.0-alpha.2 or older to a release after 0.2.0-alpha.3 skips the move of build
 images to their new names, so builds that run during the upgrade may need a retry.
 [Upgrading from v0.2.0-alpha.2 or older](../infra/UPGRADE.md#upgrading-from-v020-alpha2-or-older) says

@@ -1,12 +1,30 @@
 <configuration>
-  <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
-    <encoder>
-      <pattern>%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level %logger{36} - %msg%n</pattern>
-    </encoder>
-  </appender>
   <logger name="com.hazelcast" level="WARN"/>
   <logger name="io.netty" level="WARN"/>
   <logger name="com.zaxxer.hikari" level="WARN"/>
+  <condition class="ch.qos.logback.core.boolex.PropertyEqualityCondition">
+    <key>LIFTGATE_LOG_FORMAT</key>
+    <value>json</value>
+  </condition>
+  <if>
+    <then>
+      <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="ch.qos.logback.classic.encoder.JsonEncoder">
+          <withContext>false</withContext>
+          <withMessage>false</withMessage>
+          <withArguments>false</withArguments>
+          <withFormattedMessage>true</withFormattedMessage>
+        </encoder>
+      </appender>
+    </then>
+    <else>
+      <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+          <pattern>%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+      </appender>
+    </else>
+  </if>
   <root level="${LIFTGATE_LOG_LEVEL:-INFO}">
     <appender-ref ref="STDOUT"/>
   </root>

@@ -73,6 +73,10 @@ object Memberships : Table("memberships") {
     val role = oneOf("role", "owner", "admin", "member")
     val createdAt = createdAtColumn()
     override val primaryKey = PrimaryKey(orgId, userId)
+
+    init {
+        index("memberships_user", false, userId)
+    }
 }
 
 /**
@@ -85,6 +89,11 @@ object Sessions : Table("sessions") {
     val expiresAt = timestampWithTimeZone("expires_at")
     val createdAt = createdAtColumn()
     override val primaryKey = PrimaryKey(id)
+
+    init {
+        index("sessions_user", false, userId)
+        index("sessions_expires", false, expiresAt)
+    }
 }
 
 /**
@@ -104,6 +113,7 @@ object Identities : Table("identities") {
 
     init {
         uniqueIndex(provider, subject)
+        index("identities_user", false, userId)
     }
 }
 
@@ -186,6 +196,11 @@ object ApiTokens : Table("api_tokens") {
     val lastUsedAt = timestampWithTimeZone("last_used_at").nullable()
     val expiresAt = timestampWithTimeZone("expires_at").nullable()
     override val primaryKey = PrimaryKey(id)
+
+    init {
+        index("api_tokens_org", false, orgId)
+        index("api_tokens_created_by", false, createdBy)
+    }
 }
 
 /**
@@ -198,6 +213,10 @@ object GitHubInstallations : Table("github_installations") {
     val accountLogin = text("account_login")
     val createdAt = createdAtColumn()
     override val primaryKey = PrimaryKey(id)
+
+    init {
+        index("github_installations_org", false, orgId)
+    }
 }
 
 /**
@@ -218,6 +237,7 @@ object Projects : Table("projects") {
 
     init {
         uniqueIndex(orgId, slug)
+        index("projects_installation_repo", false, installationId, repoFullName)
     }
 }
 
@@ -335,6 +355,7 @@ object Deployments : Table("deployments") {
 
     init {
         index("deployments_service_created", false, serviceId, createdAt)
+        index("deployments_build", false, buildId)
     }
 }
 
@@ -377,6 +398,7 @@ object UsageRecords : Table("usage_records") {
 
     init {
         index("usage_records_org_window", false, orgId, windowStart)
+        index("usage_records_service", false, serviceId)
     }
 }
 
@@ -398,6 +420,7 @@ object AuditLog : Table("audit_log") {
 
     init {
         index("audit_log_org", false, orgId, id)
+        index("audit_log_actor", false, actorUserId)
     }
 }
 
@@ -461,4 +484,9 @@ object Invitations : Table("invitations") {
     val expiresAt = timestampWithTimeZone("expires_at")
     val acceptedAt = timestampWithTimeZone("accepted_at").nullable()
     override val primaryKey = PrimaryKey(id)
+
+    init {
+        index("invitations_org", false, orgId)
+        index("invitations_created_by", false, createdBy)
+    }
 }

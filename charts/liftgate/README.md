@@ -444,8 +444,10 @@ other than 2xx is retried with a growing delay for an hour.
 | `controlPlane.upstreamOverwritesClientIpHeader` | `false` | Required with `clientIpHeader`: confirms that an upstream proxy overwrites that header on every request |
 | `controlPlane.trustedProxyCidrs` | `[]` | `LIFTGATE_TRUSTED_PROXY_CIDRS`: CIDRs of the proxy that connects to the control plane |
 | `controlPlane.databasePoolSize` | `0` | `LIFTGATE_DATABASE_POOL_SIZE`: the most Postgres connections one control-plane pod holds; `0` keeps the role default of 10 for `api` and `all` and 3 for the other roles, each keeping 2 idle. Size `postgres.maxConnections` for the sum over every pod |
-| `controlPlane.javaOpts` | `-XX:MaxRAMPercentage=75.0` | `JAVA_TOOL_OPTIONS` |
-| `controlPlane.resources` | 250m / 768Mi, limit 1536Mi | |
+| `controlPlane.javaOpts` | `-XX:+UseG1GC -XX:MaxRAMPercentage=75 -XX:ActiveProcessorCount=2` | `JAVA_TOOL_OPTIONS`. Without `UseG1GC` the JVM picks the serial collector at the default 1536Mi limit, and without `ActiveProcessorCount` it counts every CPU on the node, since the pods set no CPU limit |
+| `controlPlane.resources` | 250m / 768Mi, limit 1536Mi | Resources of every control-plane pod |
+| `controlPlane.roleResources.{api,reconciler,builder,meter}` | `{}` | Resources of one role in `ha`, replacing `controlPlane.resources` for that role |
+| `controlPlane.logFormat` | `text` | `LIFTGATE_LOG_FORMAT`: `json` writes one JSON object per line, with the request's `callId` and the `buildId` or `deploymentId` being handled in `mdc` |
 | `dashboard.image` | `ghcr.io/liftgate/dashboard` | |
 | `dashboard.tag` | `""` | Empty means the chart's `appVersion` |
 | `dashboard.landing` | `false` | `LIFTGATE_LANDING` on the dashboard: serve the Liftgate Cloud landing page at `/`, with a Dashboard link for visitors who have a session cookie; when off, `/` redirects to `/dashboard`. Needs the dashboard and the API on one host (`dashboardUrl` empty or equal to `publicUrl`), because the session cookie is host-only; the chart refuses to render otherwise |

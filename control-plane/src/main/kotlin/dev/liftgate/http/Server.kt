@@ -19,6 +19,8 @@ import io.ktor.server.netty.Netty
 import io.ktor.server.plugins.BadRequestException
 import io.ktor.server.plugins.PayloadTooLargeException
 import io.ktor.server.plugins.bodylimit.RequestBodyLimit
+import io.ktor.server.plugins.callid.CallId
+import io.ktor.server.plugins.callid.callIdMdc
 import io.ktor.server.plugins.calllogging.CallLogging
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.plugins.contentnegotiation.ContentTypeWithQuality
@@ -33,6 +35,7 @@ import io.ktor.server.websocket.WebSockets
 import kotlinx.serialization.SerializationException
 import org.jetbrains.exposed.v1.exceptions.ExposedSQLException
 import org.slf4j.LoggerFactory
+import java.util.UUID
 
 private const val UNIQUE_VIOLATION = "23505"
 private const val BODY_LIMIT = 1024L * 1024
@@ -45,7 +48,11 @@ fun Application.liftgate(app: App) {
         json(json)
         accept { _, _ -> listOf(ContentTypeWithQuality(ContentType.Application.Json)) }
     }
-    install(CallLogging)
+    install(CallId) { generate { UUID.randomUUID().toString() } }
+    install(CallLogging) {
+        callIdMdc("callId")
+        disableDefaultColors()
+    }
     install(MicrometerMetrics) { registry = app.metrics }
     install(WebSockets) { maxFrameSize = WEBSOCKET_FRAME_LIMIT }
     install(DefaultHeaders) {

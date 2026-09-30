@@ -72,7 +72,7 @@ class RateLimitTest {
         every { db } returns discardingDb
         every { passkeys } returns Passkeys(testConfig(), mockk(), RateLimitTest.cache, mockk())
         every { sessions } returns mockk<Sessions> { coEvery { resolve("s") } returns user }
-        every { services } returns mockk<Services> { coEvery { scope(testService.id) } returns ServiceScope(testService, testEnvironment, testProject, testOrg) }
+        every { services } returns mockk<Services> { coEvery { scope(testService.id, any()) } returns ServiceScope(testService, testEnvironment, testProject, testOrg) }
         every { access } returns mockk<Access>(relaxUnitFun = true)
         every { builds } returns mockk<Builds> { coEvery { request(any(), any(), any(), any()) } returns testBuild }
         every { podLogs } returns mockk<PodLogs> { every { follow(any(), any(), any()) } returns flow { emit("ready"); awaitCancellation() } }

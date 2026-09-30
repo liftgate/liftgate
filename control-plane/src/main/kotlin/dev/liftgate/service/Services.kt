@@ -18,6 +18,7 @@ import dev.liftgate.events.Subject
 import dev.liftgate.events.enqueue
 import dev.liftgate.org.Limits
 import dev.liftgate.org.toOrganization
+import dev.liftgate.org.withRole
 import dev.liftgate.project.EnvironmentKind
 import dev.liftgate.project.toEnvironment
 import dev.liftgate.project.toProject
@@ -73,8 +74,8 @@ class Services(private val db: Db, private val limits: Limits = Limits()) {
         }.single().toService(namespace(environmentId))
     }
 
-    suspend fun scope(id: UUID): ServiceScope? = db.tx {
-        (ServicesTable innerJoin Environments innerJoin Projects innerJoin Organizations).selectAll()
+    suspend fun scope(id: UUID, userId: UUID? = null): ServiceScope? = db.tx {
+        (ServicesTable innerJoin Environments innerJoin Projects innerJoin Organizations).withRole(userId).selectAll()
             .where { ServicesTable.id eq id }
             .singleOrNull()?.let { ServiceScope(it.toService(), it.toEnvironment(), it.toProject(), it.toOrganization()) }
     }

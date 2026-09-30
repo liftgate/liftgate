@@ -19,10 +19,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.slf4j.MDCContext
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 import org.slf4j.LoggerFactory
 import java.time.Duration
@@ -31,6 +34,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 private const val STREAM = "LIFTGATE"
 private const val POLL_MILLIS = 5000L
+private val mdcKeys = listOf("buildId", "deploymentId")
 
 /**
  * @author Dean
@@ -119,6 +123,10 @@ class Nats(private val config: Config, private val metrics: MeterRegistry, priva
             message.term()
             return "terminated"
         }
+        return withContext(MDCContext(mdcKeys.mapNotNull { key -> (payload[key] as? JsonPrimitive)?.let { key to it.content } }.toMap())) { handle(message, payload, ackWait, handler) }
+    }
+
+    private suspend fun handle(message: Message, payload: JsonObject, ackWait: Duration, handler: suspend (JsonObject) -> Unit): String {
         try {
             coroutineScope {
                 val heartbeat = launch {

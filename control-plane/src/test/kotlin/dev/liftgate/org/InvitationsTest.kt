@@ -128,12 +128,12 @@ class InvitationsTest {
         val joined = client.accept("newbie", invitation)
         assertEquals(HttpStatusCode.OK, joined.status)
         assertEquals(OrgRole.ADMIN, json.decodeFromString(Organization.serializer(), joined.bodyAsText()).role)
-        assertEquals(OrgRole.ADMIN, orgs.role(acme.id, newbie))
+        assertEquals(OrgRole.ADMIN, orgs.byId(acme.id, newbie)?.role)
 
         val late = user("late")
         assertEquals(HttpStatusCode.Gone to "invitation_gone", client.accept("late", invitation).error())
         assertEquals(HttpStatusCode.Gone, client.get("/api/v1/invitations/${invitation.url.substringAfterLast('/')}").status)
-        assertNull(orgs.role(acme.id, late))
+        assertNull(orgs.byId(acme.id, late)?.role)
         assertEquals(HttpStatusCode.NotFound, client.post("/api/v1/invitations/nope/accept") { session("late") }.status)
     }
 
@@ -144,7 +144,7 @@ class InvitationsTest {
         db.tx { InvitationsTable.update { it[expiresAt] = now().minusSeconds(1) } }
         val newbie = user("newbie")
         assertEquals(HttpStatusCode.Gone to "invitation_gone", client.accept("newbie", invitation).error())
-        assertNull(orgs.role(acme.id, newbie))
+        assertNull(orgs.byId(acme.id, newbie)?.role)
     }
 
     @Test
@@ -183,7 +183,7 @@ class InvitationsTest {
         assertEquals(HttpStatusCode.Conflict to "last_owner", client.delete("/api/v1/orgs/acme/members/me") { session("owner") }.error())
         val second = user("second", OrgRole.OWNER)
         assertEquals(HttpStatusCode.NoContent, client.setRole("owner", owner, "member").status)
-        assertEquals(OrgRole.MEMBER, orgs.role(acme.id, owner))
+        assertEquals(OrgRole.MEMBER, orgs.byId(acme.id, owner)?.role)
         assertEquals(HttpStatusCode.Forbidden, client.setRole("owner", second, "member").status)
         assertEquals(HttpStatusCode.Conflict to "last_owner", client.delete("/api/v1/orgs/acme/members/me") { session("second") }.error())
         assertEquals(HttpStatusCode.NotFound, client.setRole("second", UUID.randomUUID(), "admin").status)
@@ -202,13 +202,13 @@ class InvitationsTest {
         limited.create("outsider-co", "Outsider Co", outsider)
         assertEquals(HttpStatusCode.NoContent, client.setRole("owner", owner, "owner").status)
         assertEquals(HttpStatusCode.Conflict to "plan_limit", client.setRole("owner", member, "owner").error())
-        assertEquals(OrgRole.MEMBER, orgs.role(acme.id, member))
+        assertEquals(OrgRole.MEMBER, orgs.byId(acme.id, member)?.role)
         val invitation = client.invite("owner", "owner").invitation()
         assertEquals(HttpStatusCode.Conflict to "plan_limit", client.accept("outsider", invitation).error())
-        assertNull(orgs.role(acme.id, outsider))
+        assertNull(orgs.byId(acme.id, outsider)?.role)
         val newbie = user("newbie")
         assertEquals(HttpStatusCode.OK, client.accept("newbie", invitation).status)
-        assertEquals(OrgRole.OWNER, orgs.role(acme.id, newbie))
+        assertEquals(OrgRole.OWNER, orgs.byId(acme.id, newbie)?.role)
     }
 
     @Test
@@ -219,10 +219,10 @@ class InvitationsTest {
         val newbie = user("newbie", status = UserStatus.PENDING)
         assertEquals(HttpStatusCode.Forbidden to "account_pending", client.accept("newbie", asMember).error())
         assertEquals(HttpStatusCode.Forbidden to "account_pending", client.accept("newbie", asOwner).error())
-        assertNull(orgs.role(acme.id, newbie))
+        assertNull(orgs.byId(acme.id, newbie)?.role)
         Admin(db).run(listOf("approve", newbie.toString()))
         assertEquals(HttpStatusCode.OK, client.accept("newbie", asOwner).status)
-        assertEquals(OrgRole.OWNER, orgs.role(acme.id, newbie))
+        assertEquals(OrgRole.OWNER, orgs.byId(acme.id, newbie)?.role)
         user("other")
         assertEquals(HttpStatusCode.OK, client.accept("other", asMember).status)
     }

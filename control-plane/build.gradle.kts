@@ -23,6 +23,7 @@ dependencies {
     implementation(libs.ktor.server.auth)
     implementation(libs.ktor.server.status.pages)
     implementation(libs.ktor.server.call.logging)
+    implementation(libs.ktor.server.call.id)
     implementation(libs.ktor.server.cors)
     implementation(libs.ktor.server.body.limit)
     implementation(libs.ktor.server.metrics.micrometer)
@@ -45,6 +46,7 @@ dependencies {
     implementation(libs.logback)
     implementation(libs.serialization.json)
     implementation(libs.coroutines.core)
+    implementation(libs.coroutines.slf4j)
     implementation(libs.micrometer.prometheus)
     implementation(libs.java.jwt)
     implementation(libs.bcpkix)
@@ -52,6 +54,7 @@ dependencies {
     implementation(libs.angus.mail)
     implementation(libs.opensaml.saml.impl)
     implementation(libs.opensaml.xmlsec.impl)
+    runtimeOnly(variantOf(libs.netty.epoll) { classifier("linux-x86_64") })
 
     testImplementation(libs.kotlin.test)
     testImplementation(libs.junit.jupiter)

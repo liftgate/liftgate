@@ -71,7 +71,7 @@ class OriginTest {
         every { this@mockk.deployments } returns this@OriginTest.deployments
         every { apiTokens } returns mockk<ApiTokens> { coEvery { resolve("lg_token") } returns (testOrg.id to user.id) }
         every { orgs } returns mockk<Orgs> { coEvery { user(user.id) } returns user }
-        every { services } returns mockk<Services> { coEvery { scope(testService.id) } returns ServiceScope(testService, testEnvironment, testProject, testOrg) }
+        every { services } returns mockk<Services> { coEvery { scope(testService.id, any()) } returns ServiceScope(testService, testEnvironment, testProject, testOrg) }
         every { access } returns mockk<Access>(relaxUnitFun = true)
         every { podLogs } returns mockk<PodLogs> { every { follow(any(), any(), any()) } returns flow { emit("ready"); awaitCancellation() } }
     }

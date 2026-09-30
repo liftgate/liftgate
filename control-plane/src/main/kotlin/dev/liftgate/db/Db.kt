@@ -3,6 +3,7 @@ package dev.liftgate.db
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import dev.liftgate.config.Config
+import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.flywaydb.core.Flyway
@@ -22,13 +23,14 @@ inline fun <reified E : Enum<E>> String.toEnum(): E = enumValueOf(uppercase())
  * @author Dean
  * @date 9/17/2026
  */
-class Db(config: Config) : AutoCloseable {
+class Db(config: Config, metrics: MeterRegistry? = null) : AutoCloseable {
     private val dataSource = HikariDataSource(HikariConfig().apply {
         jdbcUrl = config.databaseUrl
         username = config.databaseUser
         password = config.databasePassword
         maximumPoolSize = config.databasePoolSize
         minimumIdle = 2
+        metricRegistry = metrics
     })
     private val database = Database.connect(dataSource)
 

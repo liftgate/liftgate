@@ -161,7 +161,7 @@ class AuditTest {
             coEvery { createEnvironment(project.id, "staging", "Staging", EnvironmentKind.PRODUCTION, "dev") } returns environment
         }
         every { it.services } returns mockk<Services> {
-            coEvery { scope(service.id) } returns ServiceScope(service, environment, project, acme)
+            coEvery { scope(service.id, any()) } coAnswers { ServiceScope(service, environment, project, requireNotNull(orgs.bySlug("acme", secondArg()))) }
             coEvery { create(environment.id, any()) } returns service
             coEvery { update(service.id, any()) } returns service
             coEvery { delete(service.id) } just Runs

@@ -28,6 +28,8 @@ import org.slf4j.LoggerFactory
 import java.util.UUID
 import io.fabric8.kubernetes.api.model.apps.Deployment as KubeDeployment
 
+private const val CONCURRENT_RELEASES = 4
+
 /**
  * @author Dean
  * @date 9/17/2026
@@ -49,6 +51,7 @@ class Reconciler(private val app: App, private val kube: KubernetesClient) {
         } catch (e: KubernetesClientException) {
             if (e.retryable) throw e
             log.warn("release of deployment {} failed", deployment.id, e)
+            if (converge(deployment)) return app.deployments.transition(deployment.id, DeploymentStatus.SUPERSEDED)
             return app.deployments.transition(deployment.id, DeploymentStatus.FAILED, error = e.status?.message ?: e.message)
         }
         if (converge(deployment)) return app.deployments.transition(deployment.id, DeploymentStatus.SUPERSEDED)
@@ -83,7 +86,7 @@ class Reconciler(private val app: App, private val kube: KubernetesClient) {
 
     fun start(): Job {
         val consumers = CoroutineScope(app.scope.coroutineContext + SupervisorJob(app.scope.coroutineContext.job))
-        app.nats.consume(Subject.RELEASE_REQUESTED, "reconciler-release-requested", consumers) { release(it.uuid("deploymentId")) }
+        app.nats.consume(Subject.RELEASE_REQUESTED, "reconciler-release-requested", consumers, concurrency = CONCURRENT_RELEASES) { release(it.uuid("deploymentId")) }
         app.nats.consume(Subject.DOMAIN_VERIFY_REQUESTED, "reconciler-domain-verify-requested", consumers) { reroute(it.uuid("serviceId")) }
         app.nats.consume(Subject.TEARDOWN_REQUESTED, "reconciler-teardown-requested", consumers) {
             teardown(it.getValue("namespace").jsonPrimitive.content, it["serviceId"]?.jsonPrimitive?.content?.let(UUID::fromString))

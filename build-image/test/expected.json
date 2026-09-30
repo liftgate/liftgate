@@ -1,0 +1,9 @@
+{
+  "dockerfile": { "provider": null, "framework": null },
+  "fastapi": { "provider": "python", "framework": "fastapi" },
+  "hello": { "provider": "node", "framework": "node" },
+  "next": { "provider": "node", "framework": "next" },
+  "pnpm-workspace": { "provider": "node", "framework": "node" },
+  "sveltekit-node": { "provider": "node", "framework": "node" },
+  "vite": { "provider": "node", "framework": "vite" }
+}

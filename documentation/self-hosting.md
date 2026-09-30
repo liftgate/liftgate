@@ -653,6 +653,11 @@ From 0.2.0 to the release after it:
   as [Volumes and databases](#volumes-and-databases) explains.
 - The new value `operators` is optional. Set it to approve accounts in the dashboard, as
   [step 8](#8-sign-in) describes.
+- Apps that write under their working directory or `HOME` need a new build: push, or use Deploy on the
+  Builds tab. Redeploy and rollback reuse the old image, which keeps the old ownership, as
+  [User and file system](runtime-contract.md#user-and-file-system) describes.
+- Images built from a Dockerfile gain one layer, and their image `User` becomes `1000:1000`.
+- The new ownership needs no values and no migrations.
 
 Upgrading straight from 0.2.0-alpha.2 or older to a release after 0.2.0-alpha.3 skips the move of build
 images to their new names, so builds that run during the upgrade may need a retry.

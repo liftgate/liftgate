@@ -400,7 +400,7 @@ class ResourcesTest {
         assertEquals(mapOf("name" to BACKUP_STORE, "key" to "ACCESS_KEY_ID"), (configuration["s3Credentials"] as Map<*, *>)["accessKeyId"])
         val secret = Resources.backupSecret(databaseScope, backup)
         assertEquals(BACKUP_STORE to release.namespace, secret.metadata.name to secret.metadata.namespace)
-        assertEquals(mapOf("ACCESS_KEY_ID" to "key", "ACCESS_SECRET_KEY" to "secret", "ACCESS_REGION" to "garage"), secret.stringData)
+        assertEquals(mapOf("ACCESS_KEY_ID" to "key", "ACCESS_SECRET_KEY" to "secret", "ACCESS_REGION" to "garage"), secret.data.mapValues { String(Base64.getDecoder().decode(it.value)) })
         val scheduled = Resources.scheduledBackup(databaseScope, backup)
         val spec = scheduled.additionalProperties.getValue("spec") as Map<*, *>
         assertEquals(databaseLabels, scheduled.metadata.labels)

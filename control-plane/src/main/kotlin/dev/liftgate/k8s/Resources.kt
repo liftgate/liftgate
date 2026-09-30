@@ -312,7 +312,10 @@ object Resources {
     fun backupSecret(r: Tenancy, backup: DatabaseBackupConfig): Secret = SecretBuilder()
         .withMetadata(meta(BACKUP_STORE, r.namespace, r.environmentLabels()))
         .withType("Opaque")
-        .withStringData<String, String>(mapOf("ACCESS_KEY_ID" to backup.accessKeyId.orEmpty(), "ACCESS_SECRET_KEY" to backup.secretAccessKey.orEmpty(), "ACCESS_REGION" to backup.region))
+        .withData<String, String>(
+            mapOf("ACCESS_KEY_ID" to backup.accessKeyId.orEmpty(), "ACCESS_SECRET_KEY" to backup.secretAccessKey.orEmpty(), "ACCESS_REGION" to backup.region)
+                .mapValues { Base64.getEncoder().encodeToString(it.value.toByteArray()) },
+        )
         .build()
 
     fun databasePolicy(r: Tenancy, egress: List<Pair<String, Int>>): NetworkPolicy = NetworkPolicyBuilder()

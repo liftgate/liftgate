@@ -4,7 +4,7 @@
 
 Open-source full-stack application hosting. Connect a GitHub repository and Liftgate builds a container image on every push and runs it on Kubernetes, with a hostname on `liftgate.app`, custom domains, environment variables, logs and rollbacks. The same software runs [Liftgate Cloud](https://liftgate.dev) and self-hosted installs.
 
-> **Status: pre-alpha.** Liftgate is being built towards its first milestone. The API, the database schema and the chart values change without notice, every release so far is an alpha pre-release, and nothing has run in production. Read the code, try it on a cluster you can throw away, open issues.
+> **Status: public beta.** Liftgate 0.2 is a public beta. Liftgate Cloud runs it at [liftgate.dev](https://liftgate.dev), with sign-up by approval, and [documentation/self-hosting.md](documentation/self-hosting.md) installs it on one VM. The API, the database schema and the chart values can still change between 0.x releases, and every release lists its upgrade notes. Back up before you upgrade, as [Upgrading](documentation/self-hosting.md#upgrading) describes.
 
 ## What it does
 
@@ -198,7 +198,7 @@ CI runs on GitHub Actions: `control-plane.yml` builds and tests with Gradle on J
 
 ## Roadmap
 
-Milestone 1, foundation, is in progress: connect a repository, build on push, release to Kubernetes, reach the service on a platform hostname or a custom domain, manage it from the dashboard, roll back, meter usage, install with Helm in `single` or `ha`.
+Milestone 1, foundation, shipped in 0.2: connect a repository, build on push, release to Kubernetes, reach the service on a platform hostname or a custom domain, manage it from the dashboard, roll back, meter usage, install with Helm in `single` or `ha`.
 
 After milestone 1, in no particular order: preview environments per pull request, sleeping and autoscaling, object storage as a product, a CLI, bring-your-own clusters, multi-region, device VPN, billing enforcement.
 

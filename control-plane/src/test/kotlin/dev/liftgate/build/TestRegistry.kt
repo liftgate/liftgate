@@ -16,7 +16,7 @@ import java.net.http.HttpResponse
  * @date 9/27/2026
  */
 object TestRegistry {
-    const val ADDRESS = "10.200.0.1:5050"
+    const val ADDRESS = "192.168.100.3:5000"
     val config = testConfig().copy(
         registry = ADDRESS,
         registryInsecure = true,

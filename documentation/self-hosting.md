@@ -610,8 +610,11 @@ From 0.2.0-alpha.4 to the release after it:
 
 From 0.2.0 to the release after it:
 
-- Migration V30 adds thirteen indexes. Each one blocks writes to its table while it is built, so the
-  migration takes longer when `usage_records` is large. A `helm rollback` does not undo it.
+- Migration V30 adds thirteen indexes in one transaction. Writes to a table wait from the start of its
+  index until the migration commits. The indexes on `usage_records` and `audit_log`, which are never
+  pruned, come first. Writes to those two tables wait until the migration commits, which takes longer
+  when they are large, and writes to any other table wait only while its own index and the later ones
+  are built. A `helm rollback` does not undo it.
 - `controlPlane.javaOpts` now defaults to `-XX:+UseG1GC -XX:MaxRAMPercentage=75 -XX:ActiveProcessorCount=2`.
   If you set your own `javaOpts`, add these flags to it.
 - The new values `controlPlane.logFormat` and `controlPlane.roleResources` are optional.

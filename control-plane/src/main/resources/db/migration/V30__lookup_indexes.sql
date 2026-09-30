@@ -1,3 +1,5 @@
+create index usage_records_service on usage_records (service_id);
+create index audit_log_actor on audit_log (actor_user_id);
 create index memberships_user on memberships (user_id);
 create index sessions_user on sessions (user_id);
 create index sessions_expires on sessions (expires_at);
@@ -7,7 +9,5 @@ create index api_tokens_created_by on api_tokens (created_by);
 create index github_installations_org on github_installations (org_id);
 create index projects_installation_repo on projects (installation_id, repo_full_name);
 create index deployments_build on deployments (build_id);
-create index usage_records_service on usage_records (service_id);
-create index audit_log_actor on audit_log (actor_user_id);
 create index invitations_org on invitations (org_id);
 create index invitations_created_by on invitations (created_by);

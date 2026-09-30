@@ -31,18 +31,23 @@ const val MAX_STORAGE_GB = 100
 private const val MAX_PATH = 256
 private const val MAX_WATCH_PATHS = 20
 private const val MAX_WATCH_PATH_LENGTH = 100
+private const val MAX_BUILD_COMMAND = 1000
 val envVarName = Regex("[A-Za-z_][A-Za-z0-9_]*")
 private val repoPath = Regex("[A-Za-z0-9._/-]*")
+private val frameworkId = Regex("[a-z0-9-]{1,40}")
 
 fun Route.serviceRoutes(app: App) {
     route("/environments/{id}/services") {
         get { call.respond(app.services.withStatus(app.services.forEnvironment(call.environment(app).id))) }
         post {
             val environment = call.environment(app, OrgRole.ADMIN)
-            val spec = call.receive<ServiceSpec>().validated()
+            val payload = call.receive<JsonObject>()
+            val env = payload["env"]?.let { call.validEnv(json.decodeFromJsonElement(it)) }
+            val spec = json.decodeFromJsonElement<ServiceSpec>(payload).validated()
             if (spec.volume != null && app.config.storageClass == null) storageNotConfigured()
             val service = app.services.create(environment.id, spec)
             val build = try {
+                env?.let { app.envVars.replace(service.id, it) }
                 val scope = app.services.scope(service.id) ?: notFound("service")
                 app.claimPlatformDomain(scope)
                 if (call.request.queryParameters["deploy"] != "true") null
@@ -75,10 +80,7 @@ fun Route.serviceRoutes(app: App) {
             get { call.respond(app.envVars.list(call.service(app).service.id, reveal = false)) }
             put {
                 val service = call.service(app, OrgRole.ADMIN).service
-                val vars = call.receive<List<EnvVar>>()
-                if (vars.any { !envVarName.matches(it.name) }) invalid("env var names must match [A-Za-z_][A-Za-z0-9_]*")
-                if (vars.distinctBy { it.name }.size != vars.size) invalid("env var names must be unique")
-                call.auditDetails("names" to vars.joinToString(",") { it.name })
+                val vars = call.validEnv(call.receive())
                 app.envVars.replace(service.id, vars)
                 call.respond(app.envVars.list(service.id, reveal = false))
             }
@@ -110,7 +112,16 @@ private fun ServiceSpec.validated(): ServiceSpec {
     if (volume != null && volume.sizeGb !in 1..MAX_STORAGE_GB) invalid("a volume must be between 1 and $MAX_STORAGE_GB GB", "volume")
     if (volume != null && replicas > 1) invalid("a service with a volume runs at most 1 replica", "replicas")
     if (watchPaths.size > MAX_WATCH_PATHS || watchPaths.any { it.isBlank() || it.length > MAX_WATCH_PATH_LENGTH }) invalid("list at most $MAX_WATCH_PATHS watch paths of up to $MAX_WATCH_PATH_LENGTH characters each", "watchPaths")
+    if (buildCommand != null && (buildCommand.length > MAX_BUILD_COMMAND || buildCommand.lines().size > 1 || '\u0000' in buildCommand)) invalid("the build command must be one line of at most $MAX_BUILD_COMMAND characters", "buildCommand")
+    if (framework != null && !frameworkId.matches(framework)) invalid("the framework must be at most 40 lowercase letters, digits and hyphens", "framework")
     return this
+}
+
+private fun ApplicationCall.validEnv(vars: List<EnvVar>): List<EnvVar> {
+    if (vars.any { !envVarName.matches(it.name) }) invalid("env var names must match [A-Za-z_][A-Za-z0-9_]*", "env")
+    if (vars.distinctBy { it.name }.size != vars.size) invalid("env var names must be unique", "env")
+    auditDetails("names" to vars.joinToString(",") { it.name })
+    return vars
 }
 
 private fun String.isRepoPath() = repoPath.matches(this) && ".." !in split('/')

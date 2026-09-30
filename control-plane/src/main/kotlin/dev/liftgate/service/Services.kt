@@ -59,6 +59,8 @@ fun ResultRow.toService(namespace: String? = getOrNull(Environments.namespace)) 
     this[ServicesTable.healthCheckPath],
     this[ServicesTable.watchPaths],
     this[ServicesTable.volume],
+    this[ServicesTable.buildCommand],
+    this[ServicesTable.framework],
 ).run { copy(internalHost = namespace?.takeIf { listens }?.let { "$slug.$it.svc.cluster.local" }) }
 
 fun orgServiceIds(orgId: UUID) = (ServicesTable innerJoin Environments innerJoin Projects).select(ServicesTable.id).where { Projects.orgId eq orgId }
@@ -144,6 +146,8 @@ class Services(private val db: Db, private val limits: Limits = Limits()) {
         this[ServicesTable.healthCheckPath] = spec.healthCheckPath
         this[ServicesTable.watchPaths] = spec.watchPaths
         this[ServicesTable.volume] = spec.volume
+        this[ServicesTable.buildCommand] = spec.buildCommand
+        this[ServicesTable.framework] = spec.framework
     }
 
     private fun status(services: List<Service>): List<Service> {

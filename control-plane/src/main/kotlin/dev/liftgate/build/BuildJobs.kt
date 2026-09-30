@@ -83,6 +83,9 @@ object BuildJobs {
             "PRODUCTION_CACHE" to spec.productionCacheRef.orEmpty(),
             "LIFTGATE_BUILD_ENV_NAMES" to spec.variables.joinToString(" ") { it.name },
             "LIFTGATE_BUILD_ARG_NAMES" to spec.variables.filterNot { it.secret }.joinToString(" ") { it.name },
+        ) + listOfNotNull(
+            spec.service.buildCommand?.let { "LIFTGATE_BUILD_COMMAND" to it },
+            spec.service.startCommand?.let { "LIFTGATE_START_COMMAND" to it },
         )
         val storage = mapOf("ephemeral-storage" to Quantity(EPHEMERAL_STORAGE))
         return JobBuilder()

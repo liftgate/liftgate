@@ -39,6 +39,7 @@ class BuildJobsTest {
     private val pod = job.spec.template.spec
     private val clone = pod.initContainers.single()
     private val container = pod.containers.single()
+    private val commanded = BuildJobs.job(spec.copy(service = service.copy(buildCommand = "pnpm --filter web build", startCommand = "node build"))).spec.template.spec.containers.single()
     private val owner = JobBuilder(job).editMetadata().withUid("job-uid").endMetadata().build()
 
     @Test
@@ -105,6 +106,15 @@ class BuildJobsTest {
     }
 
     @Test
+    fun `build and start commands reach the build container only when they are set`() {
+        assertEquals(
+            mapOf("LIFTGATE_BUILD_COMMAND" to "pnpm --filter web build", "LIFTGATE_START_COMMAND" to "node build"),
+            commanded.env.associate { it.name to it.value } - container.env.map { it.name }.toSet(),
+        )
+        assertTrue(container.env.none { it.name.endsWith("_COMMAND") })
+    }
+
+    @Test
     fun `build variables reach the build container as references to the job's secret and never as plaintext in the job`() {
         val variables = listOf(EnvVar("NEXT_PUBLIC_GREETING", "Hello from build time"), EnvVar("STRIPE_KEY", "sk_live_build_secret", secret = true))
         val configured = spec.copy(variables = variables)
@@ -132,7 +142,7 @@ class BuildJobsTest {
     @Test
     fun `each container receives every variable its script reads`() {
         val provided = Regex("""^ENV (\w+)=""", RegexOption.MULTILINE).findAll(File("../build-image/Dockerfile").readText()).map { it.groupValues[1] }.toSet()
-        mapOf("build.sh" to container, "clone.sh" to clone).forEach { (script, target: Container) ->
+        mapOf("build.sh" to commanded, "clone.sh" to clone).forEach { (script, target: Container) ->
             Regex("""\$\{?([A-Z_]+)""").findAll(File("../build-image/$script").readText()).map { it.groupValues[1] }.filter { it !in provided }.forEach {
                 assertTrue(target.env.any { env -> env.name == it }, "$script reads $it which the ${target.name} container does not get")
             }

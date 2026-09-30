@@ -114,8 +114,6 @@ class Orgs(private val db: Db, private val limits: Limits = Limits()) {
         (Memberships innerJoin Users).selectAll().where { Memberships.orgId eq orgId }.orderBy(Users.login).map { it.toUser() to it.toRole() }
     }
 
-    suspend fun role(orgId: UUID, userId: UUID): OrgRole? = db.tx { memberRole(orgId, userId) }
-
     suspend fun setRole(orgId: UUID, userId: UUID, role: OrgRole) = db.tx {
         if (role == OrgRole.OWNER && memberRole(orgId, userId) != OrgRole.OWNER) limits.ownedOrgs(userId)
         changeMembers(orgId) { Memberships.update({ (Memberships.orgId eq orgId) and (Memberships.userId eq userId) }) { it[Memberships.role] = role.sql } }

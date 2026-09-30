@@ -2,6 +2,8 @@ alter table projects
     add column previews_enabled boolean not null default false,
     add column preview_base_environment_id uuid references environments (id) on delete set null;
 
+create index projects_preview_base_environment on projects (preview_base_environment_id);
+
 alter table environments add column pull_request integer;
 
 create unique index environments_pull_request on environments (project_id, pull_request);

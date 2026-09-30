@@ -240,6 +240,7 @@ object Projects : Table("projects") {
     init {
         uniqueIndex(orgId, slug)
         index("projects_installation_repo", false, installationId, repoFullName)
+        index("projects_preview_base_environment", false, previewBaseEnvironmentId)
         foreignKey(previewBaseEnvironmentId to Environments.id, onUpdate = NO_ACTION, onDelete = SET_NULL)
     }
 }

@@ -10,6 +10,7 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.serialization.json.jsonPrimitive
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.jdbc.JdbcTransaction
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import java.util.Base64
 
@@ -26,3 +27,5 @@ val unlimitedCache = mockk<Cache> { every { allow(any(), any(), any()) } returns
 val discardingDb = mockk<Db> { coEvery { tx<Any?>(any()) } returns null }
 
 suspend fun Db.teardowns() = tx { Outbox.selectAll().where { Outbox.subject eq Subject.TEARDOWN_REQUESTED.value }.map { it[Outbox.payload].getValue("namespace").jsonPrimitive.content } }
+
+fun JdbcTransaction.waitingLocks() = exec("select count(*) from pg_locks where not granted") { it.next(); it.getLong(1) }

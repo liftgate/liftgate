@@ -36,6 +36,7 @@ import dev.liftgate.service.ServiceSpec
 import dev.liftgate.service.Services
 import dev.liftgate.teardowns
 import dev.liftgate.testConfig
+import dev.liftgate.waitingLocks
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -62,13 +63,20 @@ import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.jdbc.JdbcTransaction
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.update
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -131,6 +139,7 @@ class PreviewsTest {
     private val production = runBlocking { projects.environments(project.id).single() }
     private val web = runBlocking { services.create(production.id, ServiceSpec("web", "Web", ServiceKind.WEB, port = 3000, cpuMillis = 250)) }
     private val worker = runBlocking { services.create(production.id, ServiceSpec("worker", "Worker", ServiceKind.WORKER, startCommand = "node worker.js")) }
+    private val pull = PullRequest(12, "Add checkout", "checkout", "abc123", false)
 
     init {
         runBlocking { envVars.replace(web.id, listOf(EnvVar("DATABASE_URL", "postgres://db", secret = true), EnvVar("MODE", "production"))) }
@@ -153,6 +162,18 @@ class PreviewsTest {
     }
 
     private fun sent(method: HttpMethod, path: String) = requests.filter { it.method == method && it.url.encodedPath == path }.map { (it.body as TextContent).text }
+
+    private fun CoroutineScope.hold(statements: JdbcTransaction.() -> Unit) {
+        val held = CountDownLatch(1)
+        launch(Dispatchers.IO) {
+            db.tx {
+                statements()
+                held.countDown()
+                repeat(200) { if (waitingLocks() != 0L) return@tx; Thread.sleep(50) }
+            }
+        }
+        held.await(10, TimeUnit.SECONDS)
+    }
 
     @Test
     fun `an opened pull request creates pr-12 with the cloned services and variables, queues builds for head sha and comments its urls`() = testApplication {
@@ -200,10 +221,33 @@ class PreviewsTest {
     }
 
     @Test
-    fun `a close that lands between an open's upsert and its deploy leaves no preview behind`() = runBlocking {
-        app.previews.open(project, PullRequest(12, "Add checkout", "checkout", "abc123", false)) { runBlocking { app.previews.close(project, 12) {} } }
+    fun `a deploy waits for a close that holds the pull request row and then finds the pull request gone`() = runBlocking {
+        app.previews.open(project, pull) { hold { removePreview(project.id, 12) } }
         assertNull(preview())
         assertEquals(0L, db.tx { PullRequests.selectAll().count() })
+    }
+
+    @Test
+    fun `a close waits for an approval's deploy that holds the pull request row and then removes the environment it created`() = runBlocking {
+        app.previews.open(project, pull.copy(fork = true)) {}
+        hold {
+            PullRequests.selectAll().where { (PullRequests.projectId eq project.id) and (PullRequests.number eq 12) }.forUpdate().toList()
+            projects.insertPreview(project.id, 12, "checkout")
+        }
+        app.previews.close(project, 12) {}
+        assertNull(preview())
+        assertEquals(1, db.teardowns().size)
+    }
+
+    @Test
+    fun `the idle sweep waits for a delivery that holds the pull request row and keeps the preview it refreshed`() = runBlocking {
+        app.previews.open(project, pull) {}
+        val environment = requireNotNull(preview())
+        db.tx { PullRequests.update { it[updatedAt] = now().minusDays(15) } }
+        hold { PullRequests.update { it[updatedAt] = now() } }
+        Housekeeping(db).runOnce()
+        assertEquals(environment, preview())
+        assertEquals(emptyList(), db.teardowns())
     }
 
     @Test

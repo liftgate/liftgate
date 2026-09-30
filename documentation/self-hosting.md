@@ -505,8 +505,14 @@ From 0.2.0-alpha.2 to 0.2.0-alpha.3:
 - Run `helm upgrade` on the Prometheus release with the new `infra/prometheus/values.yaml` to give it
   resource requests.
 
-From 0.2.0-alpha.3 to the release after it:
+From 0.2.0-alpha.3 to 0.2.0-alpha.4:
 
+- Migration V29 adds two columns to `domains`. A `helm rollback` does not undo it.
+- The new values `customDomains.cloudflare.zoneId`, `apiToken` and `gatewayServerName` are optional and
+  empty by default, which keeps gateway mode. Setting them turns on edge mode, as Custom domains in the
+  [chart README](../charts/liftgate/README.md#custom-domains) describes. In edge mode,
+  `customDomains.max` left at `null` means 100 instead of unlimited.
+- Set the GitHub App's Setup URL as in [step 6](#6-the-github-app), with Redirect on update checked.
 - Run `helm upgrade` on the Prometheus release with the new `infra/prometheus/values.yaml`, as Upgrading
   in [`infra/prometheus/README.md`](../infra/prometheus/README.md#upgrading) shows, to raise its memory
   request to 1Gi.

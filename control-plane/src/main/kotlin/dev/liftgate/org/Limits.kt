@@ -18,6 +18,8 @@ import org.jetbrains.exposed.v1.core.LongColumnType
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.innerJoin
+import org.jetbrains.exposed.v1.core.isNotNull
+import org.jetbrains.exposed.v1.core.isNull
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.TransactionManager
@@ -44,7 +46,14 @@ class Limits(private val plans: Plans = Plans(), private val customDomainsMax: I
 
     fun environment(projectId: UUID) {
         val (name, plan) = lock(Projects.select(Projects.orgId).where { Projects.id eq projectId }.single()[Projects.orgId])
-        count(name, plan.environmentsPerProject, "environments per project", Environments.selectAll().where { Environments.projectId eq projectId }.count().toInt())
+        count(name, plan.environmentsPerProject, "environments per project", Environments.selectAll().where { (Environments.projectId eq projectId) and Environments.pullRequest.isNull() }.count().toInt())
+    }
+
+    fun preview(projectId: UUID) {
+        val orgId = Projects.select(Projects.orgId).where { Projects.id eq projectId }.single()[Projects.orgId]
+        val (name, plan) = lock(orgId)
+        val previews = (Environments innerJoin Projects).selectAll().where { (Projects.orgId eq orgId) and Environments.pullRequest.isNotNull() }.count().toInt()
+        count(name, plan.previewEnvironments, "preview environments", previews)
     }
 
     fun service(environmentId: UUID, spec: ServiceSpec) {

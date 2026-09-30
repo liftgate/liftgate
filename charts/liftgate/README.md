@@ -561,6 +561,7 @@ A limit that is left out is unlimited, so `unlimited: {}` limits nothing.
 |---|---|
 | `ownedOrgs` | Organizations one user can own, taken from `defaultPlan` |
 | `projects`, `services`, `customDomains` | Per organization |
+| `previewEnvironments` | Pull request previews per organization, outside `environmentsPerProject` |
 | `environmentsPerProject` | Per project |
 | `replicas`, `cpuMillis`, `memoryMb` | Sums of pods, pods × `cpuMillis` and pods × `memoryMb` over the organization's services, where a service's pods are its `replicas` and a cron service counts as one pod |
 | `concurrentBuilds` | Running builds per organization; further builds wait in the queue. Needs `buildsPerHour` |

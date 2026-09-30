@@ -184,6 +184,7 @@ plans:
     cpuRequestRatio: 0.25
     ephemeralMb: 1024
     customDomains: 2
+    previewEnvironments: 1
     concurrentBuilds: 1
     buildsPerHour: 10
     egressBandwidth: 20M

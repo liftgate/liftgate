@@ -1,5 +1,6 @@
 package dev.liftgate.db
 
+import dev.liftgate.build.removeIdlePreviews
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -24,6 +25,7 @@ class Housekeeping(private val db: Db) {
             Outbox.deleteWhere { publishedAt less now().minusDays(OUTBOX_RETENTION_DAYS) }
             Sessions.deleteWhere { expiresAt less now() }
             EmailCodes.deleteWhere { expiresAt less now() }
+            removeIdlePreviews()
         }
     }
 

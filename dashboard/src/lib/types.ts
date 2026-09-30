@@ -25,6 +25,8 @@ export type Project = {
   repoFullName: string;
   repoDefaultBranch: string;
   installationId: number;
+  previewsEnabled: boolean;
+  previewBaseEnvironmentId: string | null;
 };
 
 export type EnvironmentKind = "production" | "preview";
@@ -37,6 +39,7 @@ export type Environment = {
   kind: EnvironmentKind;
   branch: string;
   namespace: string;
+  pullRequest: number | null;
 };
 
 export type ServiceKind = "web" | "worker" | "cron" | "static";
@@ -238,3 +241,16 @@ export type ServiceMetrics = {
   networkTx: MetricPoint[];
   restarts: number;
 };
+
+export type PullRequest = {
+  number: number;
+  title: string;
+  headRef: string;
+  headSha: string;
+  fork: boolean;
+  approvedSha: string | null;
+  error: string | null;
+  updatedAt: string;
+};
+
+export type PreviewStatus = { missing: string[] | null; pullRequests: PullRequest[] };

@@ -65,9 +65,11 @@ fun orgServiceIds(orgId: UUID) = (ServicesTable innerJoin Environments innerJoin
  * @date 9/17/2026
  */
 class Services(private val db: Db, private val limits: Limits = Limits()) {
-    suspend fun create(environmentId: UUID, spec: ServiceSpec): Service = db.tx {
+    suspend fun create(environmentId: UUID, spec: ServiceSpec): Service = db.tx { insert(environmentId, spec) }
+
+    fun insert(environmentId: UUID, spec: ServiceSpec): Service {
         limits.service(environmentId, spec)
-        ServicesTable.insertReturning {
+        return ServicesTable.insertReturning {
             it[id] = UUID.randomUUID()
             it[ServicesTable.environmentId] = environmentId
             it.set(spec)

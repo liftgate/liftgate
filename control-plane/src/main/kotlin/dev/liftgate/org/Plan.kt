@@ -23,9 +23,10 @@ data class Plan(
     val egressBandwidth: String? = null,
     val udp: Boolean = true,
     val cronTimeoutSeconds: Int = 3600,
+    val previewEnvironments: Int? = null,
 ) {
     init {
-        require(listOfNotNull(ownedOrgs, projects, environmentsPerProject, services, cpuMillis, memoryMb, replicas, customDomains, concurrentBuilds, buildsPerHour).all { it >= 0 }) {
+        require(listOfNotNull(ownedOrgs, projects, environmentsPerProject, services, cpuMillis, memoryMb, replicas, customDomains, concurrentBuilds, buildsPerHour, previewEnvironments).all { it >= 0 }) {
             "plan limits cannot be negative"
         }
         require(concurrentBuilds == null || buildsPerHour != null) { "a plan that limits concurrentBuilds must also limit buildsPerHour" }

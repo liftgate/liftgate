@@ -19,6 +19,7 @@ A limit the plan leaves out is unlimited.
 | `cpuMillis` | The sum of pods × CPU over the organization's services |
 | `memoryMb` | The sum of pods × memory over the organization's services |
 | `customDomains` | Custom domains in the organization |
+| `previewEnvironments` | Pull request previews in the organization. They do not count toward `environmentsPerProject` |
 | `concurrentBuilds` | Builds running at once. Further builds wait in the queue |
 | `buildsPerHour` | Builds started in the last hour or waiting in the queue. Further builds fail |
 
@@ -54,6 +55,7 @@ limits. `free` is meant for shared installations:
 | `cpuMillis` | 1000 |
 | `memoryMb` | 1024 |
 | `customDomains` | 2 |
+| `previewEnvironments` | 1 |
 | `concurrentBuilds` | 1 |
 | `buildsPerHour` | 10 |
 | `cpuRequestRatio` | 0.25 |

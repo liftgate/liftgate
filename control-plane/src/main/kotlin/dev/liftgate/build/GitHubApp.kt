@@ -3,6 +3,7 @@ package dev.liftgate.build
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import dev.liftgate.config.GitHubConfig
+import dev.liftgate.project.Project
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.ClientRequestException
@@ -13,6 +14,7 @@ import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
+import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
@@ -25,6 +27,9 @@ import java.time.Instant
 
 private const val API = "https://api.github.com"
 private const val PER_PAGE = 100
+
+val ClientRequestException.rateLimited
+    get() = response.status == HttpStatusCode.TooManyRequests || response.headers["x-ratelimit-remaining"] == "0" || response.headers[HttpHeaders.RetryAfter] != null
 
 /**
  * @author Dean
@@ -55,6 +60,11 @@ class GitHubApp(private val config: GitHubConfig, private val client: HttpClient
         client.get("$API/repos/$repoFullName/collaborators/$login/permission") { github(installationToken) }.body<CollaboratorPermission>().permission in setOf("admin", "write")
     } catch (e: ClientRequestException) {
         if (e.response.status == HttpStatusCode.NotFound) false else throw e
+    }
+
+    suspend fun <T> asImporter(project: Project, permission: Pair<String, String>, block: suspend (String) -> T): T? {
+        val token = installationToken(project.installationId, project.repoFullName.substringAfter('/'), mapOf(permission, "metadata" to "read"))
+        return if (project.importedByLogin?.let { canPush(token, project.repoFullName, it) } == false) null else block(token)
     }
 
     suspend fun installation(userToken: String, repoFullName: String): Pair<Long, String>? = try {
@@ -97,6 +107,18 @@ class GitHubApp(private val config: GitHubConfig, private val client: HttpClient
         }
     }
 
+    suspend fun installationSettings(installationId: Long): Installation = client.get("$API/app/installations/$installationId") { github(appJwt()) }.body()
+
+    suspend fun comment(installationToken: String, repoFullName: String, number: Int, commentId: Long?, body: String): Long {
+        val request: HttpRequestBuilder.() -> Unit = {
+            github(installationToken)
+            contentType(ContentType.Application.Json)
+            setBody(mapOf("body" to body))
+        }
+        val response = if (commentId == null) client.post("$API/repos/$repoFullName/issues/$number/comments", request) else client.patch("$API/repos/$repoFullName/issues/comments/$commentId", request)
+        return response.body<Comment>().id
+    }
+
     private fun HttpRequestBuilder.github(token: String) {
         expectSuccess = true
         bearerAuth(token)
@@ -117,7 +139,10 @@ class GitHubApp(private val config: GitHubConfig, private val client: HttpClient
     private data class CollaboratorPermission(val permission: String)
 
     @Serializable
-    private data class Installation(val id: Long)
+    data class Installation(val id: Long, val permissions: Map<String, String> = emptyMap(), val events: List<String> = emptyList())
+
+    @Serializable
+    private data class Comment(val id: Long)
 
     @Serializable
     data class Importable(val repositories: List<Repo>, val installUrl: String) {

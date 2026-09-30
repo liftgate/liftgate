@@ -8,6 +8,7 @@ import dev.liftgate.project.Projects
 import dev.liftgate.service.ServiceKind
 import dev.liftgate.service.ServiceSpec
 import dev.liftgate.service.Services
+import dev.liftgate.waitingLocks
 import io.micrometer.prometheusmetrics.PrometheusConfig
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry
 import kotlinx.coroutines.CompletableDeferred
@@ -71,7 +72,7 @@ class BacklogTest {
         launch(Dispatchers.IO) { db.tx { exec("lock table outbox"); locked.complete(Unit); unlock.await(30, TimeUnit.SECONDS) } }
         locked.await()
         val first = backlog.start(this)
-        withTimeout(10.seconds) { while (db.tx { exec("select count(*) from pg_locks where not granted") { it.next(); it.getLong(1) } } == 0L) delay(50) }
+        withTimeout(10.seconds) { while (db.tx { waitingLocks() } == 0L) delay(50) }
 
         first.cancel()
         val second = backlog.start(this)

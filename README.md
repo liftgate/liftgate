@@ -13,6 +13,7 @@ Open-source full-stack application hosting. Connect a GitHub repository and Lift
 - Runs web services, workers and cron jobs on Kubernetes with a platform hostname, verified custom domains and Let's Encrypt certificates.
 - Keeps environment variables encrypted at rest with AES-256-GCM and injects them as Kubernetes Secrets.
 - Streams build and service logs live, keeps deployment history and rolls back to any earlier successful build.
+- Deploys a preview environment for each pull request, copied from a base environment and removed when the pull request closes.
 - Isolates tenants: one namespace per environment, default-deny network policies, the restricted pod security profile, gVisor on shared clusters.
 - Meters CPU, memory and network per service from Prometheus.
 - Installs as one Helm chart: the `single` profile for a laptop or a small VPS, the `ha` profile for a real cluster.
@@ -127,11 +128,11 @@ Liftgate signs users in and reads repositories through one GitHub App. Create it
 - Callback URL: `<publicUrl>/api/v1/auth/github/callback`
 - Setup URL: `<dashboardUrl>/dashboard?installed=1`, with Redirect on update checked and Request user authorization during installation left unchecked, so an install started from the dashboard returns to the new project dialog
 - Webhook URL: `<publicUrl>/api/v1/webhooks/github`, with a webhook secret
-- Repository permissions: Commit statuses read and write, Contents read-only, Metadata read-only
+- Repository permissions: Commit statuses read and write, Contents read-only, Issues read and write, Metadata read-only, Pull requests read-only
 - Account permissions: Email addresses read-only
-- Subscribe to events: Push
+- Subscribe to events: Push, Pull request
 
-Generate a private key, then install the app on the account or organisation whose repositories you want to deploy. The App ID, client ID, client secret, webhook secret and private key go into the chart's `github` values, or into `control-plane/.env` for local development. A new project lists the repositories where the App is installed and the signed-in GitHub account can push, with a link to install the App on another account; Liftgate looks up the installation itself and checks the push access again when the project is created.
+Generate a private key, then install the app on the account or organisation whose repositories you want to deploy. The App ID, client ID, client secret, webhook secret and private key go into the chart's `github` values, or into `control-plane/.env` for local development. A new project lists the repositories where the App is installed and the signed-in GitHub account can push, with a link to install the App on another account; Liftgate looks up the installation itself and checks the push access again when the project is created. Pull request previews need the Pull request event, Pull requests read-only and Issues read and write, which lets Liftgate keep one comment with the preview URLs on each pull request; a project's settings page lists any of them the installation lacks.
 
 ### Other sign-in methods
 
@@ -200,7 +201,7 @@ CI runs on GitHub Actions: `control-plane.yml` builds and tests with Gradle on J
 
 Milestone 1, foundation, shipped in 0.2: connect a repository, build on push, release to Kubernetes, reach the service on a platform hostname or a custom domain, manage it from the dashboard, roll back, meter usage, install with Helm in `single` or `ha`.
 
-After milestone 1, in no particular order: preview environments per pull request, sleeping and autoscaling, object storage as a product, a CLI, bring-your-own clusters, multi-region, device VPN, billing enforcement.
+After milestone 1, in no particular order: sleeping and autoscaling, object storage as a product, a CLI, bring-your-own clusters, multi-region, device VPN, billing enforcement.
 
 ## Contributing and security
 

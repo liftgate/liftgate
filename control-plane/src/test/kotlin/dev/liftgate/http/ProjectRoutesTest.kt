@@ -12,11 +12,15 @@ import dev.liftgate.org.Orgs
 import dev.liftgate.org.Plan
 import dev.liftgate.org.Plans
 import dev.liftgate.org.insertUser
+import dev.liftgate.project.EnvironmentKind
 import dev.liftgate.project.Project
 import dev.liftgate.project.Projects
 import dev.liftgate.discardingDb
+import dev.liftgate.teardowns
 import dev.liftgate.testConfig
 import dev.liftgate.unlimitedCache
+import io.ktor.client.request.delete
+import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
@@ -102,6 +106,43 @@ class ProjectRoutesTest {
         assertEquals(HttpStatusCode.Conflict, refused.status)
         assertEquals(ErrorBody("plan_limit", "the free plan's projects limit is 1"), json.decodeFromString(ErrorBody.serializer(), refused.bodyAsText()))
         assertEquals(1L, db.tx { ProjectsTable.selectAll().count() })
+    }
+
+    @Test
+    fun `deleting an environment removes it and tears down its namespace`() = testApplication {
+        val org = orgs.create("acme", "Acme", user.id)
+        val project = app.projects.create(org.id, "shop", "Shop", "acme/shop", 42)
+        val staging = app.projects.createEnvironment(project.id, "staging", "Staging", EnvironmentKind.PRODUCTION, "develop")
+        application { liftgate(app) }
+        assertEquals(HttpStatusCode.NoContent, client.delete("/api/v1/environments/${staging.id}") { session() }.status)
+        assertEquals(listOf("production"), app.projects.environments(project.id).map { it.slug })
+        assertEquals(listOf(staging.namespace), db.teardowns())
+    }
+
+    @Test
+    fun `project settings turn previews on from a base environment of the same project, pull request slugs stay free for previews, and deleting the base environment clears it`() = testApplication {
+        val org = orgs.create("acme", "Acme", user.id)
+        val project = app.projects.create(org.id, "shop", "Shop", "acme/shop", 42)
+        val other = app.projects.environments(app.projects.create(org.id, "blog", "Blog", "acme/blog", 42).id).single()
+        val staging = app.projects.createEnvironment(project.id, "staging", "Staging", EnvironmentKind.PRODUCTION, "develop")
+        application { liftgate(app) }
+        suspend fun patch(body: String) = client.patch("/api/v1/projects/${project.id}") {
+            session()
+            contentType(ContentType.Application.Json)
+            setBody(body)
+        }
+        assertEquals(HttpStatusCode.UnprocessableEntity, patch("""{"previewBaseEnvironmentId":"${other.id}"}""").status)
+        val taken = client.post("/api/v1/projects/${project.id}/environments") {
+            session()
+            contentType(ContentType.Application.Json)
+            setBody("""{"slug":"pr-7","name":"Seven","branch":"seven"}""")
+        }
+        assertEquals(HttpStatusCode.UnprocessableEntity, taken.status)
+        val updated = json.decodeFromString(Project.serializer(), patch("""{"previewsEnabled":true,"previewBaseEnvironmentId":"${staging.id}"}""").bodyAsText())
+        assertEquals(true to staging.id, updated.previewsEnabled to updated.previewBaseEnvironmentId)
+        assertEquals(updated, json.decodeFromString(Project.serializer(), patch("""{}""").bodyAsText()))
+        client.delete("/api/v1/environments/${staging.id}") { session() }
+        assertEquals(updated.copy(previewBaseEnvironmentId = null), app.projects.byId(project.id))
     }
 
     @Test

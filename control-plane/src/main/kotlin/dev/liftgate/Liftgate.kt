@@ -15,6 +15,7 @@ import dev.liftgate.auth.Sso
 import dev.liftgate.build.BuildAdmission
 import dev.liftgate.build.Builder
 import dev.liftgate.build.GitHubApp
+import dev.liftgate.build.Previews
 import dev.liftgate.build.RegistryJanitor
 import dev.liftgate.build.RegistryTokens
 import dev.liftgate.cache.Cache
@@ -119,6 +120,7 @@ class App(val config: Config) : AutoCloseable {
     val notificationChannels by lazy { NotificationChannels(db, secrets) }
     val notifier by lazy { Notifier(this) }
     val invitations by lazy { Invitations(db, mailer, config.dashboardUrl, limits) }
+    val previews by lazy { Previews(this) }
     private val stopped = CountDownLatch(1)
     private var server: EmbeddedServer<*, *>? = null
 

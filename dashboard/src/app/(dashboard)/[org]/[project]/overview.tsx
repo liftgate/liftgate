@@ -71,16 +71,21 @@ export function Overview({ org, projectSlug, onboarding }: { org: string; projec
         title={project?.name ?? <Skeleton className="h-6 w-48" />}
         description={project && `${project.repoFullName} · ${project.repoDefaultBranch}`}
         actions={
-          admin && (
-            <>
-              <Button onClick={() => setDialog("environment")} disabled={!project}>
-                New environment
-              </Button>
-              <Button variant="primary" onClick={() => newService()} disabled={!environments?.length}>
-                New service
-              </Button>
-            </>
-          )
+          <>
+            <Link href={`${href}/settings`} className={buttonClasses()}>
+              Settings
+            </Link>
+            {admin && (
+              <>
+                <Button onClick={() => setDialog("environment")} disabled={!project}>
+                  New environment
+                </Button>
+                <Button variant="primary" onClick={() => newService()} disabled={!environments?.length}>
+                  New service
+                </Button>
+              </>
+            )}
+          </>
         }
       />
       <Loaded query={tree} also={[role]} skeleton={<TableSkeleton />}>

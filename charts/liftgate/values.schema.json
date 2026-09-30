@@ -367,7 +367,8 @@
         "buildsPerHour": { "$ref": "#/definitions/limit" },
         "egressBandwidth": { "type": "string", "pattern": "^[0-9]+[kMG]?$" },
         "udp": { "type": "boolean" },
-        "cronTimeoutSeconds": { "type": "integer", "minimum": 1 }
+        "cronTimeoutSeconds": { "type": "integer", "minimum": 1 },
+        "previewEnvironments": { "$ref": "#/definitions/limit" }
       },
       "dependencies": { "concurrentBuilds": ["buildsPerHour"] }
     }

@@ -17,12 +17,14 @@ import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.innerJoin
+import org.jetbrains.exposed.v1.core.isNull
 import org.jetbrains.exposed.v1.jdbc.JdbcTransaction
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insertIgnore
 import org.jetbrains.exposed.v1.jdbc.insertReturning
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.updateReturning
 import java.util.UUID
 
 fun ResultRow.toProject() = Project(
@@ -34,6 +36,8 @@ fun ResultRow.toProject() = Project(
     this[ProjectsTable.repoDefaultBranch],
     this[ProjectsTable.installationId],
     this[ProjectsTable.importedByLogin],
+    this[ProjectsTable.previewsEnabled],
+    this[ProjectsTable.previewBaseEnvironmentId],
 )
 
 fun ResultRow.toEnvironment() = Environment(
@@ -44,12 +48,19 @@ fun ResultRow.toEnvironment() = Environment(
     this[Environments.kind].toEnum(),
     this[Environments.branch],
     this[Environments.namespace],
+    this[Environments.pullRequest],
 )
 
 fun namespaceFor(environmentId: UUID) = "env-" + environmentId.toString().replace("-", "").take(12)
 
 fun JdbcTransaction.enqueueTeardown(where: () -> Op<Boolean>) = (Environments innerJoin ProjectsTable).select(Environments.namespace).where(where)
     .forEach { enqueue(Subject.TEARDOWN_REQUESTED, buildJsonObject { put("namespace", it[Environments.namespace]) }) }
+
+fun JdbcTransaction.deleteEnvironments(where: () -> Op<Boolean>) {
+    enqueueTeardown(where)
+    orphanRepositories(where())
+    Environments.deleteWhere { where() }
+}
 
 /**
  * @author Dean
@@ -92,9 +103,24 @@ class Projects(private val db: Db, private val limits: Limits = Limits()) {
         }
     }
 
+    suspend fun update(id: UUID, settings: PreviewSettings): Project = db.tx {
+        ProjectsTable.updateReturning(ProjectsTable.columns, { ProjectsTable.id eq id }) {
+            it[previewsEnabled] = settings.previewsEnabled
+            it[previewBaseEnvironmentId] = settings.previewBaseEnvironmentId
+        }.single().toProject()
+    }
+
+    suspend fun forRepo(installationId: Long, repoFullName: String): List<Project> = db.tx {
+        ProjectsTable.selectAll().where { (ProjectsTable.installationId eq installationId) and (ProjectsTable.repoFullName eq repoFullName) }.map { it.toProject() }
+    }
+
     suspend fun createEnvironment(projectId: UUID, slug: String, name: String, kind: EnvironmentKind, branch: String): Environment = db.tx {
         limits.environment(projectId)
         insertEnvironment(projectId, slug, name, kind, branch)
+    }
+
+    suspend fun deleteEnvironment(id: UUID) {
+        db.tx { deleteEnvironments { Environments.id eq id } }
     }
 
     suspend fun environment(id: UUID): Environment? = db.tx { Environments.selectAll().where { Environments.id eq id }.singleOrNull()?.toEnvironment() }
@@ -105,11 +131,16 @@ class Projects(private val db: Db, private val limits: Limits = Limits()) {
 
     suspend fun environmentsForRepo(installationId: Long, repoFullName: String, branch: String): List<Environment> = db.tx {
         (Environments innerJoin ProjectsTable).selectAll()
-            .where { (ProjectsTable.installationId eq installationId) and (ProjectsTable.repoFullName eq repoFullName) and (Environments.branch eq branch) }
+            .where { (ProjectsTable.installationId eq installationId) and (ProjectsTable.repoFullName eq repoFullName) and (Environments.branch eq branch) and Environments.pullRequest.isNull() }
             .map { it.toEnvironment() }
     }
 
-    private fun insertEnvironment(projectId: UUID, slug: String, name: String, kind: EnvironmentKind, branch: String): Environment {
+    fun insertPreview(projectId: UUID, number: Int, branch: String): Environment {
+        limits.preview(projectId)
+        return insertEnvironment(projectId, "pr-$number", "PR #$number", EnvironmentKind.PREVIEW, branch, number)
+    }
+
+    private fun insertEnvironment(projectId: UUID, slug: String, name: String, kind: EnvironmentKind, branch: String, pullRequest: Int? = null): Environment {
         val id = UUID.randomUUID()
         return Environments.insertReturning {
             it[Environments.id] = id
@@ -119,6 +150,7 @@ class Projects(private val db: Db, private val limits: Limits = Limits()) {
             it[Environments.kind] = kind.sql
             it[Environments.branch] = branch
             it[namespace] = namespaceFor(id)
+            it[Environments.pullRequest] = pullRequest
         }.single().toEnvironment()
     }
 }

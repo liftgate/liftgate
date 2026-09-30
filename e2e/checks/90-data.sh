@@ -111,11 +111,11 @@ insert into github_installations (id, org_id, account_login) values (9, '$org', 
 insert into projects (id, org_id, slug, name, repo_full_name, installation_id) values ('$project', '$org', 'data', 'Data', 'e2e-data/data', 9);
 insert into environments (id, project_id, slug, name, kind, branch, namespace) values ('$environment', '$project', 'production', 'Production', 'production', 'main', '$ns');
 insert into services (id, environment_id, slug, name, kind, port, cpu_millis, memory_mb, start_command) values
-    ('$files', '$environment', 'files', 'Files', 'worker', null, 100, 64, 'exec sleep 3600'),
+    ('$files', '$environment', 'files', 'Files', 'worker', null, 100, 64, 'trap "exit 0" TERM; sleep 3600 & wait'),
     ('$app', '$environment', 'app', 'App', 'worker', null, 100, 128, 'exec sleep 3600');
 insert into builds (id, service_id, commit_sha, branch, status, image_ref, started_at, finished_at) values
     (gen_random_uuid(), '$files', '0000000000000000000000000000000000000000', 'main', 'succeeded', 'busybox:1.36', now(), now()),
-    (gen_random_uuid(), '$app', '0000000000000000000000000000000000000000', 'main', 'succeeded', 'postgres:17-alpine', now(), now());
+    (gen_random_uuid(), '$app', '0000000000000000000000000000000000000000', 'main', 'succeeded', 'postgres:18-alpine', now(), now());
 insert into api_tokens (id, org_id, name, token_hash, created_by) values
     (gen_random_uuid(), '$org', 'data', translate(rtrim(encode(sha256('$token'), 'base64'), '='), '+/', '-_'), '00000000-0000-4000-8000-000000000001');
 EOF
@@ -126,7 +126,7 @@ kubectl -n "$system" port-forward service/liftgate-control-plane 8080:8080 > /de
 forward=$!
 curl --fail --silent --show-error --retry 30 --retry-connrefused --retry-delay 1 http://localhost:8080/readyz > /dev/null
 
-want=201 expect --request POST --data '{"slug":"main","storageGb":1,"cpuMillis":500,"memoryMb":512}' "http://localhost:8080/api/v1/environments/$environment/databases"
+want=201 expect --request POST --data '{"slug":"main","storageGb":1,"cpuMillis":100,"memoryMb":512}' "http://localhost:8080/api/v1/environments/$environment/databases"
 database="$(jq -r .id "$work/body")"
 created=$(date +%s)
 

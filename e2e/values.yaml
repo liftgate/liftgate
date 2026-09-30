@@ -41,6 +41,7 @@ plans:
     cronTimeoutSeconds: 20
   data:
     cpuMillis: 4000
+    cpuRequestRatio: 0.1
     memoryMb: 4096
     replicas: 10
     ephemeralMb: 1024

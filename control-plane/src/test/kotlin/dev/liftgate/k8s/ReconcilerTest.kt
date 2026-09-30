@@ -370,7 +370,8 @@ class ReconcilerTest {
             ),
         )
         val database = Database(UUID.randomUUID(), testEnvironment.id, "main", 1, 500, 512, null, null, Instant.now())
-        coEvery { databases.scope(database.id) } returns DatabaseScope(database, testEnvironment, testProject, testOrg) andThen null
+        val scope = DatabaseScope(database, testEnvironment, testProject, testOrg)
+        coEvery { databases.scope(database.id) } returnsMany listOf(scope, scope, null)
         acceptAll()
         val objects = listOf(
             "/apis/networking.k8s.io/v1/$namespaced/networkpolicies/allow-databases",
@@ -386,6 +387,22 @@ class ReconcilerTest {
         repeat(2) { Reconciler(app, client).database(release.namespace, database.id) }
         val sent = sent()
         assertEquals(listOf(namespacePath, quotaPath) + policyPaths + objects, sent.filter { it.method == "PATCH" }.map { it.path.removeSuffix(apply) })
+        assertEquals(deleted, sent.filter { it.method == "DELETE" }.map { it.path })
+    }
+
+    @Test
+    fun `a database deleted while it was being applied loses the cluster that apply created`() = runBlocking {
+        val database = Database(UUID.randomUUID(), testEnvironment.id, "main", 1, 500, 512, null, null, Instant.now())
+        coEvery { databases.scope(database.id) } returnsMany listOf(DatabaseScope(database, testEnvironment, testProject, testOrg), null)
+        acceptAll()
+        server.expect().patch().withPath("/apis/networking.k8s.io/v1/$namespaced/networkpolicies/allow-databases$apply").andReturn(200, "{}").always()
+        server.expect().patch().withPath("/apis/postgresql.cnpg.io/v1/$namespaced/clusters/main$apply").andReturn(200, "{}").always()
+        val deleted = listOf("scheduledbackups", "clusters").map { "/apis/postgresql.cnpg.io/v1/$namespaced/$it?labelSelector=liftgate.dev%2Fdatabase-id%3D${database.id}" }
+        deleted.forEach { server.expect().delete().withPath(it).andReturn(200, StatusBuilder().build()).always() }
+
+        Reconciler(app, client).database(release.namespace, database.id)
+        val sent = sent()
+        assertTrue(sent.any { it.method == "PATCH" && it.path.startsWith("/apis/postgresql.cnpg.io/v1/$namespaced/clusters/main") })
         assertEquals(deleted, sent.filter { it.method == "DELETE" }.map { it.path })
     }
 

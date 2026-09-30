@@ -1,6 +1,7 @@
 package dev.liftgate.k8s
 
 import dev.liftgate.App
+import dev.liftgate.database.DatabaseScope
 import dev.liftgate.deploy.Deployment
 import dev.liftgate.deploy.DeploymentStatus
 import dev.liftgate.domain.DomainKind
@@ -86,24 +87,26 @@ class Reconciler(private val app: App, private val kube: KubernetesClient) {
     fun serviceObjects() = listOf(kube.apps().deployments(), kube.batch().v1().cronjobs(), kube.services(), kube.resources(HTTPRoute::class.java), kube.persistentVolumeClaims())
 
     suspend fun database(namespace: String, id: UUID) {
-        val scope = app.databases.scope(id)?.let { it.copy(plan = app.config.plans.of(it.org.plan)) }
-        withContext(Dispatchers.IO) {
-            if (scope == null) return@withContext listOf(scheduledBackupContext, clusterContext)
-                .forEach { kube.genericKubernetesResources(it).inNamespace(namespace).withLabel(DATABASE_ID_LABEL, id.toString()).delete() }
-            val config = app.config
-            val backup = config.databaseBackup
-            try {
-                (environment(scope) + Resources.databasePolicy(scope, backup?.egress.orEmpty()) + listOfNotNull(backup?.let { Resources.backupSecret(scope, it) }))
-                    .forEach { kube.resource(it).apply() }
-                listOfNotNull(
-                    backup?.let { objectStoreContext to Resources.objectStore(scope, it) },
-                    clusterContext to Resources.cluster(scope, backup, config.storageClass, config.workloadNodeSelector, config.workloadTolerations),
-                    backup?.let { scheduledBackupContext to Resources.scheduledBackup(scope, it) },
-                ).forEach { (context, resource) -> kube.genericKubernetesResources(context).inNamespace(namespace).resource(resource).apply() }
-            } catch (e: KubernetesClientException) {
-                if (e.retryable) throw e
-                log.warn("database {} could not be applied", id, e)
-            }
+        app.databases.scope(id)?.let { apply(it.copy(plan = app.config.plans.of(it.org.plan))) }
+        if (app.databases.scope(id) == null) withContext(Dispatchers.IO) {
+            listOf(scheduledBackupContext, clusterContext).forEach { kube.genericKubernetesResources(it).inNamespace(namespace).withLabel(DATABASE_ID_LABEL, id.toString()).delete() }
+        }
+    }
+
+    private suspend fun apply(d: DatabaseScope) = withContext(Dispatchers.IO) {
+        val config = app.config
+        val backup = config.databaseBackup
+        try {
+            (environment(d) + Resources.databasePolicy(d, backup?.egress.orEmpty()) + listOfNotNull(backup?.let { Resources.backupSecret(d, it) }))
+                .forEach { kube.resource(it).apply() }
+            listOfNotNull(
+                backup?.let { objectStoreContext to Resources.objectStore(d, it) },
+                clusterContext to Resources.cluster(d, backup, config.storageClass, config.workloadNodeSelector, config.workloadTolerations),
+                backup?.let { scheduledBackupContext to Resources.scheduledBackup(d, it) },
+            ).forEach { (context, resource) -> kube.genericKubernetesResources(context).inNamespace(d.namespace).resource(resource).apply() }
+        } catch (e: KubernetesClientException) {
+            if (e.retryable) throw e
+            log.warn("database {} could not be applied", d.database.id, e)
         }
     }
 

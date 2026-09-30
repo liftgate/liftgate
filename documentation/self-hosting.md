@@ -382,9 +382,15 @@ enforces every `Content-Security-Policy` a response carries, so a second one can
 Check a page and an API response through the proxy; each of the four headers appears once:
 
 ```sh
-curl -s -o /dev/null -D - https://liftgate.example.com/login
+curl -s -o /dev/null -D - -H 'Accept: text/html' https://liftgate.example.com/login
 curl -s -o /dev/null -D - https://liftgate.example.com/api/v1/auth/providers
 ```
+
+A CDN must not rewrite the dashboard's HTML or add scripts to it. The policy blocks scripts from other
+origins, so one a CDN injects, such as Cloudflare's Web Analytics beacon, fails to load and the browser
+logs an error on every page. Pages a browser requests carry `no-transform` in `Cache-Control`, as the
+first `curl` shows, so Cloudflare skips Web Analytics, Rocket Loader and Email Address Obfuscation on
+them. If your CDN ignores `no-transform`, turn those features off for the dashboard's host.
 
 The policy forbids showing the dashboard in a frame, and `Strict-Transport-Security` tells browsers to
 reach the dashboard's and the API's hosts only over HTTPS for two years. A proxy also changes how the

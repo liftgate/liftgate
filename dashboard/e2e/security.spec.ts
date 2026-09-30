@@ -10,7 +10,24 @@ test("pages and assets carry the security headers", async ({ request }) => {
     expect(headers["x-content-type-options"], path).toBe("nosniff");
     expect(headers["referrer-policy"], path).toBe("strict-origin-when-cross-origin");
     expect(headers["strict-transport-security"], path).toBe("max-age=63072000");
+    expect(headers["x-powered-by"], path).toBeUndefined();
   }
+});
+
+test("pages tell a cdn not to rewrite them, and static assets stay cached for a year", async ({ request }) => {
+  const api = createServer(({ url }, response) => response.writeHead(url === "/api/v1/orgs/missing" ? 404 : 200).end());
+  await new Promise<void>((listening) => api.listen(3102, listening));
+  try {
+    for (const [path, status] of [["/", 200], ["/login", 200], ["/missing", 404], [`${servicePath}/missing`, 404]] as const) {
+      const response = await request.get(path, { headers: { accept: "text/html" } });
+      expect(response.status(), path).toBe(status);
+      expect(response.headers()["cache-control"], path).toBe("private, no-cache, no-store, max-age=0, must-revalidate, no-transform");
+    }
+  } finally {
+    api.close();
+  }
+  const asset = (await (await request.get("/login")).text()).match(/\/_next\/static\/[^"]+\.js/)?.[0] ?? "";
+  expect((await request.get(asset)).headers()["cache-control"]).toBe("public, max-age=31536000, immutable");
 });
 
 test("another site cannot frame the dashboard", async ({ page, baseURL }) => {

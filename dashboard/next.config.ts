@@ -18,6 +18,7 @@ const csp = [
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  poweredByHeader: false,
   headers: async () => [
     {
       source: "/:path*",
@@ -27,6 +28,11 @@ const nextConfig: NextConfig = {
         { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
         { key: "X-Content-Type-Options", value: "nosniff" },
       ],
+    },
+    {
+      source: "/:path*",
+      has: [{ type: "header", key: "accept", value: ".*text/html.*" }],
+      headers: [{ key: "Cache-Control", value: "private, no-cache, no-store, max-age=0, must-revalidate, no-transform" }],
     },
   ],
   rewrites: async () => (dev ? [{ source: "/api/:path*", destination: "http://localhost:8080/api/:path*" }] : []),

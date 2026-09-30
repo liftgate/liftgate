@@ -3,6 +3,7 @@ package dev.liftgate.db
 import dev.liftgate.http.json
 import dev.liftgate.org.DEFAULT_PLAN
 import dev.liftgate.service.ServiceSpec
+import dev.liftgate.service.Volume
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
@@ -289,6 +290,7 @@ object Services : Table("services") {
     val watchPaths = array<String>("watch_paths").databaseGenerated()
     val createdAt = createdAtColumn()
     val healthCheckPath = text("health_check_path").nullable()
+    val volume = jsonb("volume", json, Volume.serializer()).nullable()
     override val primaryKey = PrimaryKey(id)
 
     init {
@@ -513,4 +515,40 @@ object PullRequests : Table("pull_requests") {
     val error = text("error").nullable()
     val updatedAt = timestampWithTimeZone("updated_at")
     override val primaryKey = PrimaryKey(projectId, number)
+}
+
+/**
+ * @author Dean
+ * @date 9/30/2026
+ */
+object Databases : Table("databases") {
+    val id = javaUUID("id")
+    val environmentId = fk("environment_id", Environments.id, CASCADE)
+    val slug = text("slug")
+    val storageGb = integer("storage_gb")
+    val cpuMillis = integer("cpu_millis")
+    val memoryMb = integer("memory_mb")
+    val restoredFrom = javaUUID("restored_from").nullable()
+    val restoreTarget = timestampWithTimeZone("restore_target").nullable()
+    val createdAt = createdAtColumn()
+    override val primaryKey = PrimaryKey(id)
+
+    init {
+        uniqueIndex(environmentId, slug)
+    }
+}
+
+/**
+ * @author Dean
+ * @date 9/30/2026
+ */
+object ServiceLinks : Table("service_links") {
+    val serviceId = fk("service_id", Services.id, CASCADE)
+    val databaseId = fk("database_id", Databases.id)
+    val envName = text("env_name")
+    override val primaryKey = PrimaryKey(serviceId, envName)
+
+    init {
+        index("service_links_database", false, databaseId)
+    }
 }

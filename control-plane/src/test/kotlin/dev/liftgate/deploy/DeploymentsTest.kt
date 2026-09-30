@@ -2,6 +2,7 @@ package dev.liftgate.deploy
 
 import dev.liftgate.App
 import dev.liftgate.TestDatabase
+import dev.liftgate.database.Databases
 import dev.liftgate.db.Deployments as DeploymentsTable
 import dev.liftgate.db.Outbox
 import dev.liftgate.domain.Domains
@@ -93,6 +94,7 @@ class DeploymentsTest {
         every { this@mockk.services } returns this@DeploymentsTest.services
         every { this@mockk.envVars } returns this@DeploymentsTest.envVars
         every { domains } returns Domains(this@DeploymentsTest.db, "liftgate.app")
+        every { databases } returns Databases(this@DeploymentsTest.db)
     }
 
     @Test

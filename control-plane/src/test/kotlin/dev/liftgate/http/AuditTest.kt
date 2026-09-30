@@ -11,6 +11,11 @@ import dev.liftgate.auth.Sso
 import dev.liftgate.auth.SsoSettings
 import dev.liftgate.build.GitHubApp
 import dev.liftgate.build.Previews
+import dev.liftgate.database.Backup
+import dev.liftgate.database.Database
+import dev.liftgate.database.DatabaseScope
+import dev.liftgate.database.Databases
+import dev.liftgate.database.ServiceLink
 import dev.liftgate.db.AuditLog
 import dev.liftgate.db.Memberships
 import dev.liftgate.db.sql
@@ -23,6 +28,7 @@ import dev.liftgate.deploy.Deployments
 import dev.liftgate.domain.Domain
 import dev.liftgate.domain.DomainKind
 import dev.liftgate.domain.Domains
+import dev.liftgate.k8s.DatabaseClusters
 import dev.liftgate.notify.NotificationChannel
 import dev.liftgate.notify.NotificationChannel.Event
 import dev.liftgate.notify.NotificationChannel.Kind
@@ -127,6 +133,11 @@ class AuditTest {
             "POST /domains/{id}/verify",
             "DELETE /domains/{id}",
             "POST /invitations/{token}/accept",
+            "POST /environments/{id}/databases",
+            "DELETE /databases/{id}",
+            "POST /databases/{id}/restore",
+            "POST /databases/{id}/links",
+            "DELETE /databases/{id}/links/{serviceId}",
         )
     }
 
@@ -147,9 +158,16 @@ class AuditTest {
     private val deployment = Deployment(UUID.randomUUID(), service.id, build.id, DeploymentStatus.RUNNING, 1, null, Instant.now())
     private val domain = Domain(UUID.randomUUID(), service.id, "shop.acme.dev", DomainKind.CUSTOM, "token", null, "pending")
     private val channel = NotificationChannel(UUID.randomUUID(), "ops", Kind.WEBHOOK, "ops.acme.dev", setOf(Event.BUILD_FAILED), Instant.now())
+    private val database = Database(UUID.randomUUID(), environment.id, "main", 1, 500, 512, null, null, Instant.now())
     private val sso = SsoSettings("https://idp.acme.dev", "https://idp.acme.dev/sso", "certificate", listOf("acme.dev"))
     private val app = mockk<App>().also {
-        every { it.config } returns testConfig()
+        every { it.config } returns testConfig(
+            mapOf(
+                "LIFTGATE_DATABASE_BACKUP_DESTINATION" to "s3://tenants/",
+                "LIFTGATE_DATABASE_BACKUP_ACCESS_KEY_ID" to "key",
+                "LIFTGATE_DATABASE_BACKUP_SECRET_ACCESS_KEY" to "secret",
+            ),
+        )
         every { it.cache } returns unlimitedCache
         every { it.metrics } returns PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
         every { it.db } returns db
@@ -204,6 +222,16 @@ class AuditTest {
         every { it.notifier } returns mockk<Notifier> {
             coEvery { check("https://ops.acme.dev") } returns "https://ops.acme.dev"
             coEvery { send(any(), any()) } returns null
+        }
+        every { it.databases } returns mockk<Databases> {
+            coEvery { create(environment.id, any(), any(), any()) } returns database
+            coEvery { scope(database.id) } returns DatabaseScope(database, environment, project, acme)
+            coEvery { delete(database.id) } just Runs
+            coEvery { link(database.id, ServiceLink(service.id)) } just Runs
+            coEvery { unlink(database.id, service.id) } just Runs
+        }
+        every { it.databaseClusters } returns mockk<DatabaseClusters> {
+            coEvery { backups(environment.namespace, "main") } returns listOf(Backup("main-1", "completed", "2026-09-30T00:00:00Z", "2026-09-30T00:05:00Z"))
         }
         every { it.github } returns mockk<GitHubApp> { coEvery { installation("ghu_token", "acme/web") } returns (42L to "main") }
         every { it.gitConnections } returns mockk<GitConnections> { coEvery { github(users.getValue("owner")) } returns ("ghu_token" to "dean") }
@@ -263,6 +291,11 @@ class AuditTest {
         "POST /domains/{id}/verify" to Call("/domains/${domain.id}/verify", expected = acme("domains", domain.id)),
         "DELETE /domains/{id}" to Call("/domains/${domain.id}", expected = acme("domains", domain.id)),
         "POST /invitations/{token}/accept" to Call("/invitations/$invitation/accept", session = "newbie", expected = acme("orgs", acme.id)),
+        "POST /environments/{id}/databases" to Call("/environments/${environment.id}/databases", """{"slug":"main"}""", expected = acme("environments", environment.id)),
+        "DELETE /databases/{id}" to Call("/databases/${database.id}", expected = acme("databases", database.id)),
+        "POST /databases/{id}/restore" to Call("/databases/${database.id}/restore", """{"slug":"main-restored","pointInTime":"2026-09-30T01:00:00Z"}""", expected = acme("databases", database.id)),
+        "POST /databases/{id}/links" to Call("/databases/${database.id}/links", """{"serviceId":"${service.id}"}""", expected = acme("databases", database.id)),
+        "DELETE /databases/{id}/links/{serviceId}" to Call("/databases/${database.id}/links/${service.id}", expected = acme("links", service.id)),
     )
 
     private suspend fun rows() = db.tx {

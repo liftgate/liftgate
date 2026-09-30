@@ -25,12 +25,13 @@ import kotlinx.serialization.json.jsonObject
 import java.util.UUID
 
 private const val MAX_REPLICAS = 10
-private const val MAX_CPU_MILLIS = 4000
-private const val MAX_MEMORY_MB = 8192
-private const val MAX_HEALTH_CHECK_PATH = 256
+const val MAX_CPU_MILLIS = 4000
+const val MAX_MEMORY_MB = 8192
+const val MAX_STORAGE_GB = 100
+private const val MAX_PATH = 256
 private const val MAX_WATCH_PATHS = 20
 private const val MAX_WATCH_PATH_LENGTH = 100
-private val envVarName = Regex("[A-Za-z_][A-Za-z0-9_]*")
+val envVarName = Regex("[A-Za-z_][A-Za-z0-9_]*")
 private val repoPath = Regex("[A-Za-z0-9._/-]*")
 
 fun Route.serviceRoutes(app: App) {
@@ -59,6 +60,7 @@ fun Route.serviceRoutes(app: App) {
             val merged = JsonObject(json.encodeToJsonElement(scope.service.spec()).jsonObject + call.receive<JsonObject>())
             val spec = json.decodeFromJsonElement<ServiceSpec>(merged).validated()
             if (spec.slug != scope.service.slug) invalid("slug cannot be changed")
+            scope.service.volume?.let { if (spec.volume == null || spec.volume.sizeGb < it.sizeGb) invalid("a volume can grow but not shrink or go away; delete the service to remove it", "volume") }
             app.claimPlatformDomain(scope.copy(service = scope.service.copy(slug = spec.slug, kind = spec.kind)))
             call.respond(app.services.update(scope.service.id, spec))
         }
@@ -97,8 +99,13 @@ private fun ServiceSpec.validated(): ServiceSpec {
     if (!rootDir.isRepoPath()) invalid("the root directory must be a path inside the repository", "rootDir")
     if (dockerfilePath.isBlank() || dockerfilePath.startsWith('/') || !dockerfilePath.isRepoPath()) invalid("the Dockerfile path must be relative to the root directory and stay inside it", "dockerfilePath")
     if (kind == ServiceKind.CRON && cronSchedule.isNullOrBlank()) invalid("cron services need a schedule", "cronSchedule")
-    if (healthCheckPath != null && (!healthCheckPath.startsWith('/') || healthCheckPath.length > MAX_HEALTH_CHECK_PATH)) invalid("the health check path must start with / and be at most $MAX_HEALTH_CHECK_PATH characters", "healthCheckPath")
+    if (healthCheckPath != null && (!healthCheckPath.startsWith('/') || healthCheckPath.length > MAX_PATH)) invalid("the health check path must start with / and be at most $MAX_PATH characters", "healthCheckPath")
     if (healthCheckPath != null && port == null && !kind.servesHttp) invalid("a health check path needs a port to probe", "healthCheckPath")
+    if (volume != null && (volume.mountPath == "/" || !volume.mountPath.startsWith('/') || volume.mountPath.length > MAX_PATH || !volume.mountPath.isRepoPath())) {
+        invalid("the volume mount path must be an absolute path such as /data", "volume")
+    }
+    if (volume != null && volume.sizeGb !in 1..MAX_STORAGE_GB) invalid("a volume must be between 1 and $MAX_STORAGE_GB GB", "volume")
+    if (volume != null && replicas > 1) invalid("a service with a volume runs at most 1 replica", "replicas")
     if (watchPaths.size > MAX_WATCH_PATHS || watchPaths.any { it.isBlank() || it.length > MAX_WATCH_PATH_LENGTH }) invalid("list at most $MAX_WATCH_PATHS watch paths of up to $MAX_WATCH_PATH_LENGTH characters each", "watchPaths")
     return this
 }

@@ -9,6 +9,7 @@ import dev.liftgate.events.uuid
 import dev.liftgate.service.ServiceKind
 import io.fabric8.kubernetes.api.model.GenericKubernetesResource
 import io.fabric8.kubernetes.api.model.HasMetadata
+import io.fabric8.kubernetes.api.model.PersistentVolumeClaim
 import io.fabric8.kubernetes.api.model.batch.v1.CronJob
 import io.fabric8.kubernetes.api.model.gatewayapi.v1.Gateway
 import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPRoute
@@ -82,7 +83,29 @@ class Reconciler(private val app: App, private val kube: KubernetesClient) {
         syncCustomDomains()
     }
 
-    fun serviceObjects() = listOf(kube.apps().deployments(), kube.batch().v1().cronjobs(), kube.services(), kube.resources(HTTPRoute::class.java))
+    fun serviceObjects() = listOf(kube.apps().deployments(), kube.batch().v1().cronjobs(), kube.services(), kube.resources(HTTPRoute::class.java), kube.persistentVolumeClaims())
+
+    suspend fun database(namespace: String, id: UUID) {
+        val scope = app.databases.scope(id)?.let { it.copy(plan = app.config.plans.of(it.org.plan)) }
+        withContext(Dispatchers.IO) {
+            if (scope == null) return@withContext listOf(scheduledBackupContext, clusterContext)
+                .forEach { kube.genericKubernetesResources(it).inNamespace(namespace).withLabel(DATABASE_ID_LABEL, id.toString()).delete() }
+            val config = app.config
+            val backup = config.databaseBackup
+            try {
+                (environment(scope) + Resources.databasePolicy(scope, backup?.egress.orEmpty()) + listOfNotNull(backup?.let { Resources.backupSecret(scope, it) }))
+                    .forEach { kube.resource(it).apply() }
+                listOfNotNull(
+                    backup?.let { objectStoreContext to Resources.objectStore(scope, it) },
+                    clusterContext to Resources.cluster(scope, backup, config.storageClass, config.workloadNodeSelector, config.workloadTolerations),
+                    backup?.let { scheduledBackupContext to Resources.scheduledBackup(scope, it) },
+                ).forEach { (context, resource) -> kube.genericKubernetesResources(context).inNamespace(namespace).resource(resource).apply() }
+            } catch (e: KubernetesClientException) {
+                if (e.retryable) throw e
+                log.warn("database {} could not be applied", id, e)
+            }
+        }
+    }
 
     fun start(): Job {
         val consumers = CoroutineScope(app.scope.coroutineContext + SupervisorJob(app.scope.coroutineContext.job))
@@ -91,6 +114,7 @@ class Reconciler(private val app: App, private val kube: KubernetesClient) {
         app.nats.consume(Subject.TEARDOWN_REQUESTED, "reconciler-teardown-requested", consumers) {
             teardown(it.getValue("namespace").jsonPrimitive.content, it["serviceId"]?.jsonPrimitive?.content?.let(UUID::fromString))
         }
+        app.nats.consume(Subject.DATABASE_REQUESTED, "reconciler-database-requested", consumers) { database(it.getValue("namespace").jsonPrimitive.content, it.uuid("databaseId")) }
         return consumers.coroutineContext.job
     }
 
@@ -107,6 +131,7 @@ class Reconciler(private val app: App, private val kube: KubernetesClient) {
             deployment.env?.let(app.envVars::open) ?: app.envVars.list(scope.service.id, reveal = true),
             app.domains.forService(scope.service.id).filter { it.verifiedAt != null },
             app.config.plans.of(scope.org.plan),
+            app.databases.links(scope.service.id),
         )
     }
 
@@ -131,16 +156,23 @@ class Reconciler(private val app: App, private val kube: KubernetesClient) {
             listOf(Resources.deployment(r, runtimeClass, workloadNodeSelector, workloadTolerations), Resources.cronJob(r, runtimeClass, workloadNodeSelector, workloadTolerations))
         }
         val (workload, otherWorkload) = if (r.service.kind == ServiceKind.CRON) workloads.reversed() else workloads
-        val setup = environment(r) + Resources.secret(r)
+        val setup = environment(r) + Resources.secret(r) + listOfNotNull(claim(r))
         if (r.suspended) stop(r, workload) else (setup + workload).forEach { kube.resource(it).apply() }
         route(r)
         kube.resource(otherWorkload).delete()
         if (r.suspended) setup.forEach { kube.resource(it).apply() }
     }
 
-    private fun environment(r: Release): List<HasMetadata> = with(app.config) {
+    private fun environment(r: Tenancy): List<HasMetadata> = with(app.config) {
         listOf(Resources.namespace(r), Resources.resourceQuota(r)) + Resources.networkPolicies(r, gatewayNamespace, deniedEgressCidrs) +
-            listOfNotNull(logReaderRole?.let { Resources.logReaderBinding(r, it, logReaderAccount, kube.namespace) })
+            listOfNotNull(logReaderRole, databaseReaderRole).map { Resources.readerBinding(r, it, logReaderAccount, kube.namespace) }
+    }
+
+    private fun claim(r: Release): PersistentVolumeClaim? {
+        val wanted = Resources.volumeClaim(r, app.config.storageClass) ?: return null
+        val live = kube.persistentVolumeClaims().inNamespace(r.namespace).withName(wanted.metadata.name).get() ?: return wanted
+        fun PersistentVolumeClaim.size() = spec.resources.requests.getValue("storage").numericalAmount
+        return wanted.takeIf { live.size() < it.size() }?.also { it.spec.storageClassName = live.spec.storageClassName }
     }
 
     private fun stop(r: Release, workload: HasMetadata) {

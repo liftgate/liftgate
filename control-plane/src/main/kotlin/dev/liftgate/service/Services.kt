@@ -1,6 +1,7 @@
 package dev.liftgate.service
 
 import dev.liftgate.build.orphanRepositories
+import dev.liftgate.database.databaseClaiming
 import dev.liftgate.db.Builds
 import dev.liftgate.db.Db
 import dev.liftgate.db.Deployments
@@ -16,6 +17,7 @@ import dev.liftgate.deploy.DeploymentStatus
 import dev.liftgate.domain.DomainKind
 import dev.liftgate.events.Subject
 import dev.liftgate.events.enqueue
+import dev.liftgate.http.invalid
 import dev.liftgate.org.Limits
 import dev.liftgate.org.toOrganization
 import dev.liftgate.org.withRole
@@ -56,6 +58,7 @@ fun ResultRow.toService(namespace: String? = getOrNull(Environments.namespace)) 
     this[ServicesTable.startCommand],
     this[ServicesTable.healthCheckPath],
     this[ServicesTable.watchPaths],
+    this[ServicesTable.volume],
 ).run { copy(internalHost = namespace?.takeIf { listens }?.let { "$slug.$it.svc.cluster.local" }) }
 
 fun orgServiceIds(orgId: UUID) = (ServicesTable innerJoin Environments innerJoin Projects).select(ServicesTable.id).where { Projects.orgId eq orgId }
@@ -69,6 +72,7 @@ class Services(private val db: Db, private val limits: Limits = Limits()) {
 
     fun insert(environmentId: UUID, spec: ServiceSpec): Service {
         limits.service(environmentId, spec)
+        databaseClaiming(environmentId, spec.slug)?.let { invalid("the database $it uses the name ${spec.slug}", "slug") }
         return ServicesTable.insertReturning {
             it[id] = UUID.randomUUID()
             it[ServicesTable.environmentId] = environmentId
@@ -139,6 +143,7 @@ class Services(private val db: Db, private val limits: Limits = Limits()) {
         this[ServicesTable.startCommand] = spec.startCommand
         this[ServicesTable.healthCheckPath] = spec.healthCheckPath
         this[ServicesTable.watchPaths] = spec.watchPaths
+        this[ServicesTable.volume] = spec.volume
     }
 
     private fun status(services: List<Service>): List<Service> {

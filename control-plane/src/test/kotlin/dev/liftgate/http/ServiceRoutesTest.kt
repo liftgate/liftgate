@@ -22,6 +22,7 @@ import dev.liftgate.service.ServiceKind
 import dev.liftgate.service.ServiceScope
 import dev.liftgate.service.ServiceSpec
 import dev.liftgate.service.Services
+import dev.liftgate.service.Volume
 import dev.liftgate.discardingDb
 import dev.liftgate.testConfig
 import dev.liftgate.unlimitedCache
@@ -130,6 +131,21 @@ class ServiceRoutesTest {
     }
 
     @Test
+    fun `a volume keeps its service to one replica and can grow but not shrink or go away`() = testApplication {
+        coEvery { services.scope(service.id) } returns ServiceScope(service.copy(volume = Volume("/data", 2)), environment, project, org)
+        val spec = slot<ServiceSpec>()
+        coEvery { services.update(service.id, capture(spec)) } answers { service }
+        application { liftgate(app) }
+        mapOf("""{"replicas":2}""" to "replicas", """{"volume":null}""" to "volume", """{"volume":{"mountPath":"/data","sizeGb":1}}""" to "volume").forEach { (body, field) ->
+            val response = client.patch("/api/v1/services/${service.id}") { jsonBody(body) }
+            assertEquals(HttpStatusCode.UnprocessableEntity, response.status, body)
+            assertEquals(field, json.decodeFromString(ErrorBody.serializer(), response.bodyAsText()).field, body)
+        }
+        assertEquals(HttpStatusCode.OK, client.patch("/api/v1/services/${service.id}") { jsonBody("""{"volume":{"mountPath":"/srv","sizeGb":3}}""") }.status)
+        assertEquals(Volume("/srv", 3), spec.captured.volume)
+    }
+
+    @Test
     fun `patch rejects invalid specs, naming the field in words a user reads`() = testApplication {
         application { liftgate(app) }
         mapOf(
@@ -139,6 +155,8 @@ class ServiceRoutesTest {
             """{"dockerfilePath":"../src/Dockerfile"}""" to "dockerfilePath", """{"dockerfilePath":"/etc/passwd"}""" to "dockerfilePath", """{"dockerfilePath":""}""" to "dockerfilePath",
             """{"port":8080,"healthCheckPath":"healthz"}""" to "healthCheckPath", """{"port":8080,"healthCheckPath":""}""" to "healthCheckPath",
             """{"port":8080,"healthCheckPath":"/${"a".repeat(256)}"}""" to "healthCheckPath", """{"healthCheckPath":"/healthz"}""" to "healthCheckPath",
+            """{"volume":{"mountPath":"/data","sizeGb":1},"replicas":2}""" to "replicas", """{"volume":{"mountPath":"data","sizeGb":1}}""" to "volume",
+            """{"volume":{"mountPath":"/","sizeGb":1}}""" to "volume", """{"volume":{"mountPath":"/a/../etc","sizeGb":1}}""" to "volume", """{"volume":{"mountPath":"/data","sizeGb":0}}""" to "volume",
             """{"watchPaths":[" "]}""" to "watchPaths", """{"watchPaths":["${"a".repeat(101)}"]}""" to "watchPaths", """{"watchPaths":${(0..20).map { "\"p$it/**\"" }}}""" to "watchPaths",
         ).forEach { (body, field) ->
             val response = client.patch("/api/v1/services/${service.id}") { jsonBody(body) }

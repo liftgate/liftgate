@@ -327,4 +327,17 @@ class ConfigTest {
             assertTrue("LIFTGATE_DENIED_EGRESS_CIDRS" in assertFailsWith<IllegalStateException> { Config.fromEnv(minimalEnv + ("LIFTGATE_DENIED_EGRESS_CIDRS" to it)) }.message.orEmpty(), it)
         }
     }
+
+    @Test
+    fun `database backups need their keys on the reconciler and take ipv4 cidr and port pairs`() {
+        val backup = minimalEnv + ("LIFTGATE_DATABASE_BACKUP_DESTINATION" to "s3://tenants/")
+        assertTrue("LIFTGATE_DATABASE_BACKUP_ACCESS_KEY_ID" in assertFailsWith<IllegalStateException> { Config.fromEnv(backup) }.message.orEmpty())
+        assertNull(Config.fromEnv(backup + ("LIFTGATE_ROLE" to "api")).databaseBackup?.accessKeyId)
+        val keys = backup + mapOf("LIFTGATE_DATABASE_BACKUP_ACCESS_KEY_ID" to "key", "LIFTGATE_DATABASE_BACKUP_SECRET_ACCESS_KEY" to "secret")
+        assertEquals(listOf("192.0.2.10/32" to 3900), Config.fromEnv(keys + ("LIFTGATE_DATABASE_BACKUP_EGRESS" to "192.0.2.10/32:3900")).databaseBackup?.egress)
+        listOf("192.0.2.10/32", "192.0.2.10/32:0", "fd00::/8:3900").forEach {
+            assertTrue("LIFTGATE_DATABASE_BACKUP_EGRESS" in assertFailsWith<IllegalStateException> { Config.fromEnv(keys + ("LIFTGATE_DATABASE_BACKUP_EGRESS" to it)) }.message.orEmpty(), it)
+        }
+        assertNull(Config.fromEnv(minimalEnv).databaseBackup)
+    }
 }

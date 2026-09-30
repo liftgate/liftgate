@@ -103,6 +103,9 @@ data class Config(
     val logReaderAccount: String,
     val deniedEgressCidrs: List<String>,
     val cloudflare: CloudflareConfig?,
+    val storageClass: String?,
+    val databaseReaderRole: String?,
+    val databaseBackup: DatabaseBackupConfig?,
 ) {
     companion object {
         private val taint = Regex("""([\w./-]+)(?:=([\w.-]*))?(?::(NoSchedule|PreferNoSchedule|NoExecute))?""")
@@ -164,6 +167,26 @@ data class Config(
             check(cloudflareToken == null || optional("CLOUDFLARE_ZONE_ID") != null) { "LIFTGATE_CLOUDFLARE_API_TOKEN needs LIFTGATE_CLOUDFLARE_ZONE_ID" }
             val cloudflare = optional("CLOUDFLARE_ZONE_ID")?.takeIf { role in setOf(Role.API, Role.RECONCILER, Role.ALL) }?.let {
                 CloudflareConfig(it, cloudflareToken ?: error("LIFTGATE_CLOUDFLARE_ZONE_ID needs LIFTGATE_CLOUDFLARE_API_TOKEN"))
+            }
+
+            fun reconcilerSecret(name: String) = if (role in setOf(Role.RECONCILER, Role.ALL)) required(name) else optional(name)
+            val databaseBackup = optional("DATABASE_BACKUP_DESTINATION")?.let {
+                DatabaseBackupConfig(
+                    destinationPath = it,
+                    endpointUrl = optional("DATABASE_BACKUP_ENDPOINT_URL"),
+                    accessKeyId = reconcilerSecret("DATABASE_BACKUP_ACCESS_KEY_ID"),
+                    secretAccessKey = reconcilerSecret("DATABASE_BACKUP_SECRET_ACCESS_KEY"),
+                    region = text("DATABASE_BACKUP_REGION", "us-east-1"),
+                    retention = text("DATABASE_BACKUP_RETENTION", "30d"),
+                    schedule = text("DATABASE_BACKUP_SCHEDULE", "0 0 3 * * *"),
+                    egress = optional("DATABASE_BACKUP_EGRESS")?.split(',')?.map { entry ->
+                        val cidr = entry.trim().substringBeforeLast(':')
+                        val port = entry.trim().substringAfterLast(':').toIntOrNull()
+                            ?.takeIf { it in 1..65535 && ':' !in cidr && runCatching { IpSubnetFilterRule(cidr, IpFilterRuleType.ACCEPT) }.isSuccess }
+                            ?: error("LIFTGATE_DATABASE_BACKUP_EGRESS must be IPv4 cidr:port pairs such as 192.0.2.10/32:3900")
+                        cidr to port
+                    }.orEmpty(),
+                )
             }
 
             return Config(
@@ -240,6 +263,9 @@ data class Config(
                     if (':' in it || runCatching { IpSubnetFilterRule(it, IpFilterRuleType.REJECT) }.isFailure) error("LIFTGATE_DENIED_EGRESS_CIDRS must be IPv4 CIDRs such as 203.0.113.7/32")
                 }.orEmpty(),
                 cloudflare = cloudflare,
+                storageClass = optional("STORAGE_CLASS"),
+                databaseReaderRole = optional("DATABASE_READER_ROLE"),
+                databaseBackup = databaseBackup,
             )
         }
     }

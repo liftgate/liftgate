@@ -1,6 +1,9 @@
 package dev.liftgate.k8s
 
 import dev.liftgate.App
+import dev.liftgate.database.Database
+import dev.liftgate.database.DatabaseScope
+import dev.liftgate.database.Databases
 import dev.liftgate.deploy.Builds
 import dev.liftgate.deploy.DeploymentStatus
 import dev.liftgate.deploy.Deployments
@@ -10,10 +13,13 @@ import dev.liftgate.service.EnvVars
 import dev.liftgate.service.Service
 import dev.liftgate.service.ServiceKind
 import dev.liftgate.service.ServiceScope
+import dev.liftgate.service.Volume
 import dev.liftgate.service.Services
 import dev.liftgate.testConfig
 import io.fabric8.kubernetes.api.model.GenericKubernetesResourceList
 import io.fabric8.kubernetes.api.model.HasMetadata
+import io.fabric8.kubernetes.api.model.PersistentVolumeClaim
+import io.fabric8.kubernetes.api.model.Quantity
 import io.fabric8.kubernetes.api.model.StatusBuilder
 import io.fabric8.kubernetes.api.model.rbac.RoleBinding
 import io.fabric8.kubernetes.client.ConfigBuilder
@@ -27,6 +33,7 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
+import java.time.Instant
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -61,10 +68,12 @@ class ReconcilerTest {
     private val policyPaths = listOf("default-deny", "allow-internal", "allow-egress").map { "/apis/networking.k8s.io/v1/$namespaced/networkpolicies/$it" }
     private val deployments = mockk<Deployments>(relaxUnitFun = true)
     private val services = mockk<Services>()
+    private val databases = mockk<Databases> { coEvery { links(testService.id) } returns emptyMap() }
     private val app = mockk<App>().also {
         every { it.config } returns testConfig(mapOf("LIFTGATE_WORKLOAD_NODE_SELECTOR" to "liftgate.dev/pool=workloads", "LIFTGATE_WORKLOAD_TOLERATIONS" to "liftgate.dev/pool:NoSchedule"))
         every { it.deployments } returns deployments
         every { it.services } returns services
+        every { it.databases } returns databases
         every { it.builds } returns mockk<Builds> { coEvery { byId(testBuild.id) } returns testBuild }
         every { it.envVars } returns mockk<EnvVars> { coEvery { list(testService.id, reveal = true) } returns release.envVars }
         every { it.domains } returns mockk<Domains> {
@@ -131,7 +140,7 @@ class ReconcilerTest {
         every { app.config } returns testConfig(mapOf("LIFTGATE_LOG_READER_ROLE" to "liftgate-log-reader", "LIFTGATE_LOG_READER_ACCOUNT" to "liftgate-api"))
         val bindingPath = "/apis/rbac.authorization.k8s.io/v1/$namespaced/rolebindings/liftgate-log-reader"
         acceptAll()
-        accept(bindingPath, Resources.logReaderBinding(release, "liftgate-log-reader", "liftgate-api", client.namespace))
+        accept(bindingPath, Resources.readerBinding(release, "liftgate-log-reader", "liftgate-api", client.namespace))
         Reconciler(app, client).release(testDeployment.id)
 
         val binding = client.kubernetesSerialization.unmarshal(sent().single { it.path == bindingPath + apply }.utf8Body, RoleBinding::class.java)
@@ -321,13 +330,63 @@ class ReconcilerTest {
     fun `teardown of a deleted service removes what carries its id and of a deleted project the namespace`() = runBlocking {
         acceptAll()
         val kinds = listOf("apis/apps/v1/$namespaced/deployments", "apis/batch/v1/$namespaced/cronjobs", "api/v1/$namespaced/services")
-        val labelled = (kinds + "apis/gateway.networking.k8s.io/v1/$namespaced/httproutes" + "api/v1/$namespaced/secrets")
+        val labelled = (kinds + "apis/gateway.networking.k8s.io/v1/$namespaced/httproutes" + "api/v1/$namespaced/persistentvolumeclaims" + "api/v1/$namespaced/secrets")
             .map { "/$it?labelSelector=liftgate.dev%2Fservice-id%3D${testService.id}" }
         labelled.forEach { server.expect().delete().withPath(it).andReturn(200, StatusBuilder().build()).always() }
         server.expect().delete().withPath(namespacePath).andReturn(200, StatusBuilder().build()).always()
         Reconciler(app, client).teardown(release.namespace, testService.id)
         Reconciler(app, client).teardown(release.namespace, null)
         assertEquals(labelled + namespacePath, paths("DELETE"))
+    }
+
+    @Test
+    fun `a volume claim is created once, grows in its own storage class and never shrinks`() = runBlocking {
+        acceptAll()
+        serve(testService.copy(replicas = 1, volume = Volume("/data", 5)))
+        val claimPath = "/api/v1/$namespaced/persistentvolumeclaims/api-data"
+        val volumed = testRelease(testService.copy(replicas = 1, volume = Volume("/data", 5)))
+        accept(claimPath, requireNotNull(Resources.volumeClaim(volumed, null)))
+        Reconciler(app, client).release(testDeployment.id)
+        server.expect().get().withPath(claimPath).andReturn(200, requireNotNull(Resources.volumeClaim(volumed.copy(service = volumed.service.copy(volume = Volume("/data", 2))), "fast"))).once()
+        Reconciler(app, client).release(testDeployment.id)
+        server.expect().get().withPath(claimPath).andReturn(200, requireNotNull(Resources.volumeClaim(volumed.copy(service = volumed.service.copy(volume = Volume("/data", 8))), "fast"))).once()
+        Reconciler(app, client).release(testDeployment.id)
+
+        val patches = sent().filter { it.method == "PATCH" }
+        val applied = patches.filter { it.path.startsWith(claimPath) }.map { client.kubernetesSerialization.unmarshal(it.utf8Body, PersistentVolumeClaim::class.java).spec }
+        assertEquals(listOf(null to Quantity("5Gi"), "fast" to Quantity("5Gi")), applied.map { it.storageClassName to it.resources.requests["storage"] })
+        val deployment = patches.first { it.path.startsWith(deploymentPath) }.utf8Body
+        listOf("\"type\":\"Recreate\"", "\"claimName\":\"api-data\"", "\"mountPath\":\"/data\"").forEach { assertTrue(it in deployment, it) }
+    }
+
+    @Test
+    fun `a database applies its environment, policy, backup store, cluster and schedule, and once deleted loses its cluster`() = runBlocking {
+        every { app.config } returns testConfig(
+            mapOf(
+                "LIFTGATE_DATABASE_BACKUP_DESTINATION" to "s3://tenants",
+                "LIFTGATE_DATABASE_BACKUP_ACCESS_KEY_ID" to "key",
+                "LIFTGATE_DATABASE_BACKUP_SECRET_ACCESS_KEY" to "secret",
+                "LIFTGATE_DATABASE_BACKUP_EGRESS" to "192.0.2.10/32:3900",
+            ),
+        )
+        val database = Database(UUID.randomUUID(), testEnvironment.id, "main", 1, 500, 512, null, null, Instant.now())
+        coEvery { databases.scope(database.id) } returns DatabaseScope(database, testEnvironment, testProject, testOrg) andThen null
+        acceptAll()
+        val objects = listOf(
+            "/apis/networking.k8s.io/v1/$namespaced/networkpolicies/allow-databases",
+            "/api/v1/$namespaced/secrets/liftgate-backup",
+            "/apis/barmancloud.cnpg.io/v1/$namespaced/objectstores/liftgate-backup",
+            "/apis/postgresql.cnpg.io/v1/$namespaced/clusters/main",
+            "/apis/postgresql.cnpg.io/v1/$namespaced/scheduledbackups/main",
+        )
+        objects.forEach { server.expect().patch().withPath(it + apply).andReturn(200, "{}").always() }
+        val deleted = listOf("scheduledbackups", "clusters").map { "/apis/postgresql.cnpg.io/v1/$namespaced/$it?labelSelector=liftgate.dev%2Fdatabase-id%3D${database.id}" }
+        deleted.forEach { server.expect().delete().withPath(it).andReturn(200, StatusBuilder().build()).always() }
+
+        repeat(2) { Reconciler(app, client).database(release.namespace, database.id) }
+        val sent = sent()
+        assertEquals(listOf(namespacePath, quotaPath) + policyPaths + objects, sent.filter { it.method == "PATCH" }.map { it.path.removeSuffix(apply) })
+        assertEquals(deleted, sent.filter { it.method == "DELETE" }.map { it.path })
     }
 
     @Test

@@ -21,6 +21,7 @@ import dev.liftgate.build.RegistryTokens
 import dev.liftgate.cache.Cache
 import dev.liftgate.config.Config
 import dev.liftgate.config.Role
+import dev.liftgate.database.Databases
 import dev.liftgate.db.Backlog
 import dev.liftgate.db.Db
 import dev.liftgate.db.Housekeeping
@@ -36,6 +37,7 @@ import dev.liftgate.events.uuid
 import dev.liftgate.http.httpServer
 import dev.liftgate.http.json
 import dev.liftgate.k8s.CertificateWatcher
+import dev.liftgate.k8s.DatabaseClusters
 import dev.liftgate.k8s.DeploymentWatcher
 import dev.liftgate.k8s.PodLogs
 import dev.liftgate.k8s.PodWatcher
@@ -121,6 +123,8 @@ class App(val config: Config) : AutoCloseable {
     val notifier by lazy { Notifier(this) }
     val invitations by lazy { Invitations(db, mailer, config.dashboardUrl, limits) }
     val previews by lazy { Previews(this) }
+    val databases = Databases(db, limits)
+    val databaseClusters = DatabaseClusters(kube)
     private val stopped = CountDownLatch(1)
     private var server: EmbeddedServer<*, *>? = null
 

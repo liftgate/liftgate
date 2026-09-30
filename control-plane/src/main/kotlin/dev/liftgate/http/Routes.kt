@@ -13,7 +13,7 @@ import java.net.Inet6Address
 import java.net.InetSocketAddress
 import java.util.UUID
 
-val orgScopedPaths = listOf("/orgs", "/projects", "/environments", "/services", "/deployments", "/domains", "/invitations")
+val orgScopedPaths = listOf("/orgs", "/projects", "/environments", "/services", "/deployments", "/domains", "/invitations", "/databases")
 
 fun Route.apiRoutes(app: App) {
     healthRoutes(app)
@@ -35,6 +35,7 @@ fun Route.apiRoutes(app: App) {
         githubRoutes(app)
         audit(app)
         metricsRoutes(app)
+        databaseRoutes(app)
     }
 }
 

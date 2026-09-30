@@ -25,8 +25,8 @@ private val reservedOrgSlugs = setOf(
     "legal", "terms", "privacy", "security", "sso", "signup", "logout", "www", "app", "dashboard", "liftgate",
 )
 val reservedProjectSlugs = setOf("settings")
-private const val AUDIT_PAGE = 50
-private const val AUDIT_PAGE_MAX = 100
+private const val PAGE = 50
+private const val PAGE_MAX = 100
 
 /**
  * @author Dean
@@ -71,7 +71,7 @@ private data class Invite(val role: OrgRole, val email: String? = null)
 private data class ChangeRole(val role: OrgRole)
 
 fun Route.orgRoutes(app: App) {
-    get("/me") { call.respond(call.principal.user) }
+    get("/me") { call.respond(call.principal.user.copy(operator = call.operator(app) != null)) }
     delete("/me") {
         app.orgs.deleteUser(call.sessionUser.id)
         call.endSession(app)
@@ -129,8 +129,7 @@ fun Route.orgRoutes(app: App) {
             get("/audit") {
                 val org = call.org(app, OrgRole.ADMIN)
                 val before = call.request.queryParameters["before"]?.let { it.toLongOrNull() ?: invalid("before must be an audit entry id") }
-                val limit = call.request.queryParameters["limit"]?.let { it.toIntOrNull()?.takeIf { n -> n in 1..AUDIT_PAGE_MAX } ?: invalid("limit must be 1 to $AUDIT_PAGE_MAX") } ?: AUDIT_PAGE
-                call.respond(app.orgs.audit(org.id, before, limit))
+                call.respond(app.orgs.audit(org.id, before, call.pageSize()))
             }
             get("/usage") { call.respond(app.orgs.usage(call.org(app).id)) }
             route("/tokens") {
@@ -168,6 +167,8 @@ fun requireSlug(slug: String, reserved: Set<String> = emptySet()) {
 }
 
 fun requireName(name: String) = name.trim().takeIf { it.length in 1..100 } ?: invalid("name must be 1 to 100 characters")
+
+fun ApplicationCall.pageSize() = request.queryParameters["limit"]?.let { it.toIntOrNull()?.takeIf { n -> n in 1..PAGE_MAX } ?: invalid("limit must be 1 to $PAGE_MAX") } ?: PAGE
 
 suspend fun ApplicationCall.org(app: App, min: OrgRole = OrgRole.MEMBER): Organization {
     val org = app.orgs.bySlug(parameters["slug"]!!, principalOrNull?.user?.id) ?: notFound("organization")

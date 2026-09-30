@@ -125,6 +125,7 @@ class App(val config: Config) : AutoCloseable {
     val previews by lazy { Previews(this) }
     val databases = Databases(db, limits)
     val databaseClusters = DatabaseClusters(kube)
+    val admin by lazy { Admin(db, config.plans, mailer, config.operators, config.dashboardUrl) }
     private val stopped = CountDownLatch(1)
     private var server: EmbeddedServer<*, *>? = null
 
@@ -142,6 +143,7 @@ class App(val config: Config) : AutoCloseable {
             val backlog = Backlog(db, metrics)
             LeaderElection(config, kube, "liftgate-outbox-relay").start(scope) { coroutineScope { relay.start(this); Housekeeping(db).start(this); backlog.start(this) } }
             nats.consume(Subject.USER_UPDATED, "api-user-updated", scope) { sessions.evict(it.uuid("userId")) }
+            nats.consume(Subject.USER_PENDING, "api-user-pending", scope) { admin.announce(it.uuid("userId")) }
             CommitStatuses(this).start()
             notifier.start()
         }

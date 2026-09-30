@@ -12,6 +12,8 @@ import dev.liftgate.db.Passkeys as PasskeysTable
 import dev.liftgate.db.Users
 import dev.liftgate.db.now
 import dev.liftgate.db.sql
+import dev.liftgate.events.Subject
+import dev.liftgate.events.enqueue
 import dev.liftgate.http.InstantSerializer
 import dev.liftgate.http.LiftgateException
 import dev.liftgate.http.UuidSerializer
@@ -29,6 +31,7 @@ import org.jetbrains.exposed.v1.core.innerJoin
 import org.jetbrains.exposed.v1.core.isNull
 import org.jetbrains.exposed.v1.core.lowerCase
 import org.jetbrains.exposed.v1.core.vendors.ForUpdateOption
+import org.jetbrains.exposed.v1.jdbc.JdbcTransaction
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.select
@@ -62,7 +65,7 @@ fun removeSignInMethod(userId: UUID, delete: () -> Int) {
 
 fun audit(userId: UUID, action: String, provider: String, orgId: UUID? = null) = audit(userId, action, "user", userId.toString(), mapOf("provider" to provider), orgId)
 
-fun audit(actor: UUID, action: String, targetType: String, targetId: String, details: Map<String, String>, orgId: UUID? = null, viaToken: Boolean = false) = AuditLog.insert {
+fun audit(actor: UUID?, action: String, targetType: String, targetId: String, details: Map<String, String>, orgId: UUID? = null, viaToken: Boolean = false) = AuditLog.insert {
     it[AuditLog.orgId] = orgId
     it[actorUserId] = actor
     it[AuditLog.action] = action
@@ -131,7 +134,7 @@ class SignIn(
         Users.update({ (Users.id eq userId) and (Users.email.lowerCase() eq email.lowercase()) }) { it[emailVerified] = true }
     }
 
-    private fun createUser(identity: VerifiedIdentity): UUID {
+    private fun JdbcTransaction.createUser(identity: VerifiedIdentity): UUID {
         if (signup == Signup.CLOSED) throw LiftgateException(HttpStatusCode.Forbidden, "signup_closed", "sign-up is closed on this Liftgate instance")
         val active = signup == Signup.OPEN || allowed(identity) || identity.org?.takeIf { identity.emailVerified }?.let(::vouches) == true
         return insertUser(
@@ -141,7 +144,7 @@ class SignIn(
             identity.avatarUrl,
             if (active) UserStatus.ACTIVE else UserStatus.PENDING,
             now().takeIf { consent },
-        ).id
+        ).id.also { if (!active) enqueue(Subject.USER_PENDING, JsonObject(mapOf("userId" to JsonPrimitive(it.toString())))) }
     }
 
     private fun allowed(identity: VerifiedIdentity): Boolean {

@@ -36,6 +36,7 @@ fun Route.apiRoutes(app: App) {
         audit(app)
         metricsRoutes(app)
         databaseRoutes(app)
+        operatorRoutes(app)
     }
 }
 

@@ -46,7 +46,7 @@ export function SelfHost() {
             </li>
           ))}
         </ol>
-        <p className="mt-8 text-sm leading-5 text-graphite-400">Liftgate is pre-alpha, so start on a cluster you can throw away.</p>
+        <p className="mt-8 text-sm leading-5 text-graphite-400">Liftgate is in public beta, so read each release&apos;s upgrade notes and back up before you upgrade.</p>
         <a href={`${repoUrl}#self-hosting`} target="_blank" rel="noreferrer" className={buttonClasses("secondary", "mt-6", "lg")}>
           Install guide
         </a>

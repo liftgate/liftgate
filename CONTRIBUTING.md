@@ -1,6 +1,6 @@
 # Contributing to Liftgate
 
-Liftgate is pre-alpha and moving quickly. Open an issue before a large change so the design can be agreed first; small fixes can go straight to a pull request. Read the [README](README.md) for the architecture and the local development setup, and the [code of conduct](CODE_OF_CONDUCT.md) before taking part.
+Liftgate is in public beta and moving quickly. Open an issue before a large change so the design can be agreed first; small fixes can go straight to a pull request. Read the [README](README.md) for the architecture and the local development setup, and the [code of conduct](CODE_OF_CONDUCT.md) before taking part.
 
 ## Setup
 

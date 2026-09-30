@@ -17,7 +17,6 @@ The examples use these names. Replace them with yours everywhere.
 | `liftgate.example.com` | The dashboard and the API, the chart's `publicUrl` |
 | `apps.example.net` | The deploy domain; apps get `<service>-<project>-<org>.apps.example.net` |
 | `203.0.113.10` | The VM's public IPv4 address |
-| `192.168.100.3` | The registry machine's address on the private network it shares with the VM |
 | `ops@example.com` | The address Let's Encrypt writes to about your certificates |
 | `your-github-login` | Your GitHub login |
 
@@ -30,11 +29,10 @@ session cookie. The chart refuses to render such a pair, as Separate sites in th
 
 - A VM for the cluster: x86-64, because the images are published for `linux/amd64` only, with Ubuntu
   24.04 or 22.04, a public IPv4 address, and ports 22, 80 and 443 open to the internet. Start with 4
-  vCPUs, 8 GB of memory and 80 GB of disk. That leaves room for the platform, one build at a time and a
-  few small apps; it is a starting point, not a measured minimum. The kubelet settings reserve 1 CPU and
-  2 GiB for the system, and a single build may use 2 CPUs, 4 GiB of memory and 20 GiB of disk.
-- A second machine for the container registry, with a private network between it and the VM that
-  carries only machines you control and trust, numbered outside `10.0.0.0/8`. Step 2 explains why.
+  vCPUs, 8 GB of memory and 80 GB of disk. That leaves room for the platform, the registry's images, one
+  build at a time and a few small apps; it is a starting point, not a measured minimum. The kubelet
+  settings reserve 1 CPU and 2 GiB for the system, and a single build may use 2 CPUs, 4 GiB of memory and
+  20 GiB of disk.
 - Two domains whose DNS you control, one for the dashboard and one for the apps. The apps' DNS must let
   cert-manager create TXT records, either through RFC 2136 dynamic updates or through one of the
   [DNS providers cert-manager supports](https://cert-manager.io/docs/configuration/acme/dns01/).
@@ -57,78 +55,22 @@ Let's Encrypt checks the first name over HTTP before it issues the dashboard's c
 
 ## 2. The registry
 
-Every build pushes an image to the registry, and the VM pulls it from there. Build jobs run in a
-namespace whose network policy only lets them reach private addresses listed in the chart's
-`build.allowedEgressCidrs`. On Cilium, which this install uses, such address rules
-[never match a node or a pod of the cluster](https://docs.cilium.io/en/stable/security/policy/layer3/),
-so a registry on the VM itself, or inside the cluster, is unreachable for builds. Run it on another
-machine on the private network instead, with disk for the images Liftgate keeps: the newest 10 builds of
-each service and a build cache per service.
+Every build pushes an image to a container registry, and k3s pulls it from there to run the app. Step 7
+turns on the registry the chart runs inside the cluster:
 
-Number that network outside `10.0.0.0/8`. Cilium, as `infra/install.sh` installs it, hands out pod
-addresses from that range and
-[assumes traffic to it targets pods](https://docs.cilium.io/en/stable/network/concepts/ipam/cluster-pool/),
-so neither the VM nor the builds would reach a registry there.
+- It answers at `10.43.0.50`, an address the chart pins in the range k3s gives Services
+  (`10.43.0.0/16`), so k3s pulls from it without the cluster's DNS. Port 5000 is the registry, and port
+  5001 passes login requests to the control plane.
+- Each build gets a login for its own images only, k3s pulls with a login that can only read, and the
+  control plane deletes the images it no longer needs with a third.
+- Only build jobs, the control plane and the VM itself can connect to it. Apps cannot, and nothing
+  outside the VM can.
+- It speaks plain HTTP, which on one VM never leaves the machine.
+- It keeps the images on the VM's disk: the newest 10 builds of each service, the images that run, and
+  a build cache per service.
 
-On the registry machine, install Docker, create a password, and start
-[CNCF Distribution](https://distribution.github.io/distribution/) with that login and deletes enabled,
-so Liftgate can prune old images:
-
-```sh
-apt-get update && apt-get install -y docker.io
-install -d -m 700 /etc/liftgate-registry
-REGISTRY_PASSWORD=$(openssl rand -hex 32)
-echo "$REGISTRY_PASSWORD"
-docker run --rm --entrypoint htpasswd httpd:2.4 -Bbn liftgate "$REGISTRY_PASSWORD" > /etc/liftgate-registry/htpasswd
-cat > /etc/liftgate-registry/config.yml <<'EOF'
-version: 0.1
-storage:
-  filesystem:
-    rootdirectory: /var/lib/registry
-  delete:
-    enabled: true
-http:
-  addr: :5000
-auth:
-  htpasswd:
-    realm: liftgate
-    path: /etc/docker/registry/htpasswd
-EOF
-docker run -d --name liftgate-registry --restart unless-stopped -p 192.168.100.3:5000:5000 \
-  -v /srv/liftgate-registry:/var/lib/registry \
-  -v /etc/liftgate-registry/config.yml:/etc/docker/registry/config.yml:ro \
-  -v /etc/liftgate-registry/htpasswd:/etc/docker/registry/htpasswd:ro \
-  registry:2.8.3
-curl -s -o /dev/null -w '%{http_code}\n' -u "liftgate:$REGISTRY_PASSWORD" http://192.168.100.3:5000/v2/
-```
-
-The last command prints `200`. Note the password; the VM needs it in steps 3 and 7. The registry listens
-only on the private address and speaks plain HTTP, which is why the chart values in step 7 mark it
-insecure. Plain HTTP carries the password and every image in the clear, so anyone who can read the
-private network's traffic gets both. Use this setup only on a network that carries nothing but machines
-you control and trust. Without such a network, serve the registry over HTTPS under a DNS name with a
-publicly trusted certificate, set `registry` to that name, and leave out `registryInsecure` and the
-`http://` endpoint in `registries.yaml`. Build jobs have no way to trust a private certificate
-authority.
-
-Deleting an image frees no disk until the registry's garbage collection runs. Run it while no build
-pushes, for example weekly from a timer:
-
-```sh
-docker exec liftgate-registry registry garbage-collect --delete-untagged /etc/docker/registry/config.yml
-```
-
-Image retention in [`infra/registry/README.md`](../infra/registry/README.md#image-retention) has the timer
-Liftgate Cloud uses, which puts the registry in read-only mode while it collects, and the cases where
-garbage collection removes more than it should.
-
-This setup gives every build the same registry login, so a build can read other projects' images. That
-suits an installation whose users trust each other. `registryAuth: token`, which gives each build a login
-for its own repository only, does not work on this layout: build jobs fetch that login from `publicUrl`
-over their internet egress, and here `publicUrl` is the VM's own address, which builds cannot reach for
-the reason above and because step 7 denies it to them. Before strangers build here, serve `publicUrl`
-from an address outside the cluster, such as a proxy on another machine, then switch as Registry
-authentication in the [chart README](../charts/liftgate/README.md#registry-authentication) describes.
+Step 3 creates the logins before k3s starts, and step 7 hands them to the chart.
+[A registry on another machine](#a-registry-on-another-machine) keeps the images off the VM instead.
 
 ## 3. Prepare the VM
 
@@ -142,23 +84,32 @@ git clone --depth 1 --branch "v$VERSION" https://github.com/liftgate/liftgate.gi
 cd liftgate
 ```
 
-Tell k3s where the registry is and how to log in, before k3s starts for the first time. Use the password
-from step 2:
+Create the key that signs the registry logins, its certificate, and the passwords of the login k3s pulls
+with and of the one the control plane deletes old images with:
 
 ```sh
-REGISTRY_PASSWORD=<the password from step 2>
+openssl req -x509 -newkey rsa:4096 -nodes -days 3650 -subj /CN=liftgate-registry-token \
+  -keyout registry-token.key -out registry-token.crt
+PULL_PASSWORD=$(openssl rand -hex 32)
+JANITOR_PASSWORD=$(openssl rand -hex 32)
+```
+
+Tell k3s where the registry is and how to log in, before k3s starts for the first time:
+
+```sh
 mkdir -p /etc/rancher/k3s
 cat > /etc/rancher/k3s/registries.yaml <<EOF
 mirrors:
-  "192.168.100.3:5000":
+  "10.43.0.50:5000":
     endpoint:
-      - "http://192.168.100.3:5000"
+      - "http://10.43.0.50:5000"
 configs:
-  "192.168.100.3:5000":
+  "10.43.0.50:5000":
     auth:
-      username: liftgate
-      password: $REGISTRY_PASSWORD
+      username: pull
+      password: $PULL_PASSWORD
 EOF
+chmod 600 /etc/rancher/k3s/registries.yaml
 ```
 
 Then follow three sections of [`infra/k3s/install.md`](../infra/k3s/install.md), in order, from the
@@ -252,13 +203,15 @@ GITHUB_WEBHOOK_SECRET=<the webhook secret from step 6>
 cat > liftgate-values.yaml <<EOF
 deployDomain: apps.example.net
 publicUrl: https://liftgate.example.com
-registry: 192.168.100.3:5000
-registryInsecure: true
-build:
-  allowedEgressCidrs:
-    - cidr: 192.168.100.3/32
-      ports: [5000]
-  registryCredentials: '{"auths":{"192.168.100.3:5000":{"auth":"$(printf 'liftgate:%s' "$REGISTRY_PASSWORD" | base64 -w0)"}}}'
+inClusterRegistry:
+  enabled: true
+  clusterIP: 10.43.0.50
+registryTokenKey: |
+$(sed 's/^/  /' registry-token.key)
+registryTokenCertificate: |
+$(sed 's/^/  /' registry-token.crt)
+registryPullPassword: $PULL_PASSWORD
+registryJanitorPassword: $JANITOR_PASSWORD
 deniedEgressCidrs:
   - 203.0.113.10/32
 signup:
@@ -280,9 +233,9 @@ chmod 600 liftgate-values.yaml
 | Value | Why |
 |---|---|
 | `deployDomain`, `publicUrl` | The apps' domain and the dashboard's address. The dashboard and the API share `publicUrl` |
-| `registry`, `registryInsecure` | Where builds push, over plain HTTP |
-| `build.allowedEgressCidrs` | Lets build jobs reach the registry's private address, on port 5000 only |
-| `build.registryCredentials` | The registry login for builds and for the daily image cleanup |
+| `inClusterRegistry` | Runs the registry from step 2 at the address `registries.yaml` names |
+| `registryTokenKey`, `registryTokenCertificate` | Sign the registry logins, and let the registry check them |
+| `registryPullPassword`, `registryJanitorPassword` | The logins k3s pulls with and the control plane deletes old images with |
 | `deniedEgressCidrs` | Keeps apps, builds and notification webhooks away from the VM's own public address |
 | `signup.allow` | Makes your account active on its first sign-in; see step 8 |
 | `github` | The GitHub App from step 6 |
@@ -292,8 +245,8 @@ Every other value keeps its default: the `single` profile, a PostgreSQL database
 NATS, gateway-mode custom domains, the `unlimited` plan and sign-up by approval. The
 [chart README](../charts/liftgate/README.md) documents all of them.
 
-`liftgate-values.yaml` now holds the master key and the App's secrets. Keep it for every upgrade, and
-keep a copy of it offline, away from the VM.
+`liftgate-values.yaml` now holds the master key, the App's secrets and the registry's signing key. Keep
+it for every upgrade, and keep a copy of it offline, away from the VM.
 
 Install the chart and wait for it:
 
@@ -302,6 +255,7 @@ helm install liftgate oci://ghcr.io/liftgate/charts/liftgate --version "$VERSION
   --namespace liftgate-system --values liftgate-values.yaml
 kubectl -n liftgate-system rollout status deployment/liftgate-control-plane --timeout=15m
 kubectl -n liftgate-system rollout status deployment/liftgate-dashboard --timeout=5m
+kubectl -n liftgate-system rollout status statefulset/liftgate-registry --timeout=5m
 kubectl -n liftgate-system get certificates
 ```
 
@@ -366,6 +320,19 @@ Every organization is on the `unlimited` plan until you change `defaultPlan` or 
 `admin plan`. [Plans and limits](plans-and-limits.md) describes the plans and the limits that apply to
 all of them.
 
+### The registry
+
+Once a day the control plane deletes the images Liftgate no longer needs; Image retention in the
+[chart README](../charts/liftgate/README.md#image-retention) lists the ones it keeps. Their disk is freed
+by the registry's garbage collection, which runs each time the registry starts, and the CronJob
+`liftgate-registry-gc` restarts it every Sunday at 04:30 UTC. While it collects, apps keep pulling and
+pushes are refused, so a build that pushes then fails; start it again with Deploy on the Builds tab. The
+images live in the volume `data-liftgate-registry-0`, whose size k3s does not enforce:
+
+```sh
+kubectl -n liftgate-system exec liftgate-registry-0 -c registry -- du -sh /var/lib/registry
+```
+
 ### Alerts
 
 The Prometheus from step 4 comes with Alertmanager and the alert rules in
@@ -408,11 +375,116 @@ reach the dashboard's and the API's hosts only over HTTPS for two years. A proxy
 control plane finds a client's address for rate limits; set `controlPlane.trustedProxies` as Client IP
 in the [chart README](../charts/liftgate/README.md#client-ip) describes.
 
+## A registry on another machine
+
+Before the chart could run the registry inside the cluster, this guide put it on a second machine. That
+layout still works, for example to share one registry between installations. Build jobs reach private
+addresses only through `build.allowedEgressCidrs`, and on Cilium such address rules
+[never match a node or a pod of the cluster](https://docs.cilium.io/en/stable/security/policy/layer3/),
+so the registry has to run outside the cluster, on a private network that carries only machines you
+control and trust. Number that network outside `10.0.0.0/8`: Cilium, as `infra/install.sh` installs
+it, hands out pod addresses from that range and
+[assumes traffic to it targets pods](https://docs.cilium.io/en/stable/network/concepts/ipam/cluster-pool/).
+The commands use `192.168.100.3` for the registry machine's address on that network.
+
+On the registry machine, install Docker, create a password, and start
+[CNCF Distribution](https://distribution.github.io/distribution/) with that login and deletes enabled,
+so Liftgate can prune old images:
+
+```sh
+apt-get update && apt-get install -y docker.io
+install -d -m 700 /etc/registry
+REGISTRY_PASSWORD=$(openssl rand -hex 32)
+echo "$REGISTRY_PASSWORD"
+docker run --rm --entrypoint htpasswd httpd:2.4 -Bbn liftgate "$REGISTRY_PASSWORD" > /etc/registry/htpasswd
+cat > /etc/registry/config.yml <<'EOF'
+version: 0.1
+storage:
+  filesystem:
+    rootdirectory: /var/lib/registry
+  delete:
+    enabled: true
+http:
+  addr: :5000
+auth:
+  htpasswd:
+    realm: liftgate
+    path: /etc/docker/registry/htpasswd
+EOF
+docker run -d --name registry --restart unless-stopped -p 192.168.100.3:5000:5000 \
+  -v /var/lib/registry:/var/lib/registry \
+  -v /etc/registry/config.yml:/etc/docker/registry/config.yml:ro \
+  -v /etc/registry/htpasswd:/etc/docker/registry/htpasswd:ro \
+  registry:2.8.3
+curl -s -o /dev/null -w '%{http_code}\n' -u "liftgate:$REGISTRY_PASSWORD" http://192.168.100.3:5000/v2/
+```
+
+The last command prints `200`. On the VM, set `REGISTRY_PASSWORD` to the same password and follow the
+steps above with two changes. In step 3, skip the registry key and passwords, and write
+`registries.yaml` for this registry:
+
+```sh
+mkdir -p /etc/rancher/k3s
+cat > /etc/rancher/k3s/registries.yaml <<EOF
+mirrors:
+  "192.168.100.3:5000":
+    endpoint:
+      - "http://192.168.100.3:5000"
+configs:
+  "192.168.100.3:5000":
+    auth:
+      username: liftgate
+      password: $REGISTRY_PASSWORD
+EOF
+chmod 600 /etc/rancher/k3s/registries.yaml
+```
+
+In step 7, replace the `inClusterRegistry` and `registry` lines inside the `cat` command with these, which
+read `REGISTRY_PASSWORD`:
+
+```yaml
+registry: 192.168.100.3:5000
+registryInsecure: true
+build:
+  allowedEgressCidrs:
+    - cidr: 192.168.100.3/32
+      ports: [5000]
+  registryCredentials: '{"auths":{"192.168.100.3:5000":{"auth":"$(printf 'liftgate:%s' "$REGISTRY_PASSWORD" | base64 -w0)"}}}'
+```
+
+`build.allowedEgressCidrs` lets build jobs reach the registry's private address on port 5000 only, and
+`build.registryCredentials` is the registry login for builds and for the daily image cleanup.
+
+The registry listens only on the private address and speaks plain HTTP, which carries the password and
+every image in the clear, so anyone who can read the private network's traffic gets both. Without a
+network that carries nothing but machines you control and trust, serve the registry over HTTPS under a
+DNS name with a publicly trusted certificate, set `registry` to that name, and leave out
+`registryInsecure` and the `http://` endpoint in `registries.yaml`. Build jobs have no way to trust a
+private certificate authority.
+
+Deleting an image frees no disk until the registry's garbage collection runs. Run it while no build
+pushes, for example weekly from a timer:
+
+```sh
+docker exec registry registry garbage-collect --delete-untagged /etc/docker/registry/config.yml
+```
+
+Image retention in [`infra/registry/README.md`](../infra/registry/README.md#image-retention) has a timer
+that puts the registry in read-only mode while it collects, and the cases where garbage collection
+removes more than it should.
+
+This layout gives every build the same registry login, so a build can read other projects' images. That
+suits an installation whose users trust each other. Per-build logins (`registryAuth: token`) need build
+jobs to reach `publicUrl`, and here it is the VM's own address, which builds cannot reach for the reason
+above and because `deniedEgressCidrs` denies it to them. Before strangers build here, move to the
+in-cluster registry, or serve `publicUrl` from an address outside the cluster and follow
+[`infra/registry/README.md`](../infra/registry/README.md).
+
 ## Backups and restore
 
 The chart runs PostgreSQL without backups until you turn them on, and the install notes warn about it.
-The database holds everything Liftgate knows; the apps' images live in the registry, and build logs live
-in NATS for 7 days.
+The database holds everything Liftgate knows. The apps' images live in the registry's volume, which these
+backups do not cover: after losing it, build each service again. Build logs live in NATS for 7 days.
 
 Backups need a bucket on an S3-compatible store outside the VM, such as a hosted object store or
 [Garage](https://garagehq.deuxfleurs.fr) on another machine, reached over HTTPS, because the backups hold
@@ -529,17 +601,56 @@ From 0.2.0-alpha.3 to 0.2.0-alpha.4:
   request to 1Gi.
 - The dashboard and the API send security headers. A proxy in front of them must pass them through, as
   [A proxy in front of Liftgate](#a-proxy-in-front-of-liftgate) says.
+- The chart can run the registry inside the cluster, which this guide now uses. Nothing changes until
+  `inClusterRegistry.enabled` is set; [Moving to the in-cluster registry](#moving-to-the-in-cluster-registry)
+  switches an installation with a registry on another machine.
 
 Upgrading straight from 0.2.0-alpha.2 or older to a release after 0.2.0-alpha.3 skips the move of build
 images to their new names, so builds that run during the upgrade may need a retry.
 [Upgrading from v0.2.0-alpha.2 or older](../infra/UPGRADE.md#upgrading-from-v020-alpha2-or-older) says
 which ones.
 
+### Moving to the in-cluster registry
+
+An installation with its registry on another machine, as in
+[A registry on another machine](#a-registry-on-another-machine), moves the registry into the cluster
+like this:
+
+1. Create the registry's signing key, its certificate and the two passwords as in step 3. An
+   installation that already sets `registryAuth: token` keeps its four `registry` values instead, and
+   uses its `registryPullPassword` below.
+2. On every node, add the in-cluster registry to the `mirrors` and `configs` of
+   `/etc/rancher/k3s/registries.yaml`, next to the entries that are there, and restart k3s
+   (`k3s-agent` on agents):
+
+   ```yaml
+   mirrors:
+     "10.43.0.50:5000":
+       endpoint:
+         - "http://10.43.0.50:5000"
+   configs:
+     "10.43.0.50:5000":
+       auth:
+         username: pull
+         password: <the pull password>
+   ```
+
+3. In `liftgate-values.yaml`, add `inClusterRegistry` and the four `registry` values as in step 7, and
+   remove `registry`, `registryInsecure`, `registryAuth`, `build.registryCredentials` and the registry's
+   entry in `build.allowedEgressCidrs`. Upgrade as in step 3 of [Upgrading](#upgrading), then wait for
+   `kubectl -n liftgate-system rollout status statefulset/liftgate-registry`.
+
+Builds after the upgrade push to the in-cluster registry. Images of earlier builds stay in the old
+registry: apps keep running from them, a rollback to one of those builds pulls it from there, and the
+control plane no longer deletes any of them. Build each service again, with a push or Deploy on the
+Builds tab, to move it. Keep the old registry and its entries in `registries.yaml` until no deployment
+you may roll back to uses it.
+
 ## Uninstalling
 
-`helm uninstall liftgate --namespace liftgate-system` keeps the database, its volumes and its backups,
-and a later install with the same release name, namespace and `secrets.masterKey` picks them up again.
-Uninstall in the [chart README](../charts/liftgate/README.md#uninstall) says how to delete the data too.
+`helm uninstall liftgate --namespace liftgate-system` keeps the database, its volumes, its backups and
+the registry's volume `data-liftgate-registry-0`, and a later install with the same release name,
+namespace and `secrets.masterKey` picks them up again. Uninstall in the [chart README](../charts/liftgate/README.md#uninstall) says how to delete the data too.
 
 ## Troubleshooting
 
@@ -562,7 +673,7 @@ kubectl get --raw /api/v1/namespaces/liftgate-system/services/liftgate-control-p
 | "Your account is waiting for approval" | Approve the account with `admin approve`, as in step 8 |
 | The repository picker is empty | Install the App on the account that owns the repository; your GitHub account must be able to push to it. Then choose Refresh |
 | Pushes do not start builds | The App's Advanced tab lists recent webhook deliveries and their responses. The webhook secret must match `github.webhookSecret`, and the push must be to an environment's branch |
-| A build fails while pushing the image | `curl -u liftgate:<password> http://192.168.100.3:5000/v2/` from the VM, `build.allowedEgressCidrs` and `build.registryCredentials` |
-| A deployment fails with `ImagePullBackOff` | `k3s crictl pull <image>` on the VM with the image from the build. After changing `/etc/rancher/k3s/registries.yaml`, run `systemctl restart k3s` |
+| A build fails while pushing the image | `kubectl -n liftgate-system get pods liftgate-registry-0` and `kubectl -n liftgate-system logs liftgate-registry-0 --all-containers`. With a registry on another machine: `curl -u liftgate:<password> http://192.168.100.3:5000/v2/` from the VM, `build.allowedEgressCidrs` and `build.registryCredentials` |
+| A deployment fails with `ImagePullBackOff` | `k3s crictl pull <image>` on the VM with the image from the build, and the registry's entry and password in `/etc/rancher/k3s/registries.yaml`. After changing that file, run `systemctl restart k3s` |
 | App pods never appear, or stay in `ContainerCreating` with a runtime handler error | `kubectl get runtimeclass gvisor`, `kubectl get pods --all-namespaces -l liftgate.dev/managed=true`, and the gVisor section of `infra/k3s/install.md` |
 | The Metrics tab stays empty | `kubectl -n liftgate-system get pods` for Prometheus, and gVisor and cAdvisor in `infra/prometheus/README.md` |

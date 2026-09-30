@@ -7,7 +7,8 @@ Helm chart for the Liftgate control plane, dashboard, database, message bus and 
 The chart expects the cluster baseline from [`infra/`](../../infra): Gateway API CRDs, a
 Gateway controller (Cilium by default), cert-manager with Gateway API support and a
 `letsencrypt` ClusterIssuer, the CloudNativePG operator and a Prometheus reachable at
-`prometheusUrl`. Build jobs push to `registry`; nodes must be able to pull from it.
+`prometheusUrl`. Build jobs push to `registry`; nodes must be able to pull from it. Without a
+registry of your own, the chart can run one; see [In-cluster registry](#in-cluster-registry).
 
 You also need a GitHub App (webhook URL `<publicUrl>/api/v1/webhooks/github`, OAuth callback
 `<publicUrl>/api/v1/auth/github/callback`, setup URL `<dashboardUrl>/dashboard?installed=1` with
@@ -531,6 +532,9 @@ other than 2xx is retried with a growing delay for an hour.
 | `defaultPlan` | `unlimited` | `LIFTGATE_DEFAULT_PLAN`; the plan of every organization that has not been given one with `admin plan` |
 | `allowSharedSite` | `false` | Render although `deployDomain` ends in the same two labels as `publicUrl` or `dashboardUrl`; see [Separate sites](#separate-sites) |
 | `deniedEgressCidrs` | `[]` | `LIFTGATE_DENIED_EGRESS_CIDRS`; public IPv4 CIDRs that tenant pods and build jobs may not reach, such as the host's own address, on top of the private ranges they never reach |
+| `inClusterRegistry.enabled` | `false` | Run the registry inside the cluster; see [In-cluster registry](#in-cluster-registry) |
+| `inClusterRegistry.clusterIP` | `""` | Required with `enabled`: the registry's fixed Service address in the cluster's Service range, such as `10.43.0.50` on k3s |
+| `inClusterRegistry.storage` | `20Gi` | Size of the registry's volume, requested when it is created |
 
 Derived variables: `LIFTGATE_DATABASE_URL` points at the CloudNativePG `-rw` Service (or
 `postgres.externalUrl`), `LIFTGATE_DATABASE_USER` and `LIFTGATE_DATABASE_PASSWORD` come from
@@ -637,6 +641,8 @@ pods; and PostgreSQL only from its own instances and the CloudNativePG operator.
 server from [`infra/`](../../infra), when it runs in the release namespace, reaches every pod
 there on the metrics ports 7777, 8080, 8081, 9093, 9100 and 9187. Anything else installed in the
 release namespace is reachable only from the control plane unless it brings its own NetworkPolicy.
+With `inClusterRegistry.enabled`, the registry also accepts build jobs and the nodes, as
+[In-cluster registry](#in-cluster-registry) describes.
 
 ## Registry authentication
 
@@ -679,8 +685,55 @@ helm upgrade liftgate charts/liftgate --reuse-values \
 
 Configure the registry with `realm` `<publicUrl>/api/v1/registry/token`, `service` equal to
 `registry`, `issuer` `liftgate` and `rootcertbundle` pointing at `registry-token.crt`.
-[`infra/registry`](../../infra/registry) has the configuration Liftgate Cloud uses and the order
-of the switch-over.
+[`infra/registry`](../../infra/registry) sets up such a registry on another machine.
+
+## In-cluster registry
+
+`inClusterRegistry.enabled=true` runs [CNCF Distribution](https://distribution.github.io/distribution/)
+2.8.3 in the release namespace as StatefulSet `<fullname>-registry`, for installs without a registry of
+their own, such as a single machine. It is off by default.
+
+- It serves port 5000 at `inClusterRegistry.clusterIP`, a fixed address in the cluster's Service range
+  (`10.43.0.0/16` on k3s), so nodes pull from it without cluster DNS. `LIFTGATE_REGISTRY` becomes
+  `<clusterIP>:5000`, over plain HTTP and with `registryAuth: token`; `registry`, `registryInsecure`,
+  `registryAuth` and `build.registryCredentials` are ignored. `registryTokenKey`,
+  `registryTokenCertificate`, `registryPullPassword` and `registryJanitorPassword` are required.
+- The token realm is port 5001 at the same address, where an nginx container in the registry pod passes
+  only `/api/v1/registry/token` to the control plane and answers 404 to everything else. Build jobs and
+  nodes reach it wherever they reach the registry, and it serves nothing that `publicUrl` does not.
+- An egress rule in `build-isolation` lets build jobs connect to ports 5000 and 5001 of the registry
+  pod. The registry pod accepts build jobs, the control plane, whose builder prunes images, and the nodes
+  through CiliumNetworkPolicy `<fullname>-registry-nodes` (entities `host` and `remote-node`), and
+  refuses every other pod, tenant pods included. No port is published outside the cluster.
+- Every node pulls as `pull`. On k3s, add this to `/etc/rancher/k3s/registries.yaml` on every node and
+  restart k3s (`k3s-agent` on agents):
+
+  ```yaml
+  mirrors:
+    "10.43.0.50:5000":
+      endpoint:
+        - "http://10.43.0.50:5000"
+  configs:
+    "10.43.0.50:5000":
+      auth:
+        username: pull
+        password: <registryPullPassword>
+  ```
+
+- Images live on the PersistentVolumeClaim `data-<fullname>-registry-0`, which `helm uninstall` keeps.
+  A StatefulSet's volume template cannot change once it exists, so changing `inClusterRegistry.storage`
+  later fails the upgrade; resize the claim itself if its storage class allows it.
+- Each time the registry starts, it runs `registry garbage-collect --delete-untagged` while a second,
+  read-only registry process serves pulls and refuses pushes, then serves normally. CronJob
+  `<fullname>-registry-gc` restarts it every Sunday at 04:30 UTC with `kubectl rollout restart`, as a
+  ServiceAccount that may only get and patch that StatefulSet. A build that pushes during the collection
+  fails and can be started again.
+
+Turning it on for an existing install sends new builds to it. Images of earlier builds stay in the old
+registry, where nodes keep pulling them for running apps and rollbacks, and the builder no longer prunes
+them; build each service again to move it.
+[Moving to the in-cluster registry](../../documentation/self-hosting.md#moving-to-the-in-cluster-registry)
+has the steps.
 
 ## Image retention
 
@@ -696,7 +749,7 @@ with `shared` it logs in with `build.registryCredentials`, which must be allowed
 
 The registry must accept deletes (`storage.delete.enabled` in Distribution), and deleting frees
 no disk until the registry's garbage collection runs; [`infra/registry`](../../infra/registry#image-retention)
-has the weekly timer Liftgate Cloud uses.
+has a weekly timer for a registry on another machine, and the in-cluster registry collects on its own.
 
 ## Build namespace
 
@@ -719,6 +772,9 @@ release name into the same namespace again adopts them and keeps the data. Insta
 kubectl -n liftgate-system delete cluster liftgate-postgres
 kubectl -n liftgate-system delete objectstore liftgate-postgres
 ```
+
+With `inClusterRegistry.enabled`, the registry's images stay too; delete them with
+`kubectl -n liftgate-system delete pvc data-liftgate-registry-0`.
 
 The `ObjectStore` only points at the bucket, so the backups and WAL stay there, and nothing in the
 cluster prunes them once the `Cluster` is gone. Delete everything under

@@ -67,8 +67,9 @@ on the chart.
 
 ## Not covered
 
-A container registry for build output (`registry` in the chart; [`registry/`](registry) has
-a token-auth configuration), DNS records, the wildcard certificate for the deploy domain
+A container registry for build output, unless the chart runs one (`inClusterRegistry`; otherwise
+`registry` in the chart, and [`registry/`](registry) has a token-auth configuration for another
+machine), DNS records, the wildcard certificate for the deploy domain
 ([`cert-manager/wildcard.yaml`](cert-manager/wildcard.yaml) is a DNS-01 recipe), the object store
 for PostgreSQL backups, and backups of JetStream volumes.
 [`documentation/self-hosting.md`](../documentation/self-hosting.md) sets up the registry, the DNS

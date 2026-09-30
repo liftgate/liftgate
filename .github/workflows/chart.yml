@@ -112,6 +112,18 @@ jobs:
           grep "/registryTokenKey" render.err
           if render $on --set inClusterRegistry.clusterIP= 2> render.err; then exit 1; fi
           grep "/inClusterRegistry/clusterIP" render.err
+      - name: the values documentation/self-hosting.md writes render and lint
+        if: matrix.profile == 'single'
+        env:
+          GITHUB_CLIENT_SECRET: secret
+          GITHUB_WEBHOOK_SECRET: webhook
+        run: |
+          chart="$PWD/charts/liftgate"
+          cd "$(mktemp -d)"
+          openssl genrsa -out github-app.private-key.pem 2048
+          sh -ec "$(sed -n -e '/^openssl req -x509/,/^JANITOR_PASSWORD=/p' -e '/^cat > liftgate-values.yaml/,/^EOF$/p' "$chart/../../documentation/self-hosting.md")"
+          helm lint "$chart" --values liftgate-values.yaml
+          helm template liftgate "$chart" --values liftgate-values.yaml | grep 'LIFTGATE_REGISTRY: "10.43.0.50:5000"'
       - name: custom domain edge mode
         run: |
           set -o pipefail

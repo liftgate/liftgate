@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { cache } from "react";
+import { apiUrl } from "@/lib/api";
 import { apiStatus } from "@/lib/api-status";
 import { OperatorConsole } from "./operator-console";
 
-const hidden = cache(async () => ((await apiStatus("/operator/summary")) ?? 200) !== 200);
+const hidden = cache(async () => !apiUrl() && ((await apiStatus("/operator/summary")) ?? 200) !== 200);
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: (await hidden()) ? "Page not found" : "Operator" };

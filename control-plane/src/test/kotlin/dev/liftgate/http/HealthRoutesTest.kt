@@ -1,5 +1,8 @@
 package dev.liftgate.http
 
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import dev.liftgate.App
 import dev.liftgate.cache.Cache
 import dev.liftgate.config.Role
@@ -16,6 +19,7 @@ import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import org.jetbrains.exposed.v1.jdbc.JdbcTransaction
+import org.slf4j.LoggerFactory
 import java.time.Duration
 import java.time.Instant
 import kotlin.test.Test
@@ -92,6 +96,22 @@ class HealthRoutesTest {
     fun `metrics are exposed in prometheus format`() = testApplication {
         application { liftgate(app) }
         assertTrue(client.get("/metrics").bodyAsText().contains("jvm_"))
+    }
+
+    @Test
+    fun `request metrics add no meter filter to a registry that already has meters, and keep their percentiles`() = testApplication {
+        val registry = LoggerFactory.getLogger(PrometheusMeterRegistry::class.java) as Logger
+        val warnings = ListAppender<ILoggingEvent>().apply { start() }
+        registry.addAppender(warnings)
+        app.metrics.counter("hikaricp.connections.timeout")
+        try {
+            application { liftgate(app) }
+            assertEquals(HttpStatusCode.OK, client.get("/readyz").status)
+        } finally {
+            registry.detachAppender(warnings)
+        }
+        assertEquals(emptyList(), warnings.list.map { it.formattedMessage })
+        assertTrue(client.get("/metrics").bodyAsText().lines().any { it.startsWith("ktor_http_server_requests_seconds{") && "route=\"/readyz\"" in it && "quantile=\"0.99\"" in it })
     }
 
     @Test

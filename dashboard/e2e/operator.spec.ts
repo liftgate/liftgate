@@ -1,7 +1,7 @@
 import { asOperator, expect, Reply, test, waiting } from "./fixtures";
 
 test("an operator approves a pending account after confirming", async ({ page, api }) => {
-  asOperator(api);
+  await asOperator(api);
   let approved = false;
   api.on("GET /operator/users", () => (approved ? [] : [waiting]));
   api.on(`POST /operator/users/${waiting.user.id}/approve`, () => {
@@ -17,7 +17,7 @@ test("an operator approves a pending account after confirming", async ({ page, a
 });
 
 test("an operator moves an organization to another plan and suspends it with a reason", async ({ page, api }) => {
-  asOperator(api);
+  await asOperator(api);
   api.on("PUT /operator/orgs/acme/plan", { message: "acme is on the unlimited plan" });
   api.on("POST /operator/orgs/acme/suspend", { message: "acme is suspended" });
   await page.goto("/dashboard/operator?view=orgs");
@@ -41,4 +41,19 @@ test("the console is not offered to anyone but operators", async ({ page, api })
   await page.goto("/dashboard/operator");
   await expect(page.getByText("Page not found")).toBeVisible();
   expect(api.calls.filter((call) => call.path.startsWith("/operator/") && call.path !== "/operator/summary")).toEqual([]);
+});
+
+test("the console is a plain 404 page without operator copy for anyone but an operator", async ({ request }) => {
+  const get = (session?: string) => request.get("/dashboard/operator", { headers: session ? { cookie: `liftgate_session=${session}` } : {} });
+  for (const session of [undefined, "member"]) {
+    const response = await get(session);
+    expect(response.status(), session).toBe(404);
+    const html = await response.text();
+    expect(html).toContain("<title>Page not found · Liftgate</title>");
+    expect(html).not.toContain("Operator");
+    expect(html).not.toContain("Approve new accounts");
+  }
+  const console = await get("operator");
+  expect(console.status()).toBe(200);
+  expect(await console.text()).toContain("Approve new accounts");
 });

@@ -11,6 +11,7 @@ import dev.liftgate.auth.Sessions
 import dev.liftgate.auth.SignIn
 import dev.liftgate.auth.VerifiedIdentity
 import dev.liftgate.config.Signup
+import dev.liftgate.db.AuditLog
 import dev.liftgate.db.Identities
 import dev.liftgate.db.Memberships
 import dev.liftgate.db.Organizations
@@ -19,6 +20,7 @@ import dev.liftgate.db.Sessions as SessionsTable
 import dev.liftgate.db.Users
 import dev.liftgate.db.now
 import dev.liftgate.org.Orgs
+import dev.liftgate.org.User
 import dev.liftgate.org.insertUser
 import dev.liftgate.project.Projects
 import dev.liftgate.teardowns
@@ -50,6 +52,7 @@ import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -193,6 +196,25 @@ class AccountRoutesTest {
         assertEquals(HttpStatusCode.NoContent, delete { session("owner") }.status)
         assertNull(orgs.bySlug("acme"))
         assertEquals(listOf(namespace), db.teardowns())
+    }
+
+    @Test
+    fun `an account without consent is asked once legal urls are set and accepting records it with one audit row`() = testApplication {
+        val dean = user("dean")
+        session("s", dean)
+        application { liftgate(app) }
+        suspend fun pending() = json.decodeFromString(User.serializer(), client.get("/api/v1/me") { session("s") }.bodyAsText()).termsPending
+        suspend fun accept() = client.post("/api/v1/me/terms") { session("s") }.status
+        assertNull(pending())
+        assertEquals(HttpStatusCode.NotFound, accept())
+        every { app.config } returns testConfig(mapOf("LIFTGATE_TERMS_URL" to "https://liftgate.dev/legal/terms"))
+        assertEquals(true, pending())
+        assertEquals(listOf(HttpStatusCode.NoContent, HttpStatusCode.NoContent), listOf(accept(), accept()))
+        assertEquals(false, pending())
+        db.tx {
+            assertNotNull(Users.selectAll().where { Users.id eq dean }.single()[Users.termsAcceptedAt])
+            assertEquals(listOf("terms.accept"), AuditLog.selectAll().where { AuditLog.actorUserId eq dean }.map { it[AuditLog.action] })
+        }
     }
 
     @Test

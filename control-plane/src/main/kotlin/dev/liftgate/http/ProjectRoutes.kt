@@ -23,7 +23,7 @@ import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonObject
 
-private val repoPattern = Regex("[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
+val repoPattern = Regex("[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
 private val previewSlug = Regex("pr-[0-9]+")
 
 /**
@@ -78,6 +78,11 @@ fun Route.projectRoutes(app: App) {
             call.respond(HttpStatusCode.NoContent)
         }
         get("/previews") { call.respond(app.previews.status(call.project(app))) }
+        get("/detect") {
+            val project = call.project(app, OrgRole.ADMIN)
+            call.limit(app, "detect", DETECTS_PER_MINUTE, call.principal.user.id.toString())
+            call.respond(app.detect(project.installationId, project.repoFullName, call.ref() ?: project.repoDefaultBranch))
+        }
         post("/previews/approve") {
             val project = call.project(app, OrgRole.ADMIN)
             val approval = call.receive<Previews.Approval>()

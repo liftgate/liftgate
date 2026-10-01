@@ -23,10 +23,14 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import java.time.Instant
 
 private const val API = "https://api.github.com"
+private const val GRAPHQL = "$API/graphql"
 private const val PER_PAGE = 100
+private const val MAX_BLOB_BYTES = 64 * 1024
 
 val ClientRequestException.rateLimited
     get() = response.status == HttpStatusCode.TooManyRequests || response.headers["x-ratelimit-remaining"] == "0" || response.headers[HttpHeaders.RetryAfter] != null
@@ -53,8 +57,32 @@ class GitHubApp(private val config: GitHubConfig, private val client: HttpClient
         }.body<AccessToken>().token
 
     suspend fun branchHead(installationId: Long, repoFullName: String, branch: String): Pair<String, String?> =
-        client.get("$API/repos/$repoFullName/commits/$branch") { github(installationToken(installationId, repoFullName.substringAfter('/'))) }
-            .body<Commit>().let { it.sha to it.commit.message }
+        commit(installationToken(installationId, repoFullName.substringAfter('/')), repoFullName, branch).let { it.sha to it.message }
+
+    suspend fun commit(installationToken: String, repoFullName: String, ref: String): Head =
+        client.get("$API/repos/$repoFullName/commits/$ref") { github(installationToken) }.body<Commit>().let { Head(it.sha, it.commit.message, it.commit.tree?.sha ?: it.sha) }
+
+    suspend fun tree(installationToken: String, repoFullName: String, treeSha: String): Pair<List<String>, Boolean> =
+        client.get("$API/repos/$repoFullName/git/trees/$treeSha") { github(installationToken); parameter("recursive", 1) }.body<Tree>()
+            .let { tree -> tree.tree.filter { it.type == "blob" }.map { it.path } to tree.truncated }
+
+    suspend fun files(installationToken: String, repoFullName: String, sha: String, paths: List<String>): Map<String, String> {
+        if (paths.isEmpty()) return emptyMap()
+        val aliases = paths.indices.map { "p$it" }
+        val query = "query(\$owner: String!, \$name: String!, ${aliases.joinToString { "\$$it: String!" }}) " +
+            "{ repository(owner: \$owner, name: \$name) { ${aliases.joinToString(" ") { "$it: object(expression: \$$it) { ... on Blob { text byteSize isBinary } }" }} } }"
+        val variables = buildJsonObject {
+            put("owner", repoFullName.substringBefore('/'))
+            put("name", repoFullName.substringAfter('/'))
+            paths.forEachIndexed { i, path -> put(aliases[i], "$sha:$path") }
+        }
+        val blobs = client.post(GRAPHQL) {
+            github(installationToken)
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject { put("query", query); put("variables", variables) })
+        }.body<Blobs>().data?.repository.orEmpty()
+        return paths.withIndex().mapNotNull { (i, path) -> blobs[aliases[i]]?.takeIf { !it.isBinary && it.byteSize <= MAX_BLOB_BYTES }?.text?.let { path to it } }.toMap()
+    }
 
     suspend fun canPush(installationToken: String, repoFullName: String, login: String): Boolean = try {
         client.get("$API/repos/$repoFullName/collaborators/$login/permission") { github(installationToken) }.body<CollaboratorPermission>().permission in setOf("admin", "write")
@@ -174,6 +202,26 @@ class GitHubApp(private val config: GitHubConfig, private val client: HttpClient
     @Serializable
     private data class Commit(val sha: String, val commit: Details) {
         @Serializable
-        data class Details(val message: String? = null)
+        data class Details(val message: String? = null, val tree: Ref? = null)
+
+        @Serializable
+        data class Ref(val sha: String)
+    }
+
+    data class Head(val sha: String, val message: String?, val treeSha: String)
+
+    @Serializable
+    private data class Tree(val tree: List<Entry>, val truncated: Boolean = false) {
+        @Serializable
+        data class Entry(val path: String, val type: String)
+    }
+
+    @Serializable
+    private data class Blobs(val data: Data? = null) {
+        @Serializable
+        data class Data(val repository: Map<String, Blob?>? = null)
+
+        @Serializable
+        data class Blob(val text: String? = null, val byteSize: Int = 0, val isBinary: Boolean = false)
     }
 }

@@ -7,7 +7,7 @@ import { api } from "@/lib/api";
 import { useAction, useApi } from "@/lib/hooks";
 import { stackName } from "@/lib/stacks";
 import type { Service, ServiceKind, ServiceSpec, Usage } from "@/lib/types";
-import { applyAction, formValues, planName } from "@/lib/util";
+import { applyAction, formValues, planName, servesHttp } from "@/lib/util";
 import { DangerZone } from "@/components/danger-zone";
 import { SaveActions, type Saved } from "@/components/save-actions";
 import { BuildFields, GeneralFields, ResourceFields, RuntimeFields, toSpec } from "@/components/service-form";
@@ -36,6 +36,7 @@ export function SettingsTab({ org, service, section, projectHref, onChanged }: {
   });
   const current = sections.find((s) => s.id === section)?.id ?? "general";
   const card = { service, onChanged };
+  const cleared: (keyof ServiceSpec)[] = kind === "cron" ? ["port", "healthCheckPath"] : servesHttp(kind) || service.port ? [] : ["healthCheckPath"];
   const dir = service.rootDir.replace(/^\/+|\/+$/g, "");
   const dockerfile = service.buildStrategy === "dockerfile" || service.framework === "dockerfile";
   const of = (used: number, limit: number | null, unit: string) => `${used}${unit}${limit === null ? "" : ` of ${limit}${unit}`}`;
@@ -44,7 +45,7 @@ export function SettingsTab({ org, service, section, projectHref, onChanged }: {
     <SettingsLayout sections={sections.map((s) => ({ ...s, href: `${pathname}?tab=settings&section=${s.id}` }))} current={current}>
       {current === "general" && (
         <>
-          <SpecCard {...card} key="general" title="General" fields={["name", "kind", "cronSchedule"]}>
+          <SpecCard {...card} key="general" title="General" fields={["name", "kind", "cronSchedule", ...cleared]}>
             {(errorAt) => <GeneralFields initial={service} kind={kind} onKind={setKind} errorAt={errorAt} />}
           </SpecCard>
           <DangerZone

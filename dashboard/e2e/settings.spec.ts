@@ -46,6 +46,21 @@ test("a service that never ran applies its settings on the first deploy", async 
   expect(api.sent(patch).map((call) => call.body)).toEqual([{ name: "Storefront", kind: "web", cronSchedule: null }]);
 });
 
+test("running as a worker or cron job clears the runtime fields that kind cannot use", async ({ page, api }) => {
+  patched(api);
+  for (const [kind, schedule] of [["Worker"], ["Cron job", "*/5 * * * *"]]) {
+    await page.goto(settings);
+    await page.getByLabel("Runs as").selectOption(kind);
+    if (schedule) await page.getByLabel("Cron schedule").fill(schedule);
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(page.getByRole("status").filter({ hasText: /^Saved\.$/ })).toBeVisible();
+  }
+  expect(api.sent(patch).map((call) => call.body)).toEqual([
+    { name: "Web", kind: "worker", cronSchedule: null, healthCheckPath: null },
+    { name: "Web", kind: "cron", cronSchedule: "*/5 * * * *", port: null, healthCheckPath: null },
+  ]);
+});
+
 test("a public build-time variable asks for a rebuild and a runtime secret for a redeploy", async ({ page, api }) => {
   api.on(`GET /services/${service.id}/env`, [
     { name: "NEXT_PUBLIC_X", value: "a", secret: false },

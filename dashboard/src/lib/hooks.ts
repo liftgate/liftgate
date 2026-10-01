@@ -78,6 +78,14 @@ export function usePolling(active: boolean, fn: () => void, ms = 5000) {
   }, [active, ms]);
 }
 
+export function useOnChange(fn: () => void, value: unknown) {
+  const [seen, setSeen] = useState(value);
+  if (seen !== value) {
+    setSeen(value);
+    fn();
+  }
+}
+
 export const useSignOut = () =>
   useAction(async () => {
     await api("/auth/logout", { method: "POST" });

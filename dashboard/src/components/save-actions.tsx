@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { api, ApiError } from "@/lib/api";
-import { useAction } from "@/lib/hooks";
+import { useAction, useOnChange } from "@/lib/hooks";
 import type { CurrentDeployment } from "@/lib/types";
 import { shortSha, type Apply } from "@/lib/util";
 import { Button } from "./ui/button";
@@ -21,12 +21,8 @@ export async function saved(serviceId: string) {
 }
 
 export function SaveActions({ serviceId, pending, saved: done, onApplied }: { serviceId: string; pending: boolean; saved?: Saved; onApplied?: () => void }) {
-  const [shown, setShown] = useState(done);
   const [applied, setApplied] = useState<string>();
-  if (shown !== done) {
-    setShown(done);
-    setApplied(undefined);
-  }
+  useOnChange(() => setApplied(undefined), done);
   const apply = useAction(async () => {
     const sha = done?.current?.commitSha;
     if (!sha) return;

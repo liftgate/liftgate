@@ -84,16 +84,9 @@ export function Menu({
   );
 }
 
-export function MenuLink({ href, checked, external = false, children }: { href: string; checked?: boolean; external?: boolean; children: ReactNode }) {
+export function MenuLink({ href, checked, children }: { href: string; checked?: boolean; children: ReactNode }) {
   return (
-    <Link
-      href={href}
-      role={checked === undefined ? "menuitem" : "menuitemradio"}
-      aria-checked={checked}
-      tabIndex={-1}
-      {...(external && { target: "_blank", rel: "noreferrer" })}
-      className={itemClasses}
-    >
+    <Link href={href} role={checked === undefined ? "menuitem" : "menuitemradio"} aria-checked={checked} tabIndex={-1} className={itemClasses}>
       {children}
     </Link>
   );

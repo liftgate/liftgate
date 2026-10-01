@@ -2,6 +2,7 @@
 
 import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, useState, type ReactNode } from "react";
+import { useOnChange } from "@/lib/hooks";
 import { Footer } from "./footer";
 import { Icon } from "./icons";
 import { Mark } from "./mark";
@@ -36,11 +37,7 @@ function AppShell({ children }: { children: ReactNode }) {
   const scope = useScope();
   const route = `${usePathname()}?${useSearchParams()}`;
   const [drawer, setDrawer] = useState(false);
-  const [shown, setShown] = useState(route);
-  if (shown !== route) {
-    setShown(route);
-    setDrawer(false);
-  }
+  useOnChange(() => setDrawer(false), route);
   const suspended = scope.org?.suspendedAt && scope.org;
   return (
     <>

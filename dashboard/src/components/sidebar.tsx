@@ -3,16 +3,17 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useParams, usePathname, useSearchParams } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { useApi, useSignOut } from "@/lib/hooks";
+import { useApi, useOnChange, useSignOut } from "@/lib/hooks";
 import { stackIcon } from "@/lib/stacks";
 import type { Environment, OperatorSummary, Organization, Project, ProjectTree, Service, User } from "@/lib/types";
 import { planName } from "@/lib/util";
 import { CreateOrgForm } from "./create-org-form";
 import { Footer } from "./footer";
-import { Icon, StackIcon, type IconName } from "./icons";
+import { Icon, StackIcon } from "./icons";
 import { docsUrl } from "./landing/links";
+import { NavItem, navItemClasses } from "./settings-layout";
 import { Badge, statusTone, type Tone } from "./ui/badge";
 import { Dialog } from "./ui/dialog";
 import { Input } from "./ui/input";
@@ -25,19 +26,9 @@ export const lastOrg = (orgs: Organization[]) => orgs.find((o) => o.slug === loc
 
 const dots: Record<Tone, string> = { success: "bg-success", warning: "bg-warning", danger: "bg-danger", accent: "bg-accent", neutral: "bg-graphite-600" };
 
-const itemClasses = "flex h-8 items-center gap-2 rounded-md px-2 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-accent";
-
 const triggerClasses = "flex h-10 w-full items-center gap-2 rounded-md px-2 text-sm hover:bg-graphite-800 focus-visible:outline-2 focus-visible:outline-accent";
 
 export type Scope = ReturnType<typeof useScope>;
-
-function useReload(reload: () => void, when: unknown) {
-  const [seen, setSeen] = useState(when);
-  if (seen !== when) {
-    setSeen(when);
-    reload();
-  }
-}
 
 export function useScope() {
   const pathname = usePathname();
@@ -48,11 +39,11 @@ export function useScope() {
   const me = useApi<User>("/me");
   const orgs = useApi<Organization[]>("/orgs");
   const list = orgs.data;
-  useReload(orgs.reload, !routeOrg || !list || list.some((o) => o.slug === routeOrg) ? "known" : routeOrg);
+  useOnChange(orgs.reload, !routeOrg || !list || list.some((o) => o.slug === routeOrg) ? "known" : routeOrg);
   const org = list && (list.find((o) => o.slug === routeOrg) ?? lastOrg(list));
   const project = org?.slug === routeOrg ? (params.project ?? (onNew ? search.get("project") : null) ?? undefined) : undefined;
   const tree = useApi<ProjectTree>(project && `/orgs/${org?.slug}/projects/${project}/tree`);
-  useReload(tree.reload, pathname);
+  useOnChange(tree.reload, pathname);
   const projects = useApi<Project[]>(project && `/orgs/${org?.slug}/projects#${project}`, () => api<Project[]>(`/orgs/${org?.slug}/projects`));
   const pending = useApi<OperatorSummary>(me.data?.operator && "/operator/summary").data?.pending;
   useEffect(() => {
@@ -81,15 +72,6 @@ export function useScope() {
   return { me: me.data, orgs: list, org, project, tree: tree.data, projects: projects.data, pending, current, title };
 }
 
-function Item({ href, current, icon, children }: { href: string; current?: boolean; icon?: IconName; children: ReactNode }) {
-  return (
-    <Link href={href} aria-current={current ? "page" : undefined} className={`${itemClasses} ${current ? "bg-graphite-800 font-medium text-white" : "text-graphite-400 hover:text-white"}`}>
-      {icon && <Icon name={icon} />}
-      {children}
-    </Link>
-  );
-}
-
 function Monogram({ name, danger = false }: { name: string; danger?: boolean }) {
   return (
     <span aria-hidden className="relative flex size-6 shrink-0 items-center justify-center rounded-md bg-graphite-700 text-xs font-semibold text-white">
@@ -107,9 +89,9 @@ export function Sidebar({ scope }: { scope: Scope }) {
       {org && scope.orgs ? (
         <OrgSwitcher org={org} orgs={scope.orgs} prefill={me?.name ?? me?.login} />
       ) : scope.orgs ? (
-        <Item href="/dashboard" icon="plus">
+        <NavItem href="/dashboard" icon="plus">
           Create organization
-        </Item>
+        </NavItem>
       ) : (
         <Skeleton className="h-10" />
       )}
@@ -122,22 +104,22 @@ export function Sidebar({ scope }: { scope: Scope }) {
               Projects
             </Link>
             <ProjectSwitcher org={org} project={tree?.project} projects={scope.projects} />
-            <Item href={`${base}/${project}`} icon="overview" current={current === "overview"}>
+            <NavItem href={`${base}/${project}`} icon="overview" current={current === "overview"}>
               Overview
-            </Item>
+            </NavItem>
             {tree ? <Services tree={tree} href={`${base}/${project}`} current={current} /> : <Skeleton className="h-8" />}
-            <Item href={`${base}/${project}/settings`} icon="settings" current={current === "project-settings"}>
+            <NavItem href={`${base}/${project}/settings`} icon="settings" current={current === "project-settings"}>
               Settings
-            </Item>
+            </NavItem>
           </>
         ) : base ? (
           <>
-            <Item href={base} icon="projects" current={current === "projects"}>
+            <NavItem href={base} icon="projects" current={current === "projects"}>
               Projects
-            </Item>
-            <Item href={`${base}/settings`} icon="settings" current={current === "org-settings"}>
+            </NavItem>
+            <NavItem href={`${base}/settings`} icon="settings" current={current === "org-settings"}>
               Settings
-            </Item>
+            </NavItem>
           </>
         ) : (
           !scope.orgs && <Skeleton className="h-16" />
@@ -146,7 +128,7 @@ export function Sidebar({ scope }: { scope: Scope }) {
       <div className="mt-auto flex flex-col gap-1 pt-6">
         <hr className="mb-1 border-graphite-700" />
         {me?.operator && (
-          <Item href="/dashboard/operator" icon="operator" current={current === "operator"}>
+          <NavItem href="/dashboard/operator" icon="operator" current={current === "operator"}>
             Operator
             {!!pending && (
               <span className="ml-auto">
@@ -156,9 +138,9 @@ export function Sidebar({ scope }: { scope: Scope }) {
                 </Badge>
               </span>
             )}
-          </Item>
+          </NavItem>
         )}
-        <a href={docsUrl("getting-started")} target="_blank" rel="noreferrer" className={`${itemClasses} text-graphite-400 hover:text-white`}>
+        <a href={docsUrl("getting-started")} target="_blank" rel="noreferrer" className={`${navItemClasses} text-graphite-400 hover:text-white`}>
           <Icon name="docs" />
           Docs
           <Icon name="external" className="ml-auto size-3" />
@@ -277,7 +259,7 @@ function Services({ tree, href, current }: { tree: ProjectTree; href: string; cu
       {environments.length === 1 ? rows(environments[0]) : environments.map(group)}
       {previews.length > 0 && (
         <details open={previews.some((e) => current?.startsWith(`${e.slug}/`))} className="group">
-          <summary className={`${itemClasses} cursor-pointer list-none text-graphite-400 hover:text-white [&::-webkit-details-marker]:hidden`}>
+          <summary className={`${navItemClasses} cursor-pointer list-none text-graphite-400 hover:text-white [&::-webkit-details-marker]:hidden`}>
             <Icon name="chevronRight" className="size-4 transition-transform group-open:rotate-90" />
             Previews ({previews.length})
           </summary>
@@ -291,12 +273,12 @@ function Services({ tree, href, current }: { tree: ProjectTree; href: string; cu
 function ServiceItem({ service, href, current }: { service: Service; href: string; current: boolean }) {
   const status = service.current?.status.replace("_", " ") ?? "not deployed";
   return (
-    <Item href={href} current={current}>
+    <NavItem href={href} current={current}>
       <span aria-hidden className={`size-2 shrink-0 rounded-full ${dots[statusTone(status)]}`} />
       {stackIcon(service.framework) && <StackIcon id={service.framework} />}
       <span className="min-w-0 truncate">{service.name}</span>
       <span className="sr-only">, {status}</span>
-    </Item>
+    </NavItem>
   );
 }
 

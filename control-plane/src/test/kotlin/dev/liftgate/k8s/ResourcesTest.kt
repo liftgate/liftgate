@@ -423,6 +423,7 @@ class ResourcesTest {
         val container = pod.containers.single().securityContext
         assertEquals(true, pod.securityContext.runAsNonRoot)
         assertEquals(1000L to 1000L, pod.securityContext.runAsUser to pod.securityContext.runAsGroup)
+        assertEquals(1000L, pod.securityContext.fsGroup)
         assertEquals("RuntimeDefault", pod.securityContext.seccompProfile.type)
         assertEquals(false, pod.automountServiceAccountToken)
         assertEquals(false, container.allowPrivilegeEscalation)

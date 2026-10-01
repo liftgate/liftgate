@@ -98,8 +98,27 @@ The container runs as user 1000 and group 1000, whatever `USER` the image sets. 
 and has no Linux capabilities. On installations that use the chart's default runtime class, `gvisor`, it
 runs in a gVisor sandbox.
 
-Files the app reads must be readable by user 1000, and it can only write where user 1000 may write. The
-file system lasts as long as the container: a restart, a redeploy or a rollback starts from the image
+In an image Liftgate builds with Railpack:
+
+- User 1000 owns the working directory, `/app`, and everything in it except the files inside
+  `node_modules` directories, which stay owned by root and read-only. The directories inside
+  `node_modules` are writable, so files such as `node_modules/.cache` can be created.
+- Files that a `deploy.inputs` entry of your own `railpack.json` copies from an image, from the
+  repository, or with an include of `/` keep the owner they arrive with.
+- `HOME` is `/home/liftgate`, owned by user 1000. The image has a user named `liftgate` for uid 1000,
+  unless it already had a user with that uid.
+- `/tmp` is writable.
+- A `HOME` variable set on the service replaces `/home/liftgate`.
+
+In an image Liftgate builds from a Dockerfile, Liftgate adds one last layer that gives user 1000 the final
+stage's `WORKDIR` by the same rule, and sets `USER 1000:1000`. Files already owned by `1000:1000` are
+skipped, so `COPY --chown=1000:1000` keeps that layer small. With `WORKDIR /` nothing changes. `HOME`,
+`/tmp` and every other path stay as the image made them.
+
+Everywhere else, the app can write only where the image lets user 1000 write. Images built by Liftgate
+0.3.0-alpha.1 or older do not have this ownership; build the app again to get it.
+
+The file system lasts as long as the container: a restart, a redeploy or a rollback starts from the image
 again. Nothing you write survives, so keep state in a database or object store outside Liftgate.
 
 ## Resources

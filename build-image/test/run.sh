@@ -65,6 +65,14 @@ contract() {
   done | jq --slurp --sort-keys add
 }
 
+writable() {
+  expect "the name of uid 1000 in $1" "$(docker exec "$run-$1" id -un)" liftgate
+  expect "a writable HOME, /app and /app/$2 in $1" "$(docker exec "$run-$1" sh -c "touch \"\$HOME/probe\" ./probe $2/probe && echo \"\$HOME\"")" /home/liftgate
+  expect "unwritable paths under /app in $1" "$(docker exec "$run-$1" find . \( -type d -o ! -path '*/node_modules/*' \) ! -writable -print -quit)" ""
+  added=$(docker history --no-trunc --human=false --format '{{.Size}} {{.CreatedBy}}' "$registry/test/$1:latest" | awk 'NR == 1 || /home\/liftgate/ { size += $1 } END { print size }')
+  [ "$added" -lt 1000000 ] || { echo "the layers Liftgate adds to the $1 image hold $added bytes" >&2; exit 1; }
+}
+
 docker network create "$run" > /dev/null
 docker run --detach --name "$run-registry" --network "$run" --network-alias registry --publish 127.0.0.1::5000 \
   registry:2.8.3@sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373 > /dev/null
@@ -103,15 +111,11 @@ resized="$next/_next/image?url=%2Fsample.png&w=64&q=75"
 curl --silent --show-error --output /dev/null "$resized"
 expect "x-nextjs-cache of the second image request" \
   "$(curl --silent --show-error --dump-header - --output /dev/null "$resized" | tr -d '\r' | awk -F ': ' 'tolower($1) == "x-nextjs-cache" { print $2 }')" HIT
-expect "the name of uid 1000" "$(docker exec "$run-next" id -un)" liftgate
-expect "a writable HOME, /app and /app/.next" "$(docker exec "$run-next" sh -c 'touch "$HOME/probe" ./probe .next/probe && echo "$HOME"')" /home/liftgate
-expect "unwritable paths under /app" "$(docker exec "$run-next" find . \( -type d -o ! -path '*/node_modules/*' \) ! -writable -print -quit)" ""
+writable next .next
 if docker logs "$run-next" 2>&1 | grep EACCES; then
   echo "the Next.js app was denied a write" >&2
   exit 1
 fi
-top=$(docker history --human=false --format '{{.Size}}' "$registry/test/next:latest" | head -n 2 | awk '{ size += $1 } END { print size }')
-[ "$top" -lt 1000000 ] || { echo "the two newest layers of the Next.js image hold $top bytes" >&2; exit 1; }
 
 build hello hello --env LIFTGATE_BUILD_STRATEGY=auto
 restricted --detach --name "$run-hello" --env PORT=8080 --publish 127.0.0.1::8080 "$registry/test/hello:latest" > /dev/null
@@ -140,6 +144,7 @@ expect "a pnpm workspace app started through /bin/sh -c" \
 
 build vite vite --env LIFTGATE_BUILD_STRATEGY=auto --env LIFTGATE_BUILD_ENV_NAMES=API_TOKEN --env "LIFTGATE_ENV_API_TOKEN=$token"
 expect "GET /health on the Vite sample" "$(serve vite /health "$registry/test/vite:latest" | grep -o "hello from vite")" "hello from vite"
+writable vite dist
 
 expect "railpack info" "$(contract)" "$(jq --sort-keys . "$fixtures/expected.json")"
 

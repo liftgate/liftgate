@@ -71,13 +71,14 @@ else
   plan=$(mktemp -d)
   prepare --plan-out "$plan/railpack-plan.json" "$context"
   jq --arg own "$(own /app)" '
-    [.deploy.inputs[]? | select(any(.include[]?; . == ".")) | .step // empty] as $owned
-    | (.steps[] | select(.name | IN($owned[])) | .commands) += [{cmd: $own}]
-    | .steps += [{name: "liftgate:own", inputs: ([.deploy.base] + .deploy.inputs), secrets: [], commands: [{
+    [.deploy.inputs[]? | select(.step) | {step, include: [.include[]? | select(. == "/app" or startswith("/app/") or (startswith("/") | not))], exclude: ["*"]} | select(.include != [])] as $roots
+    | ([$roots[].step] | unique) as $sources
+    | .steps += [$sources[] | {name: "liftgate:own:\(.)", inputs: [{step: .}], commands: [{cmd: $own}]}]
+    | .steps += [{name: "liftgate:own", inputs: ([.deploy.base] + $roots), commands: [{
         cmd: "sh -ec \"\($own); mkdir -p /home/liftgate; chown 1000:1000 /home/liftgate; cut -d: -f3 /etc/passwd | grep -qx 1000 || echo liftgate:x:1000:1000::/home/liftgate:/bin/sh >> /etc/passwd\""
       }]}]
+    | .deploy.inputs |= if (. // []) == [] then . else map(if .step | IN($sources[]) then .step |= "liftgate:own:\(.)" else . end) + [{step: "liftgate:own", include: ["/."], exclude: ["*", "!app"]}] end
     | .deploy.base = {step: "liftgate:own"}
-    | .deploy.inputs = [{step: "liftgate:own", include: ["/etc/passwd"]}]
     | .deploy.variables.HOME = "/home/liftgate"
   ' "$plan/railpack-plan.json" > "$plan/owned.json"
   mv "$plan/owned.json" "$plan/railpack-plan.json"

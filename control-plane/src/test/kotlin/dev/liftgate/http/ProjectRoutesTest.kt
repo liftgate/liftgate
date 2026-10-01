@@ -35,6 +35,7 @@ import io.ktor.server.testing.testApplication
 import io.micrometer.prometheusmetrics.PrometheusConfig
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
@@ -151,9 +152,9 @@ class ProjectRoutesTest {
     }
 
     @Test
-    fun `detecting a project's repository is for org admins and reads its default branch`() = testApplication {
+    fun `detecting a project's repository is for org admins, reads its default branch, and reads nothing once the importer lost write access`() = testApplication {
         val org = orgs.create("acme", "Acme", user.id)
-        val project = app.projects.create(org.id, "shop", "Shop", "acme/shop", 42, defaultBranch = "trunk")
+        val project = app.projects.create(org.id, "shop", "Shop", "acme/shop", 42, "alice", defaultBranch = "trunk")
         val grace = db.tx { insertUser("grace", null, null, null) }
         db.tx {
             Memberships.insert {
@@ -171,18 +172,28 @@ class ProjectRoutesTest {
             coEvery { resolve("s") } returns user
             coEvery { resolve("m") } returns grace
         }
-        every { app.github } returns mockk<GitHubApp> {
+        val github = mockk<GitHubApp> {
             coEvery { installationToken(42, "shop", any()) } returns "ghs_token"
+            coEvery { canPush("ghs_token", "acme/shop", "alice") } returns true
             coEvery { commit("ghs_token", "acme/shop", "trunk") } returns GitHubApp.Head("abc123", "ship it", "t1")
             coEvery { tree("ghs_token", "acme/shop", "t1") } returns (listOf("package.json") to false)
             coEvery { files("ghs_token", "acme/shop", "abc123", listOf("package.json")) } returns mapOf("package.json" to """{"devDependencies":{"vite":"8"}}""")
         }
+        every { app.github } returns github
         application { liftgate(app) }
         assertEquals(HttpStatusCode.Forbidden, client.get("/api/v1/projects/${project.id}/detect") { session("m") }.status)
         val response = client.get("/api/v1/projects/${project.id}/detect") { session() }
         assertEquals(HttpStatusCode.OK, response.status)
         val detection = json.decodeFromString(Detection.serializer(), response.bodyAsText())
         assertEquals(Triple("trunk", "vite", "shop"), Triple(detection.ref, detection.services.single().framework?.id, detection.services.single().spec.slug))
+        coEvery { github.canPush("ghs_token", "acme/shop", "alice") } returns false
+        val refused = client.get("/api/v1/projects/${project.id}/detect?ref=main") { session() }
+        assertEquals(HttpStatusCode.OK, refused.status)
+        val unread = json.decodeFromString(Detection.serializer(), refused.bodyAsText())
+        assertEquals(Triple(null, emptyList(), listOf("The GitHub account that imported acme/shop no longer has write access, so nothing was read and builds will fail. Re-import the project.")), Triple(unread.commit, unread.services, unread.warnings))
+        coVerify(exactly = 1) { github.commit(any(), any(), any()) }
+        coVerify(exactly = 1) { github.tree(any(), any(), any()) }
+        coVerify(exactly = 1) { github.files(any(), any(), any(), any()) }
     }
 
     @Test

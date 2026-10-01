@@ -49,6 +49,7 @@ class GitHubRoutesTest {
     private val user = User(UUID.randomUUID(), "dean", null, null, null)
     private val sha = UUID.randomUUID().toString().replace("-", "")
     private val requests = Collections.synchronizedList(mutableListOf<HttpRequestData>())
+    private var tree = """{"tree":[{"path":".env.example","type":"blob"},{"path":"package.json","type":"blob"}]}"""
     private var blobs = """{"data":{"repository":{"p0":{"text":"{\"dependencies\":{\"next\":\"16\"}}","byteSize":30},"p1":{"text":"DATABASE_URL=postgres://u:p@h/db","byteSize":33}}}}"""
     private val github = GitHubApp(
         GitHubConfig("12345", TestKeys.privateKeyPem),
@@ -65,7 +66,7 @@ class GitHubRoutesTest {
                 request.url.encodedPath.endsWith("/installation") -> ok("""{"id":42}""")
                 request.url.encodedPath == "/app/installations/42/access_tokens" -> respond("""{"token":"ghs_token"}""", HttpStatusCode.Created, headers)
                 request.url.encodedPath == "/repos/acme/shop/commits/main" -> ok("""{"sha":"$sha","commit":{"message":"ship it\n\nwith a body","tree":{"sha":"t1"}}}""")
-                request.url.encodedPath == "/repos/acme/shop/git/trees/t1" -> ok("""{"tree":[{"path":".env.example","type":"blob"},{"path":"package.json","type":"blob"}]}""")
+                request.url.encodedPath == "/repos/acme/shop/git/trees/t1" -> ok(tree)
                 request.url.encodedPath == "/graphql" -> ok(blobs)
                 request.url.encodedPath.startsWith("/repos/acme/broken/") -> respond("""{"message":"Server Error"}""", HttpStatusCode.InternalServerError, headers)
                 else -> ok(
@@ -164,6 +165,18 @@ class GitHubRoutesTest {
             val detection = json.decodeFromString(Detection.serializer(), response.bodyAsText())
             assertEquals(Triple(true, emptyList(), listOf("Couldn't read $repo, so nothing was detected. Railpack will still detect the stack during the build.")), Triple(detection.partial, detection.services, detection.warnings))
         }
+        assertNull(cache.detections["acme/shop@$sha"])
+    }
+
+    @Test
+    fun `a detection over 128 KB is answered but not cached`() = testApplication {
+        every { app.cache } returns cache
+        application { liftgate(app) }
+        tree = (0 until 10).joinToString("", """{"tree":[{"path":".env.example","type":"blob"}""", "]}") { """,{"path":"s$it/index.html","type":"blob"}""" }
+        val env = (0 until 200).joinToString("\\n") { "# ${"d".repeat(120)}\\nV$it=" }
+        blobs = """{"data":{"repository":{"p0":{"text":"$env","byteSize":${env.length}}}}}"""
+        val detection = json.decodeFromString(Detection.serializer(), detect("acme/shop").bodyAsText())
+        assertEquals(List(10) { 200 }, detection.services.map { it.variables.size })
         assertNull(cache.detections["acme/shop@$sha"])
     }
 }

@@ -234,6 +234,28 @@ class DetectorTest {
     }
 
     @Test
+    fun `workspace apps build their own Dockerfile from the root, and with only a root Dockerfile they start unchecked`() {
+        val detection = detect(
+            mapOf(
+                "Dockerfile" to "FROM node:24\nEXPOSE 3000",
+                "package.json" to """{"private":true}""",
+                "pnpm-workspace.yaml" to "packages:\n  - 'apps/*'",
+                "pnpm-lock.yaml" to "",
+                "apps/web/package.json" to """{"name":"web","scripts":{"build":"next build","start":"next start"},"dependencies":{"next":"16"}}""",
+                "apps/api/package.json" to """{"name":"api","scripts":{"build":"nest build","start":"nest start"},"dependencies":{"@nestjs/core":"11"}}""",
+                "apps/api/Dockerfile" to "FROM node:24\nEXPOSE 4000",
+            ),
+        )
+        assertEquals(
+            listOf(Triple("shop", "Dockerfile", true), Triple("api", "apps/api/Dockerfile", true), Triple("web", "Dockerfile", false)),
+            detection.services.map { Triple(it.spec.name, it.spec.dockerfilePath, it.selected) },
+        )
+        assertTrue(detection.services.all { it.builder == "dockerfile" && it.spec.rootDir == "/" && it.spec.buildCommand == null && it.spec.startCommand == null })
+        assertEquals(listOf("apps/web/**", "pnpm-lock.yaml", "package.json"), detection.services[2].spec.watchPaths)
+        assertEquals(listOf("The root Dockerfile builds every app whose root directory is /"), detection.services[2].warnings)
+    }
+
+    @Test
     fun `liftgate's own tree selects the control plane and the dashboard and skips build fixtures`() {
         val root = File("..").canonicalFile
         val paths = root.walk().onEnter { it.name !in setOf(".git", "node_modules", "build", ".gradle", ".next", ".kotlin") }
@@ -285,6 +307,16 @@ class DetectorTest {
         listOf("sk_live_x", "u:p@", "sk_live_real", "example.com").forEach { assertFalse(it in serialized, it) }
         assertEquals(listOf("acme/shop commits a .env file. Liftgate didn't read it; rotate any secrets it holds."), detection.warnings)
         assertEquals(listOf("package.json", ".env.example"), Detector.wanted(listOf(".env", ".env.example", ".env.local", ".env.production", "package.json")))
+    }
+
+    @Test
+    fun `each app lists at most 200 variables and skips names over 128 characters`() {
+        val files = (0 until 48).associate { f -> ".env.a$f.example" to (0 until 6_000).joinToString("\n", prefix = if (f == 0) "${"B".repeat(129)}=1\n" else "") { "A${f}_$it=" } } +
+            (0 until 10).associate { "s$it/index.html" to "" }
+        val detection = assertTimeoutPreemptively(Duration.ofSeconds(1)) { detect(files) }
+        assertEquals(List(10) { 200 }, detection.services.map { it.variables.size })
+        assertEquals("A0_0", detection.services.first().variables.first().name)
+        assertTrue(json.encodeToString(Detection.serializer(), detection).length < 256 * 1024)
     }
 
     @Test

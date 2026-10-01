@@ -81,7 +81,7 @@ fun Route.projectRoutes(app: App) {
         get("/detect") {
             val project = call.project(app, OrgRole.ADMIN)
             call.limit(app, "detect", DETECTS_PER_MINUTE, call.principal.user.id.toString())
-            call.respond(app.detect(project.installationId, project.repoFullName, call.ref() ?: project.repoDefaultBranch))
+            call.respond(app.detect(project.installationId, project.repoFullName, call.ref() ?: project.repoDefaultBranch, project.importedByLogin))
         }
         post("/previews/approve") {
             val project = call.project(app, OrgRole.ADMIN)

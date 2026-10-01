@@ -22,12 +22,15 @@ object Detector {
     private const val MAX_DIRECTORIES = 50
     private const val MAX_DEPTH = 3
     private const val MAX_DESCRIPTION = 120
+    private const val MAX_VARIABLES = 200
+    private const val MAX_VARIABLE_NAME = 128
     private const val MAX_GLOBS = 50
     private const val MAX_GLOB_LENGTH = 100
     private const val RAILPACK = "railpack"
     private const val DOCKERFILE = "dockerfile"
     private const val CADDY = "Caddy"
     private const val SET_START = "Set a start command"
+    private const val ROOT_DOCKERFILE = "The root Dockerfile builds every app whose root directory is /"
 
     private val markers = setOf(
         "package.json", "requirements.txt", "pyproject.toml", "Pipfile", "go.mod", "Cargo.toml", "Gemfile", "composer.json", "pom.xml",
@@ -110,12 +113,10 @@ object Detector {
         }.takeIf { script in scripts }
         val watched = dependencies(pkg).filter { (dep, version) -> version.startsWith("workspace:") || dep in workspace.dirs }.keys.mapNotNull { workspace.dirs[it] }
         val warnings = listOfNotNull(SET_START.takeIf { run("start") == null && row.spec.kind != ServiceKind.STATIC }, "Check the first build".takeIf { workspace.pm != "pnpm" })
-        return row.copy(
-            spec = row.spec.copy(
-                buildCommand = run("build"),
-                startCommand = run("start"),
-                watchPaths = (listOf(dir) + watched).map { "$it/**" }.plus(listOfNotNull(workspace.lockfile, "package.json")).distinct().take(MAX_WATCH_PATHS),
-            ),
+        val watchPaths = (listOf(dir) + watched).map { "$it/**" }.plus(listOfNotNull(workspace.lockfile, "package.json")).distinct().take(MAX_WATCH_PATHS)
+        val image = dockerfile("", "$dir/Dockerfile", row) ?: dockerfile("", "Dockerfile", row)?.let { it.copy(selected = false, warnings = it.warnings + ROOT_DOCKERFILE) }
+        return image?.let { it.copy(spec = it.spec.copy(watchPaths = watchPaths)) } ?: row.copy(
+            spec = row.spec.copy(buildCommand = run("build"), startCommand = run("start"), watchPaths = watchPaths),
             defaults = DetectedService.Defaults(run("build"), run("start")),
             warnings = (row.warnings + warnings).distinct(),
         )
@@ -325,18 +326,19 @@ object Detector {
 
     private fun Tree.variables(dir: String): List<DetectedVariable> =
         listOf(dir, "").distinct().flatMap { d -> children(d).filter(envExample::matches).flatMap { dotenv(path(d, it), text(d, it)) } + appJson(d) }
-            .filter { it.name != "PORT" }
+            .filter { it.name != "PORT" && it.name.length <= MAX_VARIABLE_NAME }
             .groupBy { it.name }
             .map { (_, same) -> same.first().copy(description = same.firstNotNullOfOrNull { it.description }, required = same.any { it.required }, secretHint = same.any { it.secretHint }) }
+            .take(MAX_VARIABLES)
 
     private fun dotenv(source: String, text: String?): List<DetectedVariable> {
         var comment: String? = null
-        return text.orEmpty().lines().mapNotNull { line ->
+        return text.orEmpty().lineSequence().mapNotNull { line ->
             val trimmed = line.trim()
             val above = comment
             comment = trimmed.takeIf { it.startsWith("#") }?.trimStart('#')?.trim()?.takeUnless { it.isEmpty() || assignment.matches(it) }?.take(MAX_DESCRIPTION)
             assignment.matchEntire(trimmed)?.let { DetectedVariable(it.groupValues[1], above, source, required = false, secretHint = credentialUrl.containsMatchIn(it.groupValues[2])) }
-        }
+        }.take(MAX_VARIABLES).toList()
     }
 
     private fun Tree.appJson(dir: String): List<DetectedVariable> = obj(dir, "app.json")?.get("env").let { it as? JsonObject }.orEmpty()

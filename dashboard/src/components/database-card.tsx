@@ -147,12 +147,12 @@ function DatabaseDetails({
   const link = useAction(async (form: HTMLFormElement) => {
     const v = formValues(form);
     await api(`/databases/${database.id}/links`, { method: "POST", body: { serviceId: v.serviceId, envName: v.envName } });
-    setStatus(await saved(v.serviceId, true));
+    setStatus(await saved(v.serviceId));
     onChanged();
   });
   const unlink = useAction(async (serviceId: string) => {
     await api(`/databases/${database.id}/links/${serviceId}`, { method: "DELETE" });
-    setStatus(await saved(serviceId, true));
+    setStatus(await saved(serviceId));
     onChanged();
   });
   const restore = useAction(async (form: HTMLFormElement) => {

@@ -67,7 +67,7 @@ export function Tokens({ org }: { org: string }) {
       <PageHeader
         title="API tokens"
         description="A token acts in this organization with its creator's role. It cannot manage tokens or SSO."
-        actions={newToken}
+        actions={!!tokens.data?.length && newToken}
       />
       <Loaded query={tokens} skeleton={<TableSkeleton />}>
         {(list) =>

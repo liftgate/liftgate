@@ -37,7 +37,7 @@ test("the console is not offered to anyone but operators", async ({ page, api })
   api.on("GET /operator/summary", new Reply(404));
   await page.goto("/account");
   await expect(page.getByRole("link", { name: "Operator console" })).toHaveCount(0);
-  await expect(page.locator('header a[href="/dashboard/operator"]')).toHaveCount(0);
+  await expect(page.locator('nav[aria-label="Main"] a[href="/dashboard/operator"]')).toHaveCount(0);
   await page.goto("/dashboard/operator");
   await expect(page.getByText("Page not found")).toBeVisible();
   expect(api.calls.filter((call) => call.path.startsWith("/operator/") && call.path !== "/operator/summary")).toEqual([]);

@@ -375,3 +375,8 @@ export const asOperator = (api: Api) => {
   api.on("GET /operator/orgs", [{ org, members: 2, projects: 1, services: 1, createdAt: ago(9000) }] satisfies OperatorOrg[]);
   return api.session("operator");
 };
+
+export const openNav = async (page: Page) => {
+  if ((page.viewportSize()?.width ?? 1440) < 1024) await page.getByRole("button", { name: "Open menu" }).click();
+  return page.getByRole("navigation", { name: "Main" });
+};

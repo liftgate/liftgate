@@ -63,7 +63,7 @@ export function NameSlugFields({
     <>
       <div className="grid gap-4 sm:grid-cols-2">
         {name}
-        <Field label={compact ? "URL name" : "Slug"} hint={initial ? "Slugs cannot be changed" : compact ? undefined : "2 to 40 lowercase letters, numbers and dashes"} error={errorAt?.("slug")}>
+        <Field label={compact ? "URL name" : "Slug"} hint={initial || compact ? undefined : "2 to 40 lowercase letters, numbers and dashes"} error={errorAt?.("slug")}>
           <Input
             name="slug"
             required

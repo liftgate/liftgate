@@ -1,20 +1,16 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { useApi } from "@/lib/hooks";
-import type { AuthProviders, BuildStrategy, Detection, Service, ServiceKind, ServiceSpec } from "@/lib/types";
-import { formValues, kindLabels, servesHttp } from "@/lib/util";
+import type { AuthProviders, Detection, ServiceKind, ServiceSpec } from "@/lib/types";
+import { kindLabels, servesHttp } from "@/lib/util";
 import { DocsLink } from "./docs-link";
 import { NameSlugFields } from "./name-slug-fields";
-import { redeployRequested } from "./save-actions";
-import { Field, FormError, Input, Textarea } from "./ui/input";
+import { Field, Input, Textarea } from "./ui/input";
 import { Select } from "./ui/select";
 
 const kinds: ServiceKind[] = ["web", "static", "worker", "cron"];
-const strategies: BuildStrategy[] = ["auto", "dockerfile"];
 const insideRepo = String.raw`(?!(.*\/)?\.\.(\/|$))[A-Za-z0-9._\/\-]*`;
-const buildFields = ["rootDir", "buildCommand", "dockerfilePath", "watchPaths", "startCommand", "port", "healthCheckPath"];
-const resourceFields = ["replicas", "cpuMillis", "memoryMb", "volume", "storageGb"];
 
 type ErrorAt = (field: string) => string | undefined;
 
@@ -23,7 +19,7 @@ export const toSpec = (v: Record<string, string>): ServiceSpec => ({
   name: v.name,
   kind: v.kind as ServiceKind,
   rootDir: v.rootDir || "/",
-  buildStrategy: v.buildStrategy as BuildStrategy,
+  buildStrategy: v.buildStrategy === "dockerfile" ? "dockerfile" : "auto",
   dockerfilePath: v.dockerfilePath || "Dockerfile",
   port: v.port ? Number(v.port) : null,
   replicas: Number(v.replicas),
@@ -93,7 +89,6 @@ export function GeneralFields({
 
 export function BuildFields({
   initial,
-  withStrategy = false,
   buildDefault,
   dockerfile = false,
   directories,
@@ -102,7 +97,6 @@ export function BuildFields({
   errorAt,
 }: {
   initial?: Partial<ServiceSpec>;
-  withStrategy?: boolean;
   buildDefault?: string | null;
   dockerfile?: boolean;
   directories?: Detection["directories"];
@@ -110,7 +104,6 @@ export function BuildFields({
   onDirectory?: (path: string) => void;
   errorAt?: ErrorAt;
 }) {
-  const [strategy, setStrategy] = useState<BuildStrategy>(initial?.buildStrategy ?? "auto");
   const [other, setOther] = useState(!!directories && !directories.some((d) => d.path === directory));
   const rootInput = (
     <Input name="rootDir" defaultValue={initial?.rootDir ?? "/"} pattern={insideRepo} className="font-mono" />
@@ -143,23 +136,18 @@ export function BuildFields({
         <Field label="Build command" error={errorAt?.("buildCommand")}>
           <Input name="buildCommand" defaultValue={initial?.buildCommand ?? ""} placeholder={buildDefault ?? "Railpack default"} maxLength={1000} className="font-mono" />
         </Field>
-        {withStrategy && (
-          <Field label="Build strategy">
-            <Select name="buildStrategy" value={strategy} onChange={(e) => setStrategy(e.target.value as BuildStrategy)}>
-              {strategies.map((strategy) => (
-                <option key={strategy} value={strategy}>
-                  {strategy}
-                </option>
-              ))}
-            </Select>
-          </Field>
-        )}
-        {(dockerfile || (withStrategy && strategy === "dockerfile")) && (
-          <Field label="Dockerfile path" hint="Relative to the root directory" error={errorAt?.("dockerfilePath")}>
+        {dockerfile && (
+          <Field label="Dockerfile path" hint="Used when this file exists; otherwise Railpack builds the app" error={errorAt?.("dockerfilePath")}>
             <Input name="dockerfilePath" required pattern={`(?!\\/)${insideRepo}`} defaultValue={initial?.dockerfilePath ?? "Dockerfile"} className="font-mono" />
           </Field>
         )}
       </div>
+      {initial?.buildStrategy === "dockerfile" && (
+        <label className="flex items-center gap-2 text-sm text-graphite-200">
+          <input type="checkbox" name="buildStrategy" value="dockerfile" defaultChecked className="accent-accent" />
+          Always build with the Dockerfile
+        </label>
+      )}
       <Field label="Watch paths" hint="One glob per line. A push that changes no matching file skips this service; empty watches the root directory" error={errorAt?.("watchPaths")}>
         <Textarea
           name="watchPaths"
@@ -268,44 +256,6 @@ export function ResourceFields({ initial, errorAt }: { initial?: Partial<Service
   );
 }
 
-export function ServiceForm({
-  initial,
-  error,
-  errorField,
-  actions,
-  onSubmit,
-}: {
-  initial: Service;
-  error?: string;
-  errorField?: string;
-  actions: ReactNode;
-  onSubmit: (spec: ServiceSpec, redeploy: boolean) => void;
-}) {
-  const [kind, setKind] = useState<ServiceKind>(initial.kind);
-  const at = (field: string) => (errorField === field ? error : undefined);
-  return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        onSubmit(toSpec(formValues(e.currentTarget)), redeployRequested(e));
-      }}
-      onInvalidCapture={(e) => (e.target as HTMLElement).closest("details")?.setAttribute("open", "")}
-      className="flex flex-col gap-4"
-    >
-      <GeneralFields initial={initial} kind={kind} onKind={setKind} errorAt={at} />
-      <Section title="Build and runtime" hint="Root directory, commands, port, health check" open failed={!!errorField && buildFields.includes(errorField)}>
-        <BuildFields initial={initial} withStrategy errorAt={at} />
-        <RuntimeFields initial={initial} kind={kind} errorAt={at} />
-      </Section>
-      <Section title="Resources" hint="Replicas, CPU, memory and a volume" open={false} failed={!!errorField && resourceFields.includes(errorField)}>
-        <ResourceFields initial={initial} errorAt={at} />
-      </Section>
-      <FormError message={errorField ? undefined : error} />
-      <div className="flex justify-end gap-2">{actions}</div>
-    </form>
-  );
-}
-
 function UrlPreview({ host }: { host?: string }) {
   return host ? (
     <>
@@ -313,26 +263,5 @@ function UrlPreview({ host }: { host?: string }) {
     </>
   ) : (
     "Too long for a readable hostname, so it gets a shortened one with a suffix."
-  );
-}
-
-function Section({ title, hint, open: initiallyOpen, failed, children }: { title: string; hint: string; open: boolean; failed: boolean; children: ReactNode }) {
-  const [open, setOpen] = useState(initiallyOpen);
-  const [shown, setShown] = useState(failed);
-  if (failed !== shown) {
-    setShown(failed);
-    if (failed) setOpen(true);
-  }
-  return (
-    <details open={open} onToggle={(e) => setOpen(e.currentTarget.open)} className="group rounded-lg border border-graphite-700">
-      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg px-4 py-3 text-sm focus-visible:outline-2 focus-visible:outline-accent [&::-webkit-details-marker]:hidden">
-        <svg viewBox="0 0 16 16" aria-hidden className="size-4 shrink-0 text-graphite-400 transition-transform group-open:rotate-90">
-          <path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-        <span className="font-medium text-graphite-200">{title}</span>
-        <span className="truncate text-xs text-graphite-400 max-sm:hidden">{hint}</span>
-      </summary>
-      <div className="flex flex-col gap-4 border-t border-graphite-700 p-4">{children}</div>
-    </details>
   );
 }

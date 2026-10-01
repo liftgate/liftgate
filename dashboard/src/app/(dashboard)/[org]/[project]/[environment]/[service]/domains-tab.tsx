@@ -57,6 +57,11 @@ export function DomainsTab({ service, admin }: { service: Service; admin: boolea
   );
   return (
     <div className="flex flex-col gap-6">
+      {service.internalHost && (
+        <Card className="p-6">
+          <CopyField label="Private address" value={service.internalHost} hint="Services in this environment reach it on port 80 and on its own port" />
+        </Card>
+      )}
       <Card>
         <CardHeader
           title="Domains"

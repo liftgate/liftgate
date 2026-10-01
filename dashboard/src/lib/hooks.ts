@@ -78,6 +78,12 @@ export function usePolling(active: boolean, fn: () => void, ms = 5000) {
   }, [active, ms]);
 }
 
+export const useSignOut = () =>
+  useAction(async () => {
+    await api("/auth/logout", { method: "POST" });
+    window.location.replace("/login");
+  });
+
 export function useRole(org: string) {
   const query = useApi<Organization>(`/orgs/${org}`);
   const role = query.data?.role;

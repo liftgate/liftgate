@@ -14,7 +14,7 @@ test("deleting a service waits for its slug to be typed", async ({ page, api }) 
 });
 
 test("cancelling a confirmation sends nothing", async ({ page, api }) => {
-  await page.goto("/account");
+  await page.goto("/account?section=git");
   await page.getByRole("button", { name: "Disconnect" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).click();
   await expect(page.getByRole("dialog")).toBeHidden();

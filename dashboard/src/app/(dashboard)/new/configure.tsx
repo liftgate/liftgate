@@ -9,6 +9,7 @@ import type { AuthProviders, DetectedService, Detection, Environment, Project, P
 import { classifyVariable, detectedRow, fitPlan, formValues, mergeDotenv, planName, platformHost, sameApp, servesHttp, shortSha, type EnvRow } from "@/lib/util";
 import { DetectedApp, directoryOf } from "@/components/detected-app";
 import { EnvRows, useEnvPaste } from "@/components/env-rows";
+import { Icon } from "@/components/icons";
 import { NameSlugFields, toSlug } from "@/components/name-slug-fields";
 import { PageHeader } from "@/components/page-header";
 import { ProviderGlyph, ProviderLink } from "@/components/provider";
@@ -131,7 +132,7 @@ export function Configure({ org, repo, projectSlug, environmentSlug }: { org: st
     }
     setStep("Starting build…");
     const only = chosen.length === 1 ? done[chosen[0].key] : undefined;
-    router.push(only ? `/${org}/${parent.slug}/${environment.slug}/${only.slug}${only.buildId ? `?tab=builds&build=${only.buildId}` : ""}` : `/${org}/${parent.slug}`);
+    router.push(only ? `/${org}/${parent.slug}/${environment.slug}/${only.slug}${only.buildId ? `?tab=deployments&build=${only.buildId}` : ""}` : `/${org}/${parent.slug}`);
   });
 
   if (detection.error?.code === "github_not_connected")
@@ -167,9 +168,7 @@ export function Configure({ org, repo, projectSlug, environmentSlug }: { org: st
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-8">
       <div className="flex flex-col gap-2">
         <Link href={repo ? `/new?org=${org}` : `/${org}/${projectSlug}`} className="flex w-fit items-center gap-1 rounded-sm text-sm text-graphite-400 hover:text-white focus-visible:outline-2 focus-visible:outline-accent">
-          <svg viewBox="0 0 16 16" aria-hidden className="size-4">
-            <path d="M10 4l-4 4 4 4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+          <Icon name="back" />
           {repo ? "Choose another repository" : `Back to ${owner?.name ?? projectSlug}`}
         </Link>
         <PageHeader

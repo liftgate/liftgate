@@ -63,7 +63,7 @@ test("a passkey added on the account page signs in", async ({ page, api }) => {
     },
   });
   api.on("POST /me/passkeys", () => new Reply(201, { id: "passkey-laptop", name: "Laptop", createdAt: new Date().toISOString(), lastUsedAt: null }));
-  await page.goto("/account");
+  await page.goto("/account?section=sign-in");
   await page.getByLabel("Passkey name").fill("Laptop");
   await page.getByRole("button", { name: "Add passkey" }).click();
   await expect.poll(() => api.sent("POST /me/passkeys").length).toBe(1);

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Build, Deployment, Environment, Project, Service, Usage } from "./types.ts";
 import {
+  applyAction,
   canRollBack,
   classifyVariable,
   currentDeployment,
@@ -9,6 +10,7 @@ import {
   envPayload,
   findService,
   fitPlan,
+  history,
   keepsStoredValue,
   linkTarget,
   mergeDotenv,
@@ -207,4 +209,51 @@ test("fitPlan starts at 500m and 512 MB, splits the headroom in 250m and 256 MB 
   assert.deepEqual(fitPlan(3, usage({ services: 4, replicas: 4 })), { count: 2, cpuMillis: 500, memoryMb: 512 });
   assert.deepEqual(fitPlan(2, usage({ cpuMillis: 1000 })), { count: 0, cpuMillis: 500, memoryMb: 512 });
   assert.deepEqual(fitPlan(3, usage({}, { services: null, cpuMillis: null, memoryMb: null, replicas: null })), { count: 3, cpuMillis: 500, memoryMb: 512 });
+});
+
+test("history joins each deployment to its build, keeps builds that were never released and lists the newest first", () => {
+  const build = (id: string, minute: number) => ({ id, createdAt: `2026-10-01T10:${minute}:00Z` }) as Build;
+  const deployment = (id: string, buildId: string, minute: number) => ({ id, buildId, createdAt: `2026-10-01T10:${minute}:30.5Z` }) as Deployment;
+  const builds = [build("queued", 50), build("failed", 40), build("released", 10)];
+  const rows = history(builds, [deployment("redeploy", "released", 30), deployment("first", "released", 12)]);
+  assert.deepEqual(
+    rows.map((row) => row.key),
+    ["queued", "failed", "redeploy", "first"],
+  );
+  assert.equal(rows[2].build?.id, "released");
+  assert.equal(rows[0].deployment, undefined);
+  assert.deepEqual(history([], []), []);
+  assert.equal(history([], [deployment("orphan", "pruned", 11)])[0].build, undefined);
+});
+
+test("applyAction rebuilds for build inputs and public build-time variables, redeploys for the rest, and offers nothing before the first deploy", () => {
+  const running = { status: "running" } as const;
+  const before = { rootDir: "/", buildCommand: null, dockerfilePath: "Dockerfile", buildStrategy: "auto", startCommand: null, port: null, replicas: 1 } as const;
+  for (const [field, value] of [
+    ["rootDir", "apps/web"],
+    ["buildCommand", "pnpm build"],
+    ["dockerfilePath", "Dockerfile.prod"],
+    ["buildStrategy", "dockerfile"],
+    ["startCommand", "node build"],
+  ] as const)
+    assert.equal(applyAction(running, before, { ...before, [field]: value }), "rebuild", field);
+  assert.equal(applyAction(running, before, { ...before, port: 3000 }), "redeploy");
+  assert.equal(applyAction(running, before, { replicas: 2 }), "redeploy");
+  assert.equal(applyAction(running, before, { ...before }), undefined);
+  assert.equal(applyAction(null, before, { ...before, port: 3000 }), undefined);
+  assert.equal(applyAction(null, before, { ...before, buildCommand: "pnpm build" }), undefined);
+  assert.equal(applyAction({ status: "failed" }, before, { ...before, port: 3000 }), undefined);
+  assert.equal(applyAction({ status: "failed" }, before, { ...before, rootDir: "web" }), "rebuild");
+
+  const stored = [
+    { name: "NEXT_PUBLIC_X", value: "a", secret: false },
+    { name: "API_TOKEN", value: null, secret: true },
+  ];
+  const env = (name: string, value: string | null, secret = false) => ({ env: stored.map((v) => (v.name === name ? { name, value, secret } : v)) });
+  assert.equal(applyAction(running, { env: stored }, env("NEXT_PUBLIC_X", "b")), "rebuild");
+  assert.equal(applyAction(running, { env: stored }, env("API_TOKEN", "new", true)), "redeploy");
+  assert.equal(applyAction(running, { env: stored }, env("API_TOKEN", null, true)), undefined);
+  assert.equal(applyAction(running, { env: stored }, { env: [...stored, { name: "VITE_KEY", value: "k", secret: false }] }), "rebuild");
+  assert.equal(applyAction(running, { env: stored }, { env: stored.slice(1) }), "rebuild");
+  assert.equal(applyAction(running, { env: stored }, { env: stored.slice(0, 1) }), "redeploy");
 });

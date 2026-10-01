@@ -1,46 +1,18 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import type { Environment, Service } from "@/lib/types";
-import { shortSha, timeAgo } from "@/lib/util";
-import { StatusBadge } from "./ui/badge";
-import { buttonClasses } from "./ui/button";
+import { environmentKindLabels, shortSha, timeAgo } from "@/lib/util";
+import { Badge, StatusBadge } from "./ui/badge";
 import { Card, CardHeader } from "./ui/card";
-import { EmptyState } from "./ui/empty-state";
 import { Cell, Row, Table } from "./ui/table";
 
-export function EnvironmentCard({
-  environment,
-  services,
-  href,
-  addHref,
-  children,
-}: {
-  environment: Environment;
-  services: Service[];
-  href: string;
-  addHref?: string;
-  children?: ReactNode;
-}) {
+export function EnvironmentCard({ environment, services, href, children }: { environment: Environment; services: Service[]; href: string; children?: ReactNode }) {
   return (
     <Card>
-      <CardHeader
-        title={environment.name}
-        description={`${environment.branch} · ${environment.namespace}`}
-        actions={<StatusBadge status={environment.kind} />}
-      />
+      <CardHeader title={environment.name} description={environment.branch} actions={<Badge>{environmentKindLabels[environment.kind]}</Badge>} />
       <div className="p-6">
         {services.length === 0 ? (
-          <EmptyState
-            title="No services in this environment"
-            description="Add a web, worker, cron or static service."
-            action={
-              addHref && (
-                <Link href={addHref} className={buttonClasses()}>
-                  Add service
-                </Link>
-              )
-            }
-          />
+          <p className="text-sm text-graphite-400">No services in this environment.</p>
         ) : (
           <Table columns={["Service", "Status", "URL", "Last deploy"]}>
             {services.map((service) => (

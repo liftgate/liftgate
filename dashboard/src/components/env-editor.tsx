@@ -3,10 +3,10 @@
 import { useEffect, useEffectEvent, useState } from "react";
 import { api } from "@/lib/api";
 import { useAction } from "@/lib/hooks";
-import type { DetectedVariable, Detection, EnvVar } from "@/lib/types";
-import { detectedRow, envPayload, sameApp, storedRows } from "@/lib/util";
+import type { DetectedVariable, Detection, EnvVar, Service } from "@/lib/types";
+import { applyAction, detectedRow, envPayload, sameApp, storedRows } from "@/lib/util";
 import { EnvRows, useEnvPaste } from "./env-rows";
-import { redeployRequested, SaveActions, saved } from "./save-actions";
+import { SaveActions, type Saved } from "./save-actions";
 import { Button } from "./ui/button";
 import { Card, CardHeader } from "./ui/card";
 import { EmptyState } from "./ui/empty-state";
@@ -14,19 +14,33 @@ import { FormError } from "./ui/input";
 
 type Repository = { projectId: string; branch: string; rootDir: string; buildCommand?: string | null; dockerfilePath: string };
 
-export function EnvEditor({ serviceId, initial, repository, databaseHref }: { serviceId: string; initial: EnvVar[]; repository?: Repository; databaseHref?: string }) {
+export function EnvEditor({
+  service,
+  initial,
+  repository,
+  databaseHref,
+  onChanged,
+}: {
+  service: Pick<Service, "id" | "current">;
+  initial: EnvVar[];
+  repository?: Repository;
+  databaseHref?: string;
+  onChanged?: () => void;
+}) {
   const [rows, setRows] = useState(() => storedRows(initial));
-  const [status, setStatus] = useState<string>();
+  const [stored, setStored] = useState(initial);
+  const [saved, setSaved] = useState<Saved>();
   const [found, setFound] = useState<{ variables: DetectedVariable[]; manual: boolean }>();
-  const save = useAction(async (andRedeploy: boolean) => {
-    setStatus(undefined);
+  const save = useAction(async () => {
+    setSaved(undefined);
     const body = envPayload(rows);
-    await api(`/services/${serviceId}/env`, { method: "PUT", body });
+    const after = await api<EnvVar[]>(`/services/${service.id}/env`, { method: "PUT", body });
     setRows(storedRows(body));
-    setStatus(await saved(serviceId, andRedeploy));
+    setStored(after);
+    setSaved({ current: service.current, apply: applyAction(service.current, { env: stored }, { env: body }) });
   });
   const change = (next: typeof rows) => {
-    setStatus(undefined);
+    setSaved(undefined);
     setRows(next);
   };
   const paste = useEnvPaste(rows, change);
@@ -47,7 +61,7 @@ export function EnvEditor({ serviceId, initial, repository, databaseHref }: { se
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        save.run(redeployRequested(e));
+        save.run();
       }}
       className="flex flex-col gap-4"
     >
@@ -120,7 +134,7 @@ export function EnvEditor({ serviceId, initial, repository, databaseHref }: { se
         )}
       </Card>
       <FormError message={save.error} />
-      <SaveActions pending={save.pending} status={status} />
+      <SaveActions serviceId={service.id} pending={save.pending} saved={saved} onApplied={onChanged} />
     </form>
   );
 }

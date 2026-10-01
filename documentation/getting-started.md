@@ -85,8 +85,8 @@ detects the stack during the build.
 
 Choose Deploy. Liftgate creates the project with one environment, `production`, which builds the
 repository's default branch, adds the service with its variables, starts a build of the latest commit
-and opens the service's Builds tab with the build log streaming. With several apps it opens the project
-instead.
+and opens the service's Deployments tab with the build log streaming. With several apps it opens the
+project instead.
 
 ## 5. Open the app
 
@@ -109,21 +109,22 @@ the Deployments tab says why, and the previous release keeps serving.
 
 - A push to the environment's branch builds every service of that environment, unless watch paths say
   otherwise.
-- Watch paths, under Settings, Build and runtime, limit which pushes build a service: one glob per line,
-  relative to the repository root, where `*` stays inside one directory and `**` crosses directories. A
-  service without watch paths builds on changes under its root directory. A push that creates the
-  branch, a force push and a very large push build every service.
-- Deploy on the Builds tab builds a branch or a full 40-character commit SHA you name, or the branch's
-  latest commit when you leave the field empty.
-- Redeploy in the service header releases the running build again with the current settings and
-  variables, without building.
+- Watch paths, under the service's Settings, Build, limit which pushes build a service: one glob per
+  line, relative to the repository root, where `*` stays inside one directory and `**` crosses
+  directories. A service without watch paths builds on changes under its root directory. A push that
+  creates the branch, a force push and a very large push build every service.
+- Deploy in the service header builds the branch's latest commit. While a deployment runs, the button
+  is Redeploy, which releases the running build again with the current settings and variables, without
+  building; Deploy latest commit is then in its menu. The menu also deploys a branch or a full
+  40-character commit SHA you name.
 - Liftgate posts a commit status to GitHub for every build, named `liftgate/<service>` in `production`
   and `liftgate/<environment>/<service>` elsewhere.
 
 ## Environments
 
 An environment tracks one branch and holds its own services, variables and addresses. New environment
-on the project page adds one, of kind `production` or `preview`, with its branch. Add service reads the
+in the project's Settings adds one with its branch, and Delete removes one with its services; the last
+production environment stays. Add service on the project's Overview reads the
 repository again and lists the apps that are not deployed in that environment yet. Services in different
 environments cannot reach each other over the network.
 
@@ -133,7 +134,8 @@ The Environment variables tab holds the service's variables. Tick Secret for a v
 back: the dashboard and the API never show it again, and members of the organization see only that it
 is set. Paste .env and Import file add many variables at once, and Check repository lists the names in
 the repository's example env files that the service does not have yet. Save keeps the change for the
-next deployment, and Save and redeploy applies it at once without building.
+next deployment. While the service runs, Save then offers Redeploy, which applies the change at once
+without building, or Rebuild and deploy when a public build-time variable such as `NEXT_PUBLIC_` changed.
 
 Builds see the variables too:
 
@@ -145,17 +147,18 @@ Builds see the variables too:
 - A Railpack build sees every variable.
 
 A value the build bakes into the image, such as a `NEXT_PUBLIC_` variable of a Next.js app, changes only
-with a new build. Push, or use Deploy on the Builds tab; Redeploy reuses the old image.
+with a new build. Push, or use Rebuild and deploy or Deploy; Redeploy reuses the old image.
 
 ## Health checks
 
-Set a health check path under Settings, Build and runtime, and Liftgate checks it over HTTP before a new
-release takes traffic and while it runs. Without one, it only checks that the port accepts connections.
-The [runtime contract](runtime-contract.md#health-checks) has the timings.
+Set a health check path under the service's Settings, Runtime, and Liftgate checks it over HTTP before a
+new release takes traffic and while it runs. Without one, it only checks that the port accepts
+connections. The [runtime contract](runtime-contract.md#health-checks) has the timings.
 
 ## Rollback
 
-The Deployments tab lists every deployment of the service. Roll back to this, on a deployment that was
+The Deployments tab lists every deployment of the service, and every build that was not released. Roll
+back to this, on a deployment that was
 replaced, releases that build again with the settings and variables it ran with. Deployments made before
 0.2.0-alpha.3 stored no settings, so a rollback to one of them uses the current settings. Rollback is not
 offered once the build's image has been deleted; [Plans and limits](plans-and-limits.md) says which
@@ -169,8 +172,8 @@ made.
 ## Logs
 
 The Logs tab follows the output of the service's running pods, starting with the last 500 lines of each.
-The Builds tab shows each build's log, live while it runs and replayed afterwards for 7 days. Both have
-Copy and Download.
+Logs on a row of the Deployments tab shows that build's log, live while it runs and replayed afterwards
+for 7 days. Both have Copy and Download.
 
 To read what a container printed before it crashed, open the WebSocket the Logs tab uses,
 `/api/v1/logs/services/<service id>`, with `?previous=true` and an API token in the `Authorization`

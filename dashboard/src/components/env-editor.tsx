@@ -12,7 +12,7 @@ import { Card, CardHeader } from "./ui/card";
 import { EmptyState } from "./ui/empty-state";
 import { FormError } from "./ui/input";
 
-type Repository = { projectId: string; branch: string; rootDir: string; buildCommand?: string | null };
+type Repository = { projectId: string; branch: string; rootDir: string; buildCommand?: string | null; dockerfilePath: string };
 
 export function EnvEditor({ serviceId, initial, repository, databaseHref }: { serviceId: string; initial: EnvVar[]; repository?: Repository; databaseHref?: string }) {
   const [rows, setRows] = useState(() => storedRows(initial));

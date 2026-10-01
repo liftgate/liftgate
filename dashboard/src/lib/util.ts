@@ -78,9 +78,10 @@ export const servesHttp = (kind: ServiceKind) => kind === "web" || kind === "sta
 
 const trimSlashes = (path: string) => path.replace(/^\/+|\/+$/g, "");
 
-type Placement = Pick<ServiceSpec, "rootDir" | "buildCommand">;
+type Placement = Pick<ServiceSpec, "rootDir" | "buildCommand"> & { dockerfilePath?: string };
 
-export const sameApp = (a: Placement, b: Placement) => trimSlashes(a.rootDir) === trimSlashes(b.rootDir) && (a.buildCommand ?? null) === (b.buildCommand ?? null);
+export const sameApp = (a: Placement, b: Placement) =>
+  trimSlashes(a.rootDir) === trimSlashes(b.rootDir) && (a.buildCommand ?? null) === (b.buildCommand ?? null) && (a.dockerfilePath ?? "Dockerfile") === (b.dockerfilePath ?? "Dockerfile");
 
 export const platformHost = (labels: { service: string; environment: string; project: string; org: string }, deployDomain: string) => {
   const label = [labels.service === labels.project ? "" : labels.service, labels.environment === "production" ? "" : labels.environment, labels.project, labels.org].filter(Boolean).join("-");

@@ -18,7 +18,7 @@ export function EnvTab({ service, environment, projectHref, admin }: { service: 
           <EnvEditor
             serviceId={service.id}
             initial={initial}
-            repository={{ projectId: environment.projectId, branch: environment.branch, rootDir: service.rootDir, buildCommand: service.buildCommand }}
+            repository={{ projectId: environment.projectId, branch: environment.branch, rootDir: service.rootDir, buildCommand: service.buildCommand, dockerfilePath: service.dockerfilePath }}
             databaseHref={storage ? projectHref : undefined}
           />
         ) : initial.length === 0 ? (

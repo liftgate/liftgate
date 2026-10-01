@@ -71,7 +71,8 @@ export function Configure({ org, repo, projectSlug, environmentSlug }: { org: st
   const owner = project ?? tree.data?.project;
   const existing = tree.data?.services.filter((s) => s.environmentId === target?.id) ?? [];
   const found = (detection.data?.services ?? []).filter((d) => !existing.some((s) => sameApp(s, d.spec)));
-  const ready = !!detection.data || (late && (!!repo || !!tree.data));
+  const reading = !detection.data && !detection.error;
+  const ready = !reading || (late && (!!repo || !!tree.data));
   const apps: App[] = (found.length ? found.map((detected, i) => ({ key: String(i), detected })) : ready ? [{ key: "0", detected: null }] : []).map((app) =>
     app.key in swaps ? { ...app, detected: swaps[app.key] } : app,
   );
@@ -145,10 +146,11 @@ export function Configure({ org, repo, projectSlug, environmentSlug }: { org: st
         }
       />
     );
-  const failed = detection.error ?? tree.error;
-  if (failed) return <ErrorState error={failed} retry={detection.error ? detection.reload : tree.reload} />;
+  const failed = repo ? detection.error : tree.error;
+  if (failed) return <ErrorState error={failed} retry={repo ? detection.reload : tree.reload} />;
 
   const commit = detection.data?.commit;
+  const warnings = detection.error ? [`Couldn't read ${owner?.repoFullName}: ${detection.error.message}. Railpack will still detect the stack during the build.`] : (detection.data?.warnings ?? []);
   const names = groups.flatMap(rowsFor);
   const sources = [...new Set(groups.flatMap((app) => app.detected?.variables.map((v) => v.source) ?? []))];
   const filled = names.filter((row) => row.value).length;
@@ -192,7 +194,7 @@ export function Configure({ org, repo, projectSlug, environmentSlug }: { org: st
                 )}
               </span>
             ) : (
-              !detection.data && <span aria-hidden className="inline-block h-4 w-64 animate-pulse rounded bg-graphite-800" />
+              reading && <Skeleton className="h-4 w-64" />
             )
           }
         />
@@ -241,7 +243,7 @@ export function Configure({ org, repo, projectSlug, environmentSlug }: { org: st
 
       <Card className="flex flex-col gap-6 p-6 max-sm:p-4">
         {multi && <h2 className="text-base font-medium">{apps.length} apps found</h2>}
-        {detection.data?.warnings.map((warning) => (
+        {warnings.map((warning) => (
           <p key={warning} role="status" className="text-sm text-warning">
             {warning}
           </p>
@@ -324,7 +326,7 @@ export function Configure({ org, repo, projectSlug, environmentSlug }: { org: st
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
         <div className="flex min-w-0 flex-col gap-1 text-sm sm:mr-auto">
-          {late && !detection.data && <p className="text-graphite-400">Still reading {repo ?? owner?.repoFullName}. Railpack will detect the stack during the build.</p>}
+          {late && reading && <p className="text-graphite-400">Still reading {repo ?? owner?.repoFullName}. Railpack will detect the stack during the build.</p>}
           {chosen.length > 1 && usage?.limits.concurrentBuilds === 1 && <p className="text-graphite-400">Builds run one at a time on the {planName(usage.plan)} plan.</p>}
           {requiredEmpty > 0 && (
             <p className="text-warning">

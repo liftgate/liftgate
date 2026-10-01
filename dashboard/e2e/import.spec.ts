@@ -146,6 +146,14 @@ test("adding a service to a project hides the app that is already deployed and o
   expect(api.sent(`GET /projects/${project.id}/detect`)[0].search).toBe("?ref=main");
 });
 
+test("adding a service opens plain settings when the branch cannot be read", async ({ page, api }) => {
+  api.on(`GET /projects/${project.id}/detect`, new Reply(422, { error: "invalid", message: "ref must be a branch name or commit sha", field: "ref" }));
+  await page.goto("/new?org=acme&project=shop");
+  await expect(page.getByText("Couldn't read acme/shop: ref must be a branch name or commit sha. Railpack will still detect the stack during the build.")).toBeVisible();
+  await expect(page.getByRole("form", { name: "Settings for web" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Deploy", exact: true })).toBeEnabled();
+});
+
 test("check repository adds the names the service has not set as empty rows", async ({ page, api }) => {
   await page.goto(`${servicePath}?tab=env`);
   await page.getByRole("button", { name: "Check repository" }).click();

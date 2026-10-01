@@ -155,9 +155,10 @@ test("classifyVariable makes credentials secret by hint, word or well-known name
   for (const name of ["LOG_LEVEL", "KEYBOARD_LAYOUT", "MONKEY", "PASSPORT_ISSUER", "NODE_ENV"]) assert.equal(classifyVariable(name).secret, false, name);
 });
 
-test("sameApp matches a service by root directory, ignoring slashes, and by build command", () => {
-  assert.equal(sameApp({ rootDir: "/apps/web/" }, { rootDir: "apps/web", buildCommand: null }), true);
+test("sameApp matches a service by root directory, ignoring slashes, by build command and by Dockerfile path", () => {
+  assert.equal(sameApp({ rootDir: "/apps/web/" }, { rootDir: "apps/web", buildCommand: null, dockerfilePath: "Dockerfile" }), true);
   assert.equal(sameApp({ rootDir: "/", buildCommand: "pnpm --filter web build" }, { rootDir: "/", buildCommand: "pnpm --filter api build" }), false);
+  assert.equal(sameApp({ rootDir: "/", dockerfilePath: "Dockerfile" }, { rootDir: "/", dockerfilePath: "apps/api/Dockerfile" }), false);
 });
 
 test("mergeDotenv fills matching rows, adds new ones and counts both", () => {

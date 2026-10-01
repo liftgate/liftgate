@@ -6,6 +6,7 @@ import type { Detection, DetectedService, ServiceKind } from "@/lib/types";
 import { formValues, kindLabels, servesHttp } from "@/lib/util";
 import { BuildFields, GeneralFields, ResourceFields, RuntimeFields } from "./service-form";
 import { Button } from "./ui/button";
+import { FormError } from "./ui/input";
 
 export const SET_START = "Set a start command";
 
@@ -72,6 +73,7 @@ export function DetectedApp({
   const port = value("port", spec?.port);
   const health = value("healthCheckPath", spec?.healthCheckPath);
   const host = servesHttp(kind) ? hostFor(value("slug", prefill.slug)) : undefined;
+  const errorAt = (field: string) => (failure?.field === field ? failure.message : undefined);
   const railpack = (command?: string | null) => (command ? `${command} (Railpack)` : "Railpack");
   const facts = [
     ["Build", dockerfile ? value("dockerfilePath", spec?.dockerfilePath) : value("buildCommand", spec?.buildCommand) || railpack(detected?.defaults.build)],
@@ -138,11 +140,7 @@ export function DetectedApp({
           )}
         </div>
       )}
-      {failure && (
-        <p role="alert" className="text-sm text-danger">
-          {failure.message}
-        </p>
-      )}
+      <FormError message={failure?.message} />
       <form
         id={id}
         ref={(element) => {
@@ -166,7 +164,7 @@ export function DetectedApp({
           kind={kind}
           onKind={setKind}
           hostFor={hostFor}
-          errorAt={(field) => (failure?.field === field ? failure.message : undefined)}
+          errorAt={errorAt}
         />
         <BuildFields
           initial={spec}
@@ -175,16 +173,16 @@ export function DetectedApp({
           directories={directories}
           directory={directory}
           onDirectory={onSwap}
-          errorAt={(field) => (failure?.field === field ? failure.message : undefined)}
+          errorAt={errorAt}
         />
         <RuntimeFields
           initial={spec}
           kind={kind}
           startDefault={dockerfile ? "Image CMD" : (detected?.defaults.start ?? "Railpack default")}
           startRequired={!!detected?.warnings.includes(SET_START)}
-          errorAt={(field) => (failure?.field === field ? failure.message : undefined)}
+          errorAt={errorAt}
         />
-        <ResourceFields initial={{ ...spec, ...resources }} errorAt={(field) => (failure?.field === field ? failure.message : undefined)} />
+        <ResourceFields initial={{ ...spec, ...resources }} errorAt={errorAt} />
       </form>
     </div>
   );

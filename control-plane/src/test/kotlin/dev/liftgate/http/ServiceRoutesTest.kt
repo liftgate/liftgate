@@ -20,6 +20,8 @@ import dev.liftgate.project.EnvironmentKind
 import dev.liftgate.project.Project
 import dev.liftgate.project.Projects
 import dev.liftgate.service.BuildStrategy
+import dev.liftgate.service.EnvVar
+import dev.liftgate.service.EnvVars
 import dev.liftgate.service.Service
 import dev.liftgate.service.ServiceKind
 import dev.liftgate.service.ServiceScope
@@ -45,6 +47,7 @@ import io.micrometer.prometheusmetrics.PrometheusMeterRegistry
 import io.mockk.Runs
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.coVerifyOrder
 import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
@@ -185,6 +188,8 @@ class ServiceRoutesTest {
             """{"volume":{"mountPath":"/data","sizeGb":1},"replicas":2}""" to "replicas", """{"volume":{"mountPath":"data","sizeGb":1}}""" to "volume",
             """{"volume":{"mountPath":"/","sizeGb":1}}""" to "volume", """{"volume":{"mountPath":"/a/../etc","sizeGb":1}}""" to "volume", """{"volume":{"mountPath":"/data","sizeGb":0}}""" to "volume",
             """{"watchPaths":[" "]}""" to "watchPaths", """{"watchPaths":["${"a".repeat(101)}"]}""" to "watchPaths", """{"watchPaths":${(0..20).map { "\"p$it/**\"" }}}""" to "watchPaths",
+            """{"buildCommand":"${"a".repeat(1001)}"}""" to "buildCommand", """{"buildCommand":"npm ci\nnpm run build"}""" to "buildCommand", """{"buildCommand":"make\u0000"}""" to "buildCommand",
+            """{"framework":"Next.js"}""" to "framework", """{"framework":""}""" to "framework", """{"framework":"${"a".repeat(41)}"}""" to "framework",
         ).forEach { (body, field) ->
             val response = client.patch("/api/v1/services/${service.id}") { jsonBody(body) }
             assertEquals(HttpStatusCode.UnprocessableEntity, response.status, body)
@@ -199,25 +204,36 @@ class ServiceRoutesTest {
         coEvery { services.update(service.id, any()) } answers { secondArg<ServiceSpec>().service(service.id, environment.id) }
         application { liftgate(app) }
         val paths = (1..20).joinToString(",") { "\"${"a".repeat(100)}\"" }
-        val body = """{"replicas":10,"cpuMillis":4000,"memoryMb":8192,"port":65535,"healthCheckPath":"/${"a".repeat(255)}","watchPaths":[$paths],"rootDir":"apps/web","dockerfilePath":"docker/Dockerfile.prod"}"""
+        val body = """{"replicas":10,"cpuMillis":4000,"memoryMb":8192,"port":65535,"healthCheckPath":"/${"a".repeat(255)}","watchPaths":[$paths],"rootDir":"apps/web","dockerfilePath":"docker/Dockerfile.prod","buildCommand":"${"a".repeat(1000)}","framework":"${"a".repeat(40)}"}"""
         assertEquals(HttpStatusCode.OK, client.patch("/api/v1/services/${service.id}") { jsonBody(body) }.status)
     }
 
     @Test
-    fun `creating with deploy builds the head of the environment branch and returns the build id`() = testApplication {
-        val web = service.copy(kind = ServiceKind.WEB)
+    fun `creating with deploy stores the variables, then builds the head of the environment branch and returns the build id`() = testApplication {
+        val web = service.copy(kind = ServiceKind.WEB, buildCommand = "pnpm --filter web build", framework = "nextjs")
         val build = testBuild.copy(serviceId = web.id, commitSha = "c".repeat(40), status = BuildStatus.QUEUED)
-        coEvery { services.create(environment.id, any()) } returns web
+        val spec = slot<ServiceSpec>()
+        val envVars = mockk<EnvVars> { coEvery { replace(web.id, any()) } just Runs }
+        val builds = mockk<Builds> { coEvery { request(web.id, "c".repeat(40), "first commit", "master") } returns build }
+        coEvery { services.create(environment.id, capture(spec)) } returns web
         coEvery { services.scope(service.id, any()) } returns ServiceScope(web, environment, project, org)
         coEvery { domains.ensurePlatform(any()) } returns mockk()
+        every { app.envVars } returns envVars
         every { app.github } returns mockk<GitHubApp> { coEvery { branchHead(42, "acme/shop", "master") } returns ("c".repeat(40) to "first commit") }
-        every { app.builds } returns mockk<Builds> { coEvery { request(web.id, "c".repeat(40), "first commit", "master") } returns build }
+        every { app.builds } returns builds
         application { liftgate(app) }
-        val response = client.post("/api/v1/environments/${environment.id}/services?deploy=true") { jsonBody("""{"slug":"api","name":"API","kind":"web"}""") }
+        val response = client.post("/api/v1/environments/${environment.id}/services?deploy=true") {
+            jsonBody("""{"slug":"api","name":"API","kind":"web","buildCommand":"pnpm --filter web build","framework":"nextjs","env":[{"name":"API_TOKEN","value":"t0ken","secret":true},{"name":"NEXT_PUBLIC_URL","value":"https://example.com"}]}""")
+        }
         assertEquals(HttpStatusCode.Created, response.status)
         val body = json.parseToJsonElement(response.bodyAsText()).jsonObject
         assertEquals(build.id.toString(), body.getValue("buildId").jsonPrimitive.content)
         assertEquals(web, json.decodeFromJsonElement(Service.serializer(), body))
+        assertEquals(ServiceSpec("api", "API", ServiceKind.WEB, buildCommand = "pnpm --filter web build", framework = "nextjs"), spec.captured)
+        coVerifyOrder {
+            envVars.replace(web.id, listOf(EnvVar("API_TOKEN", "t0ken", secret = true), EnvVar("NEXT_PUBLIC_URL", "https://example.com")))
+            builds.request(web.id, "c".repeat(40), "first commit", "master")
+        }
     }
 
     @Test
@@ -260,10 +276,17 @@ class ServiceRoutesTest {
     }
 
     @Test
-    fun `env var names must be identifiers and unique`() = testApplication {
+    fun `env var names must be identifiers and unique, and a create with bad ones never makes the service`() = testApplication {
         application { liftgate(app) }
-        listOf("""[{"name":"1BAD","value":"x"}]""", """[{"name":"A","value":"x"},{"name":"A","value":"y"}]""").forEach {
-            assertEquals(HttpStatusCode.UnprocessableEntity, client.put("/api/v1/services/${service.id}/env") { jsonBody(it) }.status, it)
+        listOf("""[{"name":"1BAD","value":"x"}]""", """[{"name":"A","value":"x"},{"name":"A","value":"y"}]""").forEach { vars ->
+            listOf(
+                client.put("/api/v1/services/${service.id}/env") { jsonBody(vars) },
+                client.post("/api/v1/environments/${environment.id}/services?deploy=true") { jsonBody("""{"slug":"api","name":"API","kind":"web","env":$vars}""") },
+            ).forEach {
+                assertEquals(HttpStatusCode.UnprocessableEntity, it.status, vars)
+                assertEquals("env", json.decodeFromString(ErrorBody.serializer(), it.bodyAsText()).field, vars)
+            }
         }
+        coVerify(exactly = 0) { services.create(any(), any()) }
     }
 }

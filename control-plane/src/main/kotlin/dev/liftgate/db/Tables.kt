@@ -291,6 +291,8 @@ object Services : Table("services") {
     val createdAt = createdAtColumn()
     val healthCheckPath = text("health_check_path").nullable()
     val volume = jsonb("volume", json, Volume.serializer()).nullable()
+    val buildCommand = text("build_command").nullable()
+    val framework = text("framework").nullable()
     override val primaryKey = PrimaryKey(id)
 
     init {

@@ -109,6 +109,8 @@ test("platformHost previews the readable hostname the API assigns, and gives up 
   assert.equal(platformHost(labels, "liftgate.app"), "api-shop-acme.liftgate.app");
   assert.equal(platformHost({ ...labels, environment: "staging" }, "apps.example.net"), "api-staging-shop-acme.apps.example.net");
   assert.equal(platformHost({ ...labels, service: "a".repeat(40), project: "b".repeat(20) }, "liftgate.app"), undefined);
+  assert.equal(platformHost({ ...labels, service: "shop" }, "liftgate.app"), "shop-acme.liftgate.app");
+  assert.equal(platformHost({ ...labels, service: "shop", environment: "staging" }, "liftgate.app"), "staging-shop-acme.liftgate.app");
 });
 
 test("the current deployment is the running one, else the newest", () => {

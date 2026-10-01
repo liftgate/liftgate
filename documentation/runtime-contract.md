@@ -14,6 +14,14 @@ statements below about ports and probes.
 | `worker` | A Deployment with `replicas` pods | None unless you set one | Its private address, when it has a port |
 | `cron` | A CronJob on the cron schedule | None | Nowhere |
 
+## Platform hostname
+
+A `web` or `static` service gets `<service>-<project>-<org>.<deploy domain>`. Outside `production` the
+environment's slug follows the service's. A service named like its project leaves its own name out, so
+service `shop` in project `shop` of org `acme` gets `shop-acme.<deploy domain>`. A name longer than 63
+characters, or one another service already holds, gets a shorter form ending in a suffix derived from the
+service. Once issued, a platform hostname does not change.
+
 ## PORT
 
 A service that has a port gets the environment variable `PORT` with that port: every `web` and `static`
@@ -59,11 +67,16 @@ because none of its pods stops before a new one is ready. When the failed rollou
 progress deadline, Liftgate puts the previous release back in place, if that release was deployed with
 stored settings, which every deployment made since 0.2.0-alpha.3 is.
 
-## Start command
+## Start and build commands
 
 With an empty start command, the container runs the image's `ENTRYPOINT` and `CMD`. A start command
 replaces both and runs as `/bin/sh -c "<start command>"`. An image without `/bin/sh`, such as a
 distroless or `scratch` image, needs an empty start command.
+
+A Railpack build also receives the start command as `RAILPACK_START_CMD`, so the image starts the same
+way, and a build command replaces Railpack's build step as `RAILPACK_BUILD_CMD`. Both take precedence over
+variables of the same name. With a start command, Railpack does not serve the app as a static site with
+Caddy. A Dockerfile build ignores both, and the start command still replaces its image's command.
 
 ## Cron jobs
 

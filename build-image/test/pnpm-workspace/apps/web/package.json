@@ -1,0 +1,11 @@
+{
+  "name": "web",
+  "private": true,
+  "scripts": {
+    "build": "node build.js",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ui": "workspace:*"
+  }
+}

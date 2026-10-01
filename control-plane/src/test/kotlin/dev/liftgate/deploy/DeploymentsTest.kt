@@ -268,6 +268,15 @@ class DeploymentsTest {
     }
 
     @Test
+    fun `a snapshot keeps the build command and framework, and one written before they existed still decodes`() = runBlocking {
+        val service = seed().let { services.update(it.id, it.spec().copy(buildCommand = "pnpm --filter web build", framework = "nextjs")) }
+        val first = running(service, "aaa")
+        assertEquals(service.spec(), deployments.byId(first.id)?.config)
+        db.tx { exec("update deployments set config = config - 'buildCommand' - 'framework'") }
+        assertEquals(service.spec().copy(buildCommand = null, framework = null), deployments.byId(first.id)?.config)
+    }
+
+    @Test
     fun `a running deployment without a snapshot is never a fallback`() = runBlocking {
         val service = seed()
         val legacy = running(service, "aaa")

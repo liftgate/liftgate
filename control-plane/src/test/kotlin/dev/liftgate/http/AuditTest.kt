@@ -361,9 +361,18 @@ class AuditTest {
     fun `an env var row names the variables and never holds a value`() = testApplication {
         application { liftgate(app) }
         assertEquals(HttpStatusCode.OK, client.putEnv().status)
-        val row = db.tx { AuditLog.selectAll().single().let { row -> AuditLog.columns.map { row[it] } } }
-        assertTrue("DATABASE_URL,PORT" in row.toString())
-        assertFalse("secret-value" in row.toString() || "8080" in row.toString())
+        val created = client.post("/api/v1/environments/${environment.id}/services") {
+            session("owner")
+            contentType(ContentType.Application.Json)
+            setBody("""{"slug":"api","name":"API","kind":"worker","env":[{"name":"DATABASE_URL","value":"postgres://secret-value","secret":true},{"name":"PORT","value":"8080"}]}""")
+        }
+        assertEquals(HttpStatusCode.Created, created.status)
+        val rows = db.tx { AuditLog.selectAll().map { row -> AuditLog.columns.map { row[it] }.toString() } }
+        assertEquals(2, rows.size)
+        rows.forEach {
+            assertTrue("DATABASE_URL,PORT" in it)
+            assertFalse("secret-value" in it || "8080" in it)
+        }
     }
 
     @Test

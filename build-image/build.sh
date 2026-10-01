@@ -23,6 +23,16 @@ prepare() {
   railpack prepare "$@"
 }
 
+setting() {
+  if [ -n "$2" ]; then
+    export "LIFTGATE_ENV_$1=$2"
+    case " ${LIFTGATE_BUILD_ENV_NAMES:-} " in
+      *" $1 "*) ;;
+      *) LIFTGATE_BUILD_ENV_NAMES="${LIFTGATE_BUILD_ENV_NAMES:-} $1" ;;
+    esac
+  fi
+}
+
 src=$(realpath "$src")
 context=$(realpath "$src/${LIFTGATE_ROOT_DIR#/}")
 inside "$context" "the root directory"
@@ -43,6 +53,8 @@ if [ "$LIFTGATE_BUILD_STRATEGY" = dockerfile ] || [ -f "$dockerfile" ]; then
     set -- "$@" --opt "build-arg:$name=${arg%??}"
   done
 else
+  setting RAILPACK_BUILD_CMD "${LIFTGATE_BUILD_COMMAND:-}"
+  setting RAILPACK_START_CMD "${LIFTGATE_START_COMMAND:-}"
   plan=$(mktemp -d)
   prepare --plan-out "$plan/railpack-plan.json" "$context"
   hash=$(for name in ${LIFTGATE_BUILD_ENV_NAMES:-}; do printf '%s\0' "$name"; value "$name"; printf '\0'; done | sha256sum | cut -d ' ' -f 1)

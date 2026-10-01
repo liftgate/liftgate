@@ -59,13 +59,15 @@ data class Service(
     val healthCheckPath: String? = null,
     val watchPaths: List<String> = emptyList(),
     val volume: Volume? = null,
+    val buildCommand: String? = null,
+    val framework: String? = null,
     val internalHost: String? = null,
     val url: String? = null,
     val current: Current? = null,
 ) {
     val listens get() = port != null || kind.servesHttp
 
-    fun spec() = ServiceSpec(slug, name, kind, rootDir, buildStrategy, dockerfilePath, port, replicas, cpuMillis, memoryMb, cronSchedule, startCommand, healthCheckPath, watchPaths, volume)
+    fun spec() = ServiceSpec(slug, name, kind, rootDir, buildStrategy, dockerfilePath, port, replicas, cpuMillis, memoryMb, cronSchedule, startCommand, healthCheckPath, watchPaths, volume, buildCommand, framework)
 
     @Serializable
     data class Current(val deploymentId: UUID, val status: DeploymentStatus, val replicasReady: Int, val commitSha: String, val createdAt: Instant)
@@ -92,9 +94,11 @@ data class ServiceSpec(
     val healthCheckPath: String? = null,
     val watchPaths: List<String> = emptyList(),
     val volume: Volume? = null,
+    val buildCommand: String? = null,
+    val framework: String? = null,
 ) {
     fun service(id: UUID, environmentId: UUID) =
-        Service(id, environmentId, slug, name, kind, rootDir, buildStrategy, dockerfilePath, port, replicas, cpuMillis, memoryMb, cronSchedule, startCommand, healthCheckPath, watchPaths, volume)
+        Service(id, environmentId, slug, name, kind, rootDir, buildStrategy, dockerfilePath, port, replicas, cpuMillis, memoryMb, cronSchedule, startCommand, healthCheckPath, watchPaths, volume, buildCommand, framework)
 
     fun watches(files: Collection<String>): Boolean {
         val root = rootDir.split('/').filterNot { it.isEmpty() || it == "." }.joinToString("/")

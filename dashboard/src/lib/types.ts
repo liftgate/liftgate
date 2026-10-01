@@ -62,6 +62,8 @@ export type ServiceSpec = {
   healthCheckPath: string | null;
   watchPaths: string[];
   volume: Volume | null;
+  buildCommand?: string | null;
+  framework?: string | null;
 };
 
 export type Service = ServiceSpec & { id: string; environmentId: string; internalHost: string | null; url: string | null; current: CurrentDeployment | null };

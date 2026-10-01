@@ -11,7 +11,7 @@ token="secret-$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
 greeting="Hello from build time $$"
 
 cleanup() {
-  docker rm -f "$run-registry" "$run-next" "$run-hello" > /dev/null 2>&1 || true
+  docker rm -f "$run-registry" "$run-next" "$run-hello" "$run-fastapi" "$run-sveltekit-node" "$run-pnpm-workspace" "$run-vite" > /dev/null 2>&1 || true
   docker network rm "$run" > /dev/null 2>&1 || true
   rm -rf "$work"
 }
@@ -46,6 +46,21 @@ sha() {
   printf %s "$1" | sha256sum | cut -d ' ' -f 1
 }
 
+serve() {
+  name=$1
+  path=$2
+  shift 2
+  docker run --detach --name "$run-$name" --user 1000:1000 --cap-drop ALL --env PORT=8080 --publish 127.0.0.1::8080 "$@" > /dev/null
+  curl --silent --show-error --fail --retry 60 --retry-all-errors --retry-delay 1 "http://$(docker port "$run-$name" 8080/tcp | head -n 1)$path"
+}
+
+contract() {
+  for fixture in "$fixtures"/*/; do
+    docker run --rm --entrypoint railpack --volume "$fixture:/src:ro" "$image" info --format json /src 2> /dev/null |
+      jq --arg name "$(basename "$fixture")" '{($name): {provider: .metadata.providers, framework: [.metadata // {} | to_entries[] | select(.key | endswith("Runtime")) | .value][0]}}'
+  done | jq --slurp --sort-keys add
+}
+
 docker network create "$run" > /dev/null
 docker run --detach --name "$run-registry" --network "$run" --network-alias registry --publish 127.0.0.1::5000 \
   registry:2.8.3@sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373 > /dev/null
@@ -77,5 +92,31 @@ esac
 build hello hello --env LIFTGATE_BUILD_STRATEGY=auto
 docker run --detach --name "$run-hello" --user 1000:1000 --cap-drop ALL --env PORT=8080 --publish 127.0.0.1::8080 "$registry/test/hello:latest" > /dev/null
 expect "the getting-started sample" "$(curl --silent --show-error --retry 60 --retry-all-errors --retry-delay 1 "http://$(docker port "$run-hello" 8080/tcp | head -n 1)/")" "hello from liftgate"
+
+build fastapi fastapi --env LIFTGATE_BUILD_STRATEGY=auto --env LIFTGATE_BUILD_ENV_NAMES=API_TOKEN --env "LIFTGATE_ENV_API_TOKEN=$token"
+expect "the FastAPI sample" "$(serve fastapi / "$registry/test/fastapi:latest")" '"hello from fastapi"'
+
+build sveltekit-node sveltekit-node --env LIFTGATE_BUILD_STRATEGY=auto --env "LIFTGATE_START_COMMAND=node build" \
+  --env LIFTGATE_BUILD_ENV_NAMES=API_TOKEN --env "LIFTGATE_ENV_API_TOKEN=$token"
+expect "SvelteKit with adapter-node" "$(serve sveltekit-node /runtime "$registry/test/sveltekit-node:latest")" "hello from node"
+
+mkdir -m 755 "$work/shim"
+cat > "$work/shim/buildctl-daemonless.sh" << 'SHIM'
+#!/bin/sh
+printf 'buildctl %s\n' "$@" >&2
+exec /usr/bin/buildctl-daemonless.sh "$@"
+SHIM
+chmod 755 "$work/shim/buildctl-daemonless.sh"
+build pnpm-workspace pnpm-workspace --env LIFTGATE_BUILD_STRATEGY=auto --volume "$work/shim:/usr/local/sbin:ro" \
+  --env "LIFTGATE_BUILD_COMMAND=pnpm --filter web build" --env "LIFTGATE_START_COMMAND=pnpm --filter web start" \
+  --env "LIFTGATE_BUILD_ENV_NAMES=RAILPACK_BUILD_CMD API_TOKEN" --env "LIFTGATE_ENV_RAILPACK_BUILD_CMD=exit 1" --env "LIFTGATE_ENV_API_TOKEN=$token"
+expect "secrets named RAILPACK_BUILD_CMD" "$(grep -c '^buildctl id=RAILPACK_BUILD_CMD,' "$work/pnpm-workspace.log")" 1
+expect "a pnpm workspace app started through /bin/sh -c" \
+  "$(serve pnpm-workspace / --entrypoint /bin/sh "$registry/test/pnpm-workspace:latest" -c "pnpm --filter web start")" "hello from a pnpm workspace"
+
+build vite vite --env LIFTGATE_BUILD_STRATEGY=auto --env LIFTGATE_BUILD_ENV_NAMES=API_TOKEN --env "LIFTGATE_ENV_API_TOKEN=$token"
+expect "GET /health on the Vite sample" "$(serve vite /health "$registry/test/vite:latest" | grep -o "hello from vite")" "hello from vite"
+
+expect "railpack info" "$(contract)" "$(jq --sort-keys . "$fixtures/expected.json")"
 
 echo "build variables reach Railpack and Dockerfile builds, and secrets stay out of the image"

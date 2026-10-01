@@ -37,6 +37,14 @@ class DomainNamesTest {
     }
 
     @Test
+    fun `a service named like its project leaves its own label out`() {
+        val shop = production.copy(service = testService.copy(slug = "shop"))
+        assertEquals("shop-acme.liftgate.app", DomainNames.platform(shop, "liftgate.app").first())
+        assertEquals("staging-shop-acme.liftgate.app", DomainNames.platform(shop.copy(environment = testEnvironment.copy(slug = "staging")), "liftgate.app").first())
+        assertTrue(Regex("""shop-shop-[0-9a-z]{6}\.liftgate\.app""").matches(DomainNames.platform(shop, "liftgate.app")[1]))
+    }
+
+    @Test
     fun `the suffix is stable per service id and differs between services`() {
         val other = production.copy(service = testService.copy(id = UUID.randomUUID()))
         assertEquals(DomainNames.platform(production, "liftgate.app"), DomainNames.platform(production, "liftgate.app"))

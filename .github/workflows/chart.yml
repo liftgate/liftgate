@@ -163,6 +163,7 @@ jobs:
       - uses: helm/kind-action@v1
       - name: install.sh refuses a cluster with another CNI and changes nothing
         run: |
+          kubectl wait nodes --all --for=condition=Ready --timeout=2m
           for cilium in 0 1; do
             if LIFTGATE_INSTALL_CILIUM=$cilium sh infra/install.sh; then exit 1; fi
           done
@@ -183,14 +184,14 @@ jobs:
           version: v4.3.0
       - name: k3s as in infra/k3s/install.md, without the podman CNI config the runner ships
         run: |
+          set -o pipefail
           sudo rm -f /etc/cni/net.d/87-podman-bridge.conflist
           sudo mkdir -p /etc/rancher/k3s
           printf 'mirrors:\n  "10.43.0.50:5000":\n    endpoint:\n      - "http://10.43.0.50:5000"\n' | sudo tee /etc/rancher/k3s/registries.yaml
-          curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.34.8+k3s1 INSTALL_K3S_EXEC='server --flannel-backend=none --disable-network-policy --disable-kube-proxy --disable=traefik --disable=servicelb --write-kubeconfig-mode=644' sh -
-          for attempt in $(seq 60); do
-            kubectl get nodes -o jsonpath='{.items[*].status.conditions[?(@.type=="Ready")].message}' | grep -q NetworkReady=false && break
-            sleep 2
-          done
+          curl -sSfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.34.8+k3s1 INSTALL_K3S_EXEC='server --flannel-backend=none --disable-network-policy --disable-kube-proxy --disable=traefik --disable=servicelb --write-kubeconfig-mode=644' sh -
+          networkless() { kubectl get nodes -o jsonpath='{.items[*].status.conditions[?(@.type=="Ready")].message}' | grep -q NetworkReady=false; }
+          for attempt in $(seq 60); do networkless && break; sleep 2; done
+          networkless
       - run: sh infra/install.sh
       - name: k3s pulls through registries.yaml from a registry at a fixed ClusterIP, as documentation/self-hosting.md sets it up
         run: |
@@ -248,6 +249,7 @@ jobs:
       - name: diagnostics
         if: failure()
         run: |
-          kubectl get nodes -o jsonpath='{range .items[*].status.conditions[*]}{.type}={.status} {.message}{"\n"}{end}'
+          kubectl get nodes -o jsonpath='{range .items[*].status.conditions[*]}{.type}={.status} {.message}{"\n"}{end}' || true
           ls -la /etc/cni/net.d /opt/cni/bin || true
           sudo journalctl -u k3s --no-pager | grep -i cni | tail -40
+          sudo journalctl -u k3s --no-pager | grep -E 'level=fatal|panic|systemd\[' | tail -40

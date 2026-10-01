@@ -3,7 +3,7 @@ import { asOperator, expect, servicePath, settled, test, type Api } from "./fixt
 
 const service = "web · production · shop · Liftgate";
 
-const routes: { path: string; title: string; parent?: string; setup?: (api: Api) => void }[] = [
+const routes: { path: string; title: string; parent?: string; setup?: (api: Api) => unknown }[] = [
   { path: "/", title: "Liftgate: open-source hosting for full-stack apps" },
   { path: "/login", title: "Sign in · Liftgate" },
   { path: "/login/sso", title: "SAML single sign-on · Liftgate" },
@@ -26,7 +26,7 @@ const routes: { path: string; title: string; parent?: string; setup?: (api: Api)
 
 for (const route of routes) {
   test(`${route.path} has a title, passes axe and fits the viewport`, async ({ page, api }) => {
-    route.setup?.(api);
+    await route.setup?.(api);
     await page.goto(route.path);
     await settled(page);
     await expect(page).toHaveTitle(route.title);

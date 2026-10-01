@@ -12,10 +12,13 @@ export default defineConfig({
     { name: "768", use: { viewport: { width: 768, height: 1024 } }, testMatch: "routes.spec.ts" },
     { name: "375", use: { viewport: { width: 375, height: 812 } }, testMatch: "routes.spec.ts" },
   ],
-  webServer: {
-    command: "npm run start -- --port 3100",
-    url: `${origin}/login`,
-    reuseExistingServer: !process.env.CI,
-    env: { LIFTGATE_LANDING: "true", LIFTGATE_DASHBOARD_URL: origin },
-  },
+  webServer: [
+    { command: "node --no-warnings --experimental-strip-types e2e/control-plane.ts", port: 3102, reuseExistingServer: !process.env.CI },
+    {
+      command: "npm run start -- --port 3100",
+      url: `${origin}/login`,
+      reuseExistingServer: !process.env.CI,
+      env: { LIFTGATE_LANDING: "true", LIFTGATE_DASHBOARD_URL: origin, LIFTGATE_API_URL: "http://localhost:3102" },
+    },
+  ],
 });

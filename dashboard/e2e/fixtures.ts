@@ -181,7 +181,7 @@ export class Api {
   readonly unmocked: string[] = [];
   private readonly handlers = new Map<string, Handler>();
 
-  constructor() {
+  constructor(private readonly page: Page) {
     const tree: ProjectTree = { project, environments: [environment], services: [service] };
     const usage: Usage = { plan: "free", limits, projects: 1, services: 1, customDomains: 0, replicas: 1, cpuMillis: 500, memoryMb: 512, storageGb: 1 };
     const replies: Record<string, unknown> = {
@@ -224,8 +224,12 @@ export class Api {
     return this.calls.filter((call) => `${call.method} ${call.path}` === key);
   }
 
-  async attach(page: Page) {
-    await page.route("**/api/v1/**", async (route) => {
+  session(value: string) {
+    return this.page.context().addCookies([{ name: "liftgate_session", value, domain: "localhost", path: "/" }]);
+  }
+
+  async attach() {
+    await this.page.route("**/api/v1/**", async (route) => {
       const request = route.request();
       const { pathname, search } = new URL(request.url());
       const path = pathname.replace("/api/v1", "");
@@ -238,7 +242,7 @@ export class Api {
       const reply = result instanceof Reply ? result : result === undefined ? new Reply(204) : new Reply(200, result);
       await route.fulfill({ status: reply.status, contentType: "application/json", body: reply.body === undefined ? "" : JSON.stringify(reply.body) });
     });
-    await page.routeWebSocket(/\/api\/v1\/logs\//, (socket) => {
+    await this.page.routeWebSocket(/\/api\/v1\/logs\//, (socket) => {
       socket.send("Listening on port 8080");
       socket.send("GET /healthz 200 in 2ms");
     });
@@ -261,8 +265,8 @@ export const test = base.extend<{ api: Api; violations: string[] }>({
   ],
   api: [
     async ({ page, violations }, use) => {
-      const api = new Api();
-      await api.attach(page);
+      const api = new Api(page);
+      await api.attach();
       await use(api);
       expect(api.unmocked, "API calls without a mock").toEqual([]);
       expect(violations, "Content-Security-Policy violations").toEqual([]);
@@ -287,4 +291,5 @@ export const asOperator = (api: Api) => {
   api.on("GET /operator/summary", { pending: 1, plans: ["free", "unlimited", "default"] } satisfies OperatorSummary);
   api.on("GET /operator/users", [waiting]);
   api.on("GET /operator/orgs", [{ org, members: 2, projects: 1, services: 1, createdAt: ago(9000) }] satisfies OperatorOrg[]);
+  return api.session("operator");
 };

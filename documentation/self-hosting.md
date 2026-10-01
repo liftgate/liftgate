@@ -653,6 +653,9 @@ From 0.2.0 to the release after it:
   as [Volumes and databases](#volumes-and-databases) explains.
 - The new value `operators` is optional. Set it to approve accounts in the dashboard, as
   [step 8](#8-sign-in) describes.
+
+From 0.3.0-alpha.1 to the release after it:
+
 - Apps that write under their working directory or `HOME` need a new build: push, or use Deploy on the
   Builds tab. Redeploy and rollback reuse the old image, which keeps the old ownership, as
   [User and file system](runtime-contract.md#user-and-file-system) describes.

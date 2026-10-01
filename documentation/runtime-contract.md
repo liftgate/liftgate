@@ -116,7 +116,7 @@ skipped, so `COPY --chown=1000:1000` keeps that layer small. With `WORKDIR /` no
 `/tmp` and every other path stay as the image made them.
 
 Everywhere else, the app can write only where the image lets user 1000 write. Images built by Liftgate
-0.2.0 or older do not have this ownership; build the app again to get it.
+0.3.0-alpha.1 or older do not have this ownership; build the app again to get it.
 
 The file system lasts as long as the container: a restart, a redeploy or a rollback starts from the image
 again. Nothing you write survives, so keep state in a database or object store outside Liftgate.

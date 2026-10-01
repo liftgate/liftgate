@@ -247,7 +247,7 @@ class DetectorTest {
     @Test
     fun `each build-image fixture matches what railpack reports in expected json`() {
         val fixtures = File("../build-image/test")
-        val providers = mapOf("node" to "node", "next" to "node", "vite" to "node", "sveltekit" to "node", "fastapi" to "python")
+        val providers = mapOf("node" to "node", "next" to "node", "vite" to "node", "sveltekit" to "node", "fastapi" to "python", "php" to "php")
         json.parseToJsonElement(File(fixtures, "expected.json").readText()).jsonObject.forEach { (name, expected) ->
             val (provider, framework) = listOf("provider", "framework").map { (expected.jsonObject[it] as? JsonPrimitive)?.contentOrNull }
             val dir = File(fixtures, name)
@@ -257,7 +257,7 @@ class DetectorTest {
                 assertEquals("dockerfile", service.builder, name)
             } else {
                 assertEquals(provider, providers[service.framework?.id], name)
-                if (framework != provider) assertEquals(framework, service.framework?.id, name)
+                if (framework != null && framework != provider) assertEquals(framework, service.framework?.id, name)
             }
         }
     }

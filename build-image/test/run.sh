@@ -25,6 +25,10 @@ build() {
   fixture=$1
   name=$2
   shift 2
+  case $fixture in
+    php*) ;;
+    *) set -- --add-host registry-1.docker.io:127.0.0.1 "$@" ;;
+  esac
   if ! docker run --rm --network "$run" --security-opt seccomp=unconfined --security-opt apparmor=unconfined \
     --volume "$fixtures/$fixture:/workspace/src:ro" \
     --env LIFTGATE_ROOT_DIR=/ --env LIFTGATE_DOCKERFILE_PATH=Dockerfile --env LIFTGATE_REGISTRY_INSECURE=true \

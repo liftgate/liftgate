@@ -61,7 +61,8 @@ if [ "$LIFTGATE_BUILD_STRATEGY" = dockerfile ] || [ -f "$dockerfile" ]; then
   fi
   printf '\nUSER 0:0\nRUN --mount=type=bind,from=%s,source=/bin/busybox,target=/.liftgate/busybox ["/.liftgate/busybox","sh","-c","case $(pwd) in /) ;; *) %s ;; esac"]\nUSER 1000:1000\n' \
     "$busybox" "$(own . '/.liftgate/busybox ')" >> "$wrap/$file"
-  set -- --frontend dockerfile.v0 --local "dockerfile=$wrap" --opt "filename=$file"
+  set -- --frontend dockerfile.v0 --local "dockerfile=$wrap" --opt "filename=$file" \
+    --local busybox=/opt/busybox --opt "context:$busybox=local:busybox"
   for name in ${LIFTGATE_BUILD_ARG_NAMES:-}; do
     arg=$(value "$name")
     set -- "$@" --opt "build-arg:$name=${arg%??}"
@@ -71,7 +72,8 @@ else
   setting RAILPACK_START_CMD "${LIFTGATE_START_COMMAND:-}"
   plan=$(mktemp -d)
   prepare --plan-out "$plan/railpack-plan.json" "$context"
-  jq --arg own "$(own /app)" --arg busybox "$busybox" '
+  frontend=ghcr.io/railwayapp/railpack-frontend:v$RAILPACK_VERSION
+  jq --arg own "$(own /app)" --arg frontend "$frontend" '
     [.deploy.inputs[]? | select(.step) | {step, include: [.include[]? | select(. == "/app" or startswith("/app/") or (startswith("/") | not))], exclude: ["*"]}] as $copies
     | ([$copies[] | select(.include != []) | .step] | unique) as $sources
     | .steps += [$sources[] | {name: "liftgate:own:\(.)", inputs: [{step: .}], commands: [{cmd: $own}]}]
@@ -79,7 +81,7 @@ else
         cmd: "sh -ec \"[ ! -d /app ] || \($own); mkdir -p /home/liftgate; chown 1000:1000 /home/liftgate; cut -d: -f3 /etc/passwd | grep -qx 1000 || echo liftgate:x:1000:1000::/home/liftgate:/bin/sh >> /etc/passwd\""
       }]}]
     | if $sources == [] then . else
-        .steps += [{name: "liftgate:roots", inputs: ([{image: $busybox}] + [$copies[] | .include |= if . == [] then ["/."] else . end]), commands: [{cmd: $own}]}]
+        .steps += [{name: "liftgate:roots", inputs: ([{image: $frontend}] + [$copies[] | .include |= if . == [] then ["/."] else . end]), commands: [{cmd: $own}]}]
         | .deploy.inputs |= map(if .step | IN($sources[]) then .step |= "liftgate:own:\(.)" else . end) + [{step: "liftgate:roots", include: ["/."], exclude: ["*", "!app"]}]
       end
     | .deploy.base = {step: "liftgate:own"}
@@ -87,7 +89,7 @@ else
   ' "$plan/railpack-plan.json" > "$plan/owned.json"
   mv "$plan/owned.json" "$plan/railpack-plan.json"
   hash=$(for name in ${LIFTGATE_BUILD_ENV_NAMES:-}; do printf '%s\0' "$name"; value "$name"; printf '\0'; done | sha256sum | cut -d ' ' -f 1)
-  set -- --frontend gateway.v0 --opt "source=ghcr.io/railwayapp/railpack-frontend:v$RAILPACK_VERSION" --local "dockerfile=$plan" --opt "build-arg:secrets-hash=$hash"
+  set -- --frontend gateway.v0 --opt "source=$frontend" --local "dockerfile=$plan" --opt "build-arg:secrets-hash=$hash"
 fi
 
 for name in ${LIFTGATE_BUILD_ENV_NAMES:-}; do

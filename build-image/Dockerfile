@@ -9,6 +9,7 @@ RUN apk add --no-cache git curl bash jq \
     && curl -fsSL "https://github.com/railwayapp/railpack/releases/download/v${RAILPACK_VERSION}/railpack-v${RAILPACK_VERSION}-${arch}-unknown-linux-musl.tar.gz" \
         | tar -xz -C /usr/local/bin railpack \
     && railpack --version
+COPY --from=busybox:1.37.0-musl@sha256:5cec3fc171c87218698e85a52af7087de727372aae264a787b8112901a5b0092 /bin/busybox /opt/busybox/bin/
 COPY --chmod=755 build.sh clone.sh /usr/local/bin/
 
 USER 1000:1000

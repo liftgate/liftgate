@@ -11,7 +11,7 @@ token="secret-$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
 greeting="Hello from build time $$"
 
 cleanup() {
-  docker rm -f "$run-registry" "$run-next" "$run-hello" "$run-fastapi" "$run-sveltekit-node" "$run-pnpm-workspace" "$run-vite" > /dev/null 2>&1 || true
+  docker rm -f "$run-registry" "$run-next" "$run-hello" "$run-fastapi" "$run-sveltekit-node" "$run-pnpm-workspace" "$run-vite" "$run-php" > /dev/null 2>&1 || true
   docker network rm "$run" > /dev/null 2>&1 || true
   rm -rf "$work"
 }
@@ -71,6 +71,10 @@ writable() {
   expect "unwritable paths under /app in $1" "$(docker exec "$run-$1" find . \( -type d -o ! -path '*/node_modules/*' \) ! -writable -print -quit)" ""
   added=$(docker history --no-trunc --human=false --format '{{.Size}} {{.CreatedBy}}' "$registry/test/$1:latest" | awk 'NR == 1 || /home\/liftgate/ { size += $1 } END { print size }')
   [ "$added" -lt 1000000 ] || { echo "the layers Liftgate adds to the $1 image hold $added bytes" >&2; exit 1; }
+}
+
+environment() {
+  docker image inspect -f '{{join .Config.Env "\n"}}' "$registry/test/$1:latest" | grep -v '^RAILPACK_BUILT_AT=' | sort
 }
 
 docker network create "$run" > /dev/null
@@ -145,6 +149,18 @@ expect "a pnpm workspace app started through /bin/sh -c" \
 build vite vite --env LIFTGATE_BUILD_STRATEGY=auto --env LIFTGATE_BUILD_ENV_NAMES=API_TOKEN --env "LIFTGATE_ENV_API_TOKEN=$token"
 expect "GET /health on the Vite sample" "$(serve vite /health "$registry/test/vite:latest" | grep -o "hello from vite")" "hello from vite"
 writable vite dist
+
+build php php --env LIFTGATE_BUILD_STRATEGY=auto
+expect "the PHP app's own front controller" "$(docker run --rm --entrypoint cat "$registry/test/php:latest" public/index.php)" "$(cat "$fixtures/php/public/index.php")"
+restricted --detach --name "$run-php" --entrypoint sleep "$registry/test/php:latest" infinity > /dev/null
+writable php public
+
+docker run --rm --entrypoint cat "$image" /usr/local/bin/build.sh | sed '/^  jq /,/^  mv /d' > "$work/plain.sh"
+chmod 755 "$work/plain.sh"
+build php-mise php-mise --env LIFTGATE_BUILD_STRATEGY=auto
+build php-mise php-mise-plain --env LIFTGATE_BUILD_STRATEGY=auto --env PRODUCTION_CACHE=registry:5000/test/php-mise:cache \
+  --volume "$work/plain.sh:/usr/local/bin/build.sh:ro"
+expect "the environment of a PHP image with mise packages" "$(environment php-mise)" "$( (environment php-mise-plain; echo HOME=/home/liftgate) | sort)"
 
 expect "railpack info" "$(contract)" "$(jq --sort-keys . "$fixtures/expected.json")"
 

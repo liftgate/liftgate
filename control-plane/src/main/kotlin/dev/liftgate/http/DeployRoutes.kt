@@ -15,7 +15,7 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import kotlinx.serialization.Serializable
 
-private val refPattern = Regex("[A-Za-z0-9][A-Za-z0-9._/-]{0,127}")
+val refPattern = Regex("[A-Za-z0-9][A-Za-z0-9._/-]{0,127}")
 val shaPattern = Regex("[0-9a-f]{40}")
 
 /**

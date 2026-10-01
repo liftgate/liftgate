@@ -288,3 +288,27 @@ export type OperatorUser = { user: User; providers: IdentityProvider[]; orgs: nu
 export type OperatorOrg = { org: Organization; members: number; projects: number; services: number; createdAt: string };
 
 export type OperatorSummary = { pending: number; plans: string[] };
+
+export type DetectedVariable = { name: string; description: string | null; source: string; required: boolean; secretHint: boolean };
+
+export type DetectedService = {
+  selected: boolean;
+  framework: { id: string; name: string } | null;
+  packageManager: string | null;
+  builder: "railpack" | "dockerfile";
+  spec: ServiceSpec;
+  defaults: { build: string | null; start: string | null };
+  evidence: string;
+  warnings: string[];
+  healthHint: string | null;
+  variables: DetectedVariable[];
+};
+
+export type Detection = {
+  ref: string;
+  commit: { sha: string; message: string | null } | null;
+  partial: boolean;
+  services: DetectedService[];
+  directories: { path: string; framework: string | null }[];
+  warnings: string[];
+};

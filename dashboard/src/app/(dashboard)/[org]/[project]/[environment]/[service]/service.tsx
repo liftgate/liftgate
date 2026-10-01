@@ -93,7 +93,7 @@ export function ServiceView({ org, projectSlug, environmentSlug, serviceSlug }: 
         {tab === "logs" && <LogsTab service={service} />}
         {tab === "metrics" && <MetricsTab service={service} />}
         {tab === "builds" && <BuildsTab service={service} admin={admin} linked={search.get("build") ?? undefined} onSelect={(id) => show("builds", id)} />}
-        {tab === "env" && <EnvTab service={service} admin={admin} />}
+        {tab === "env" && <EnvTab service={service} environment={environment} projectHref={`/${org}/${projectSlug}`} admin={admin} />}
         {tab === "domains" && <DomainsTab service={service} admin={admin} />}
         {tab === "settings" && <SettingsTab service={service} projectHref={`/${org}/${projectSlug}`} onChanged={lookup.reload} />}
       </Tabs>

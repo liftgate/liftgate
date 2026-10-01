@@ -40,43 +40,53 @@ server built from its Dockerfile.
 
 Open the dashboard, `https://liftgate.dev` for Liftgate Cloud or your installation's address, and choose
 Continue with GitHub. Signing in with another method works too, but importing a repository needs a
-GitHub connection, which the dashboard asks for when you create your first project.
+GitHub connection, which the dashboard asks for when you import your first repository.
 
 Installations that approve new accounts by hand show "Your account is waiting for approval" until an
 operator approves yours. Sign in again once you are told it has been approved.
 
 ## 2. Create an organization
 
-Projects and members belong to an organization. Enter its name; the slug below it becomes part of your
-URLs, and you cannot change it later. You are the organization's owner.
+Projects and members belong to an organization. Its name is filled in from your GitHub profile, and the
+line below it shows the addresses your apps will get. Choose Edit to change the URL name; you cannot
+change it later. Choose Continue. You are the organization's owner.
 
-## 3. Create a project
+## 3. Import a repository
 
-A project tracks one GitHub repository. Choose New project.
+The import screen lists the repositories where Liftgate's GitHub App is installed and your GitHub account
+can push, most recently pushed first. If the list is empty, choose Install the GitHub App. GitHub asks
+which account and which repositories the App may read, then sends you back to the import screen. If a
+repository is missing, choose Install the GitHub App on another account; the list refreshes when you
+come back to the tab.
 
-The dialog lists the repositories where Liftgate's GitHub App is installed and your GitHub account can
-push. If the list is empty, or the repository is missing, choose Install the GitHub App. GitHub asks
-which account and which repositories the App may read. After you install it, GitHub sends you back to
-the dashboard with the dialog open again; choose Refresh if the repository does not show up.
-
-Pick the repository, check the name and choose Create project. Liftgate creates the project with one
-environment, `production`, which builds the repository's default branch.
+Choose Import next to the repository.
 
 ## 4. Configure and deploy
 
-The next dialog, Configure and deploy, creates the first service:
+Liftgate reads the repository's file list and manifests such as `package.json`, `requirements.txt`,
+`go.mod` or a `Dockerfile`, and shows what it found:
 
-- Name: the service name, prefilled with the project name. It becomes part of the URL, and the dialog
-  shows the address the service will get.
-- Kind: `web` for an HTTP app, `static` for a static site, `worker` for a background process, `cron`
-  for a scheduled job.
-- Root directory: where the service lives in the repository, `/` for the whole repository.
-- Build and runtime, collapsed: the build strategy, the port, a start command, a health check path and
-  watch paths. The defaults suit most apps.
-- Resources, collapsed: replicas, CPU and memory.
+- Project name: prefilled with the repository name, with the address the app will get. Edit URL changes
+  the project's URL name.
+- The app: its framework, how it runs, and the build and start commands it is expected to use. Edit opens
+  its settings: service name, how it runs (web service, static site, worker or cron job), root directory,
+  build and start commands, port, health check path, watch paths and resources. The defaults suit most
+  apps.
+- A repository with several apps, such as a pnpm workspace, lists each one with a checkbox. The apps that
+  fit your plan are checked.
+- Variables named in `.env.example`, `.env.sample` or `app.json`, each with an empty value. Fill in the
+  ones you need, or choose Paste .env or Import file to fill them from a `.env` file, which is read in
+  your browser. Empty variables are skipped. Liftgate reads the example values in memory only to mark a
+  variable as required or as a likely secret, then discards them; they are never stored, cached, returned
+  or logged. It never reads a committed `.env` file.
 
-Choose Deploy. Liftgate starts a build of the branch's latest commit and opens the service's Builds tab
-with the build log streaming.
+What Liftgate shows is its best reading of the repository; every field can be changed, and Railpack still
+detects the stack during the build.
+
+Choose Deploy. Liftgate creates the project with one environment, `production`, which builds the
+repository's default branch, adds the service with its variables, starts a build of the latest commit
+and opens the service's Builds tab with the build log streaming. With several apps it opens the project
+instead.
 
 ## 5. Open the app
 
@@ -113,15 +123,17 @@ the Deployments tab says why, and the previous release keeps serving.
 ## Environments
 
 An environment tracks one branch and holds its own services, variables and addresses. New environment
-on the project page adds one, of kind `production` or `preview`, with its branch. Services in different
+on the project page adds one, of kind `production` or `preview`, with its branch. Add service reads the
+repository again and lists the apps that are not deployed in that environment yet. Services in different
 environments cannot reach each other over the network.
 
 ## Variables
 
 The Environment variables tab holds the service's variables. Tick Secret for a value nobody should read
 back: the dashboard and the API never show it again, and members of the organization see only that it
-is set. Save keeps the change for the next deployment, and Save and redeploy applies it at once without
-building.
+is set. Paste .env and Import file add many variables at once, and Check repository lists the names in
+the repository's example env files that the service does not have yet. Save keeps the change for the
+next deployment, and Save and redeploy applies it at once without building.
 
 Builds see the variables too:
 

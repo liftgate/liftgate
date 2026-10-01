@@ -17,6 +17,8 @@ const val PASSKEY_CHALLENGES_CAP = 10_000
 private const val SAML_REQUESTS_CAP = 10_000
 private const val SAML_ASSERTIONS_CAP = 100_000
 private const val RATE_LIMITS_CAP = 100_000
+private const val DETECTIONS_TTL_SECONDS = 600
+private const val DETECTIONS_CAP = 1_000
 
 /**
  * @author Dean
@@ -37,12 +39,14 @@ class Cache(config: Config) : AutoCloseable {
         getMapConfig("passkey-challenges").setEvictionConfig(lru(PASSKEY_CHALLENGES_CAP))
         getMapConfig("saml-requests").setEvictionConfig(lru(SAML_REQUESTS_CAP))
         getMapConfig("saml-assertions").setEvictionConfig(lru(SAML_ASSERTIONS_CAP))
+        getMapConfig("detections").setTimeToLiveSeconds(DETECTIONS_TTL_SECONDS).setEvictionConfig(lru(DETECTIONS_CAP))
     })
     val sessions: IMap<String, String> = hazelcast.getMap("sessions")
     val passkeyChallenges: IMap<String, String> = hazelcast.getMap("passkey-challenges")
     val samlRequests: IMap<String, String> = hazelcast.getMap("saml-requests")
     val samlAssertions: IMap<String, String> = hazelcast.getMap("saml-assertions")
     private val rateLimits: IMap<String, Int> = hazelcast.getMap("rate-limits")
+    val detections: MutableMap<String, String> = hazelcast.getMap("detections")
     val running get() = hazelcast.lifecycleService.isRunning
     val members get() = hazelcast.cluster.members.size
 

@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import type { Environment, Service } from "@/lib/types";
 import { shortSha, timeAgo } from "@/lib/util";
 import { StatusBadge } from "./ui/badge";
-import { Button } from "./ui/button";
+import { buttonClasses } from "./ui/button";
 import { Card, CardHeader } from "./ui/card";
 import { EmptyState } from "./ui/empty-state";
 import { Cell, Row, Table } from "./ui/table";
@@ -12,13 +12,13 @@ export function EnvironmentCard({
   environment,
   services,
   href,
-  onNewService,
+  addHref,
   children,
 }: {
   environment: Environment;
   services: Service[];
   href: string;
-  onNewService?: () => void;
+  addHref?: string;
   children?: ReactNode;
 }) {
   return (
@@ -33,7 +33,13 @@ export function EnvironmentCard({
           <EmptyState
             title="No services in this environment"
             description="Add a web, worker, cron or static service."
-            action={onNewService && <Button onClick={onNewService}>New service</Button>}
+            action={
+              addHref && (
+                <Link href={addHref} className={buttonClasses()}>
+                  Add service
+                </Link>
+              )
+            }
           />
         ) : (
           <Table columns={["Service", "Status", "URL", "Last deploy"]}>

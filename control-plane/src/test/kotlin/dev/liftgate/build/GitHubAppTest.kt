@@ -18,6 +18,8 @@ import io.ktor.http.content.TextContent
 import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.security.interfaces.RSAPublicKey
 import java.time.Instant
 import kotlin.test.Test
@@ -44,7 +46,17 @@ class GitHubAppTest {
                 "/repos/acme/shop" -> respond("""{"default_branch":"master","permissions":{"push":true}}""", HttpStatusCode.OK, headers)
                 "/repos/acme/docs" -> respond("""{"permissions":{"push":false}}""", HttpStatusCode.OK, headers)
                 "/repos/acme/shop/installation" -> respond("""{"id":42}""", HttpStatusCode.OK, headers)
-                "/repos/acme/shop/commits/main" -> respond("""{"sha":"abc123","commit":{"message":"ship it"}}""", HttpStatusCode.OK, headers)
+                "/repos/acme/shop/commits/main" -> respond("""{"sha":"abc123","commit":{"message":"ship it","tree":{"sha":"t1"}}}""", HttpStatusCode.OK, headers)
+                "/repos/acme/shop/git/trees/t1" -> respond(
+                    """{"sha":"t1","tree":[{"path":"package.json","type":"blob"},{"path":"apps","type":"tree"},{"path":"apps/web/package.json","type":"blob"},{"path":"lib","type":"commit"}],"truncated":true}""",
+                    HttpStatusCode.OK,
+                    headers,
+                )
+                "/graphql" -> respond(
+                    """{"data":{"repository":{"p0":{"text":"{}","byteSize":2,"isBinary":false},"p1":null,"p2":{"text":null,"byteSize":10,"isBinary":true},"p3":{"text":"x","byteSize":65537,"isBinary":false}}}}""",
+                    HttpStatusCode.OK,
+                    headers,
+                )
                 "/repos/acme/shop/collaborators/owner/permission" -> respond("""{"permission":"admin","role_name":"admin"}""", HttpStatusCode.OK, headers)
                 "/repos/acme/shop/collaborators/maintainer/permission" -> respond("""{"permission":"write","role_name":"maintain"}""", HttpStatusCode.OK, headers)
                 "/repos/acme/shop/collaborators/triager/permission" -> respond("""{"permission":"read","role_name":"triage"}""", HttpStatusCode.OK, headers)
@@ -129,6 +141,26 @@ class GitHubAppTest {
         assertEquals("12345", JWT.decode(requests.first { it.url.encodedPath == "/app" }.headers[HttpHeaders.Authorization].orEmpty().removePrefix("Bearer ")).issuer)
         assertTrue(requests.filter { it.url.encodedPath.startsWith("/user/") }.all { it.headers[HttpHeaders.Authorization] == "Bearer ghu_user" && it.url.parameters["per_page"] == "100" })
         assertEquals(listOf("1", "2"), requests.filter { it.url.encodedPath == "/user/installations/42/repositories" }.take(2).map { it.url.parameters["page"] })
+    }
+
+    @Test
+    fun `commit, tree and files read one repository with the scoped token and pass graphql expressions as variables`() = runBlocking {
+        val app = app()
+        assertEquals(GitHubApp.Head("abc123", "ship it", "t1"), app.commit("ghs_token", "acme/shop", "main"))
+        assertEquals(listOf("package.json", "apps/web/package.json") to true, app.tree("ghs_token", "acme/shop", "t1"))
+        assertEquals("1", requests.last().url.parameters["recursive"])
+        val paths = listOf("package.json", "missing.json", "logo.png", "big.json")
+        assertEquals(mapOf("package.json" to "{}"), app.files("ghs_token", "acme/shop", "abc123", paths))
+        val body = json.parseToJsonElement((requests.last().body as TextContent).text).jsonObject
+        val query = body.getValue("query").jsonPrimitive.content
+        assertTrue(paths.none { it in query } && "abc123" !in query, query)
+        assertEquals(
+            json.parseToJsonElement("""{"owner":"acme","name":"shop","p0":"abc123:package.json","p1":"abc123:missing.json","p2":"abc123:logo.png","p3":"abc123:big.json"}"""),
+            body.getValue("variables"),
+        )
+        assertTrue(requests.all { it.headers[HttpHeaders.Authorization] == "Bearer ghs_token" })
+        assertEquals(emptyMap<String, String>(), app.files("ghs_token", "acme/shop", "abc123", emptyList()))
+        assertEquals(3, requests.size)
     }
 
     @Test

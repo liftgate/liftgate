@@ -106,24 +106,26 @@ data class ServiceSpec(
         return files.any { file -> watchPaths.any { glob(it.trimStart('/'), file) } }
     }
 
-    private fun glob(pattern: String, path: String): Boolean {
-        fun BooleanArray.closed() = apply {
-            for (i in pattern.indices) if (this[i] && pattern[i] == '*') {
-                this[if (pattern.startsWith("**", i)) i + 2 else i + 1] = true
-                if (pattern.startsWith("**/", i)) this[i + 3] = true
-            }
-        }
-        val start = BooleanArray(pattern.length + 1).apply { this[0] = true }.closed()
-        return path.fold(start) { from, c ->
-            BooleanArray(pattern.length + 1).apply {
-                for (i in pattern.indices) if (from[i]) when {
-                    pattern.startsWith("**", i) -> this[i] = true
-                    pattern[i] == '*' -> if (c != '/') this[i] = true
-                    pattern[i] == '?' -> if (c != '/') this[i + 1] = true
-                    pattern[i] == c -> this[i + 1] = true
+    companion object {
+        fun glob(pattern: String, path: String): Boolean {
+            fun BooleanArray.closed() = apply {
+                for (i in pattern.indices) if (this[i] && pattern[i] == '*') {
+                    this[if (pattern.startsWith("**", i)) i + 2 else i + 1] = true
+                    if (pattern.startsWith("**/", i)) this[i + 3] = true
                 }
-            }.closed()
-        }[pattern.length]
+            }
+            val start = BooleanArray(pattern.length + 1).apply { this[0] = true }.closed()
+            return path.fold(start) { from, c ->
+                BooleanArray(pattern.length + 1).apply {
+                    for (i in pattern.indices) if (from[i]) when {
+                        pattern.startsWith("**", i) -> this[i] = true
+                        pattern[i] == '*' -> if (c != '/') this[i] = true
+                        pattern[i] == '?' -> if (c != '/') this[i + 1] = true
+                        pattern[i] == c -> this[i + 1] = true
+                    }
+                }.closed()
+            }[pattern.length]
+        }
     }
 }
 

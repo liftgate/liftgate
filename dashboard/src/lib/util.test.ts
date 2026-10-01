@@ -1,17 +1,22 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { Build, Deployment, Environment, Project, Service } from "./types.ts";
+import type { Build, Deployment, Environment, Project, Service, Usage } from "./types.ts";
 import {
   canRollBack,
+  classifyVariable,
   currentDeployment,
   duration,
   envPayload,
   findService,
+  fitPlan,
   keepsStoredValue,
   linkTarget,
+  mergeDotenv,
   pageUrl,
+  pasteSummary,
   platformHost,
   safeNext,
+  sameApp,
   shortSha,
   slugify,
   storedRows,
@@ -134,4 +139,72 @@ test("pageUrl adds the page size and the cursor to any path", () => {
   assert.equal(pageUrl("/orgs/acme/audit", 50), "/orgs/acme/audit?limit=50");
   assert.equal(pageUrl("/orgs/acme/audit", 50, 0), "/orgs/acme/audit?limit=50&before=0");
   assert.equal(pageUrl("/operator/users?status=pending", 50, "user-1"), "/operator/users?status=pending&limit=50&before=user-1");
+});
+
+test("classifyVariable marks public build-time prefixes and never makes them secret by default", () => {
+  assert.deepEqual(classifyVariable("NEXT_PUBLIC_STRIPE_KEY"), { buildTime: true, secret: false });
+  assert.deepEqual(classifyVariable("VITE_API_TOKEN", true), { buildTime: true, secret: false });
+  for (const name of ["PUBLIC_URL", "NUXT_PUBLIC_SITE", "REACT_APP_X", "EXPO_PUBLIC_X", "GATSBY_X", "VUE_APP_X"]) assert.equal(classifyVariable(name).buildTime, true, name);
+});
+
+test("classifyVariable makes credentials secret by hint, word or well-known name", () => {
+  for (const name of ["STRIPE_SECRET_KEY", "GITHUB_TOKEN", "DB_PASSWORD", "AUTH_SECRET", "API_KEY", "SESSION_COOKIE_NAME", "DATABASE_URL", "REDIS_URL", "MONGODB_URI", "SENTRY_DSN", "SQL_CONNECTION_STRING", "jwt_signing_salt"]) {
+    assert.deepEqual(classifyVariable(name), { buildTime: false, secret: true }, name);
+  }
+  assert.equal(classifyVariable("SMTP_URL", true).secret, true);
+  for (const name of ["LOG_LEVEL", "KEYBOARD_LAYOUT", "MONKEY", "PASSPORT_ISSUER", "NODE_ENV"]) assert.equal(classifyVariable(name).secret, false, name);
+});
+
+test("sameApp matches a service by root directory, ignoring slashes, by build command and by Dockerfile path", () => {
+  assert.equal(sameApp({ rootDir: "/apps/web/" }, { rootDir: "apps/web", buildCommand: null, dockerfilePath: "Dockerfile" }), true);
+  assert.equal(sameApp({ rootDir: "/", buildCommand: "pnpm --filter web build" }, { rootDir: "/", buildCommand: "pnpm --filter api build" }), false);
+  assert.equal(sameApp({ rootDir: "/", dockerfilePath: "Dockerfile" }, { rootDir: "/", dockerfilePath: "apps/api/Dockerfile" }), false);
+});
+
+test("mergeDotenv fills matching rows, adds new ones and counts both", () => {
+  const { rows, added, updated } = mergeDotenv(
+    [
+      { name: "DATABASE_URL", value: "", secret: true, description: "Postgres" },
+      { name: "LOG_LEVEL", value: "info", secret: false },
+      { name: "API_TOKEN", value: null, secret: true, stored: true },
+    ],
+    [
+      { name: "DATABASE_URL", value: "postgres://db.example.com/shop" },
+      { name: "LOG_LEVEL", value: "info" },
+      { name: "API_TOKEN", value: "t" },
+      { name: "SENTRY_DSN", value: "https://key@example.com/1" },
+    ],
+  );
+  assert.deepEqual([added, updated], [1, 2]);
+  assert.deepEqual(rows, [
+    { name: "DATABASE_URL", value: "postgres://db.example.com/shop", secret: true, description: "Postgres", updated: true },
+    { name: "LOG_LEVEL", value: "info", secret: false },
+    { name: "API_TOKEN", value: "t", secret: true, stored: true, updated: true },
+    { name: "SENTRY_DSN", value: "https://key@example.com/1", secret: true },
+  ]);
+  assert.equal(pasteSummary(1, 2, [7]), "Added 1, updated 2, skipped 1 (line 7).");
+  assert.equal(pasteSummary(4, 0, [3, 9]), "Added 4, updated 0, skipped 2 (lines 3, 9).");
+  assert.equal(pasteSummary(0, 0, []), "Added 0, updated 0, skipped 0.");
+});
+
+test("fitPlan starts at 500m and 512 MB, splits the headroom in 250m and 256 MB steps, and drops apps that still do not fit", () => {
+  const usage = (used: Partial<Usage>, limits: Partial<Usage["limits"]> = {}): Usage => ({
+    plan: "free",
+    limits: { ownedOrgs: 1, projects: 2, environmentsPerProject: 2, services: 6, cpuMillis: 1000, memoryMb: 1024, replicas: 6, cpuRequestRatio: 0.25, ephemeralMb: 1024, customDomains: 0, concurrentBuilds: 1, buildsPerHour: 10, egressBandwidth: null, udp: false, storageGb: 0, ...limits },
+    projects: 0,
+    services: 0,
+    customDomains: 0,
+    replicas: 0,
+    cpuMillis: 0,
+    memoryMb: 0,
+    storageGb: 0,
+    ...used,
+  });
+  assert.deepEqual(fitPlan(1, usage({})), { count: 1, cpuMillis: 500, memoryMb: 512 });
+  assert.deepEqual(fitPlan(2, usage({})), { count: 2, cpuMillis: 500, memoryMb: 512 });
+  assert.deepEqual(fitPlan(3, usage({})), { count: 3, cpuMillis: 250, memoryMb: 256 });
+  assert.deepEqual(fitPlan(5, usage({})), { count: 4, cpuMillis: 250, memoryMb: 256 });
+  assert.deepEqual(fitPlan(3, usage({ services: 4, replicas: 4 })), { count: 2, cpuMillis: 500, memoryMb: 512 });
+  assert.deepEqual(fitPlan(2, usage({ cpuMillis: 1000 })), { count: 0, cpuMillis: 500, memoryMb: 512 });
+  assert.deepEqual(fitPlan(3, usage({}, { services: null, cpuMillis: null, memoryMb: null, replicas: null })), { count: 3, cpuMillis: 500, memoryMb: 512 });
 });

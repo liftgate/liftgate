@@ -1,19 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 import { api } from "@/lib/api";
 import { useAction } from "@/lib/hooks";
-import type { EnvVar } from "@/lib/types";
-import { envPayload, keepsStoredValue, storedRows } from "@/lib/util";
+import type { DetectedVariable, Detection, EnvVar } from "@/lib/types";
+import { detectedRow, envPayload, sameApp, storedRows } from "@/lib/util";
+import { EnvRows, useEnvPaste } from "./env-rows";
 import { redeployRequested, SaveActions, saved } from "./save-actions";
 import { Button } from "./ui/button";
 import { Card, CardHeader } from "./ui/card";
 import { EmptyState } from "./ui/empty-state";
-import { FormError, Input } from "./ui/input";
+import { FormError } from "./ui/input";
 
-export function EnvEditor({ serviceId, initial }: { serviceId: string; initial: EnvVar[] }) {
+type Repository = { projectId: string; branch: string; rootDir: string; buildCommand?: string | null; dockerfilePath: string };
+
+export function EnvEditor({ serviceId, initial, repository, databaseHref }: { serviceId: string; initial: EnvVar[]; repository?: Repository; databaseHref?: string }) {
   const [rows, setRows] = useState(() => storedRows(initial));
   const [status, setStatus] = useState<string>();
+  const [found, setFound] = useState<{ variables: DetectedVariable[]; manual: boolean }>();
   const save = useAction(async (andRedeploy: boolean) => {
     setStatus(undefined);
     const body = envPayload(rows);
@@ -21,14 +25,24 @@ export function EnvEditor({ serviceId, initial }: { serviceId: string; initial: 
     setRows(storedRows(body));
     setStatus(await saved(serviceId, andRedeploy));
   });
-  const change = (next: EnvVar[]) => {
+  const change = (next: typeof rows) => {
     setStatus(undefined);
     setRows(next);
   };
-  const update = (i: number, patch: Partial<EnvVar>) => change(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
-  const addRow = (
-    <Button onClick={() => change([...rows, { name: "", value: "", secret: false }])}>Add variable</Button>
-  );
+  const paste = useEnvPaste(rows, change);
+  const check = useAction(async (manual: boolean) => {
+    if (!repository) return;
+    const detection = await api<Detection>(`/projects/${repository.projectId}/detect?ref=${encodeURIComponent(repository.branch)}`);
+    const candidate = detection.services.find((s) => sameApp(s.spec, repository));
+    setFound({ variables: candidate?.variables ?? [], manual });
+  });
+  const automatic = !!repository && initial.length === 0;
+  const suggest = useEffectEvent(() => check.run(false));
+  useEffect(() => {
+    if (automatic) suggest();
+  }, [automatic]);
+  const missing = found?.variables.filter((v) => !rows.some((row) => row.name === v.name)) ?? [];
+  const addRow = <Button onClick={() => change([...rows, { name: "", value: "", secret: false }])}>Add variable</Button>;
   return (
     <form
       onSubmit={(e) => {
@@ -40,50 +54,69 @@ export function EnvEditor({ serviceId, initial }: { serviceId: string; initial: 
       <Card>
         <CardHeader
           title="Environment variables"
-          description="Available to builds and injected into every container of this service. Save and redeploy applies them without a rebuild. Secret values are write-only and never become Docker build arguments."
-          actions={addRow}
+          description="Encrypted at rest and available to builds and running containers."
+          actions={
+            <>
+              {rows.length > 0 && (
+                <>
+                  {addRow}
+                  {paste.pasteButton}
+                </>
+              )}
+              {paste.importButton}
+              {repository && (
+                <Button pending={check.pending} onClick={() => check.run(true)}>
+                  Check repository
+                </Button>
+              )}
+            </>
+          }
         />
+        {paste.panel}
+        {found && (missing.length > 0 || found.manual) && (
+          <div role="status" className="flex flex-wrap items-center justify-between gap-2 border-b border-graphite-700 px-6 py-3 text-sm max-sm:px-4">
+            <span className="text-graphite-200">
+              {missing.length > 0 ? `Found in ${[...new Set(missing.map((v) => v.source))].join(", ")}: ${missing.length} not set` : "Every variable the repository names is set."}
+            </span>
+            <span className="flex gap-2">
+              {missing.length > 0 && (
+                <Button
+                  onClick={() => {
+                    change([...rows, ...missing.map(detectedRow)]);
+                    setFound(undefined);
+                  }}
+                >
+                  Add all
+                </Button>
+              )}
+              <Button variant="ghost" onClick={() => setFound(undefined)}>
+                Dismiss
+              </Button>
+            </span>
+          </div>
+        )}
+        {check.error && (
+          <div className="border-b border-graphite-700 px-6 py-3 max-sm:px-4">
+            <FormError message={check.error} />
+          </div>
+        )}
         {rows.length === 0 ? (
-          <div className="p-6">
-            <EmptyState title="No variables" description="Variables are encrypted at rest and available at build time and runtime." action={addRow} />
+          <div className="p-6 max-sm:p-4">
+            <EmptyState
+              title="No variables"
+              description="Paste a .env file or add variables one by one."
+              action={
+                <div className="flex flex-wrap justify-center gap-2">
+                  <Button variant="primary" onClick={paste.open}>
+                    Paste .env
+                  </Button>
+                  {addRow}
+                </div>
+              }
+            />
           </div>
         ) : (
-          <div className="divide-y divide-graphite-700">
-            {rows.map((row, i) => (
-              <div key={i} className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-2 px-6 py-3 md:grid-cols-[1fr_2fr_auto_auto] md:py-2">
-                <Input
-                  aria-label="Name"
-                  required
-                  pattern="[A-Za-z_][A-Za-z0-9_]*"
-                  placeholder="NAME"
-                  value={row.name}
-                  onChange={(e) => update(i, { name: e.target.value })}
-                  className="col-span-2 font-mono md:col-span-1"
-                />
-                <Input
-                  aria-label="Value"
-                  type={row.secret ? "password" : "text"}
-                  placeholder={keepsStoredValue(row) ? "Hidden. Type to replace." : "value"}
-                  value={row.value ?? ""}
-                  onChange={(e) => update(i, { value: e.target.value })}
-                  className="col-span-2 font-mono md:col-span-1"
-                />
-                <label className="flex items-center gap-2 text-sm text-graphite-200">
-                  <input
-                    type="checkbox"
-                    checked={row.secret}
-                    disabled={keepsStoredValue(row)}
-                    onChange={(e) => update(i, { secret: e.target.checked })}
-                    className="accent-accent"
-                  />
-                  Secret
-                </label>
-                <Button variant="ghost" onClick={() => change(rows.filter((_, j) => j !== i))}>
-                  Remove
-                </Button>
-              </div>
-            ))}
-          </div>
+          <EnvRows rows={rows} onChange={change} databaseHref={databaseHref} />
         )}
       </Card>
       <FormError message={save.error} />

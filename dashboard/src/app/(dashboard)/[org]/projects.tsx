@@ -1,57 +1,25 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { api, ApiError } from "@/lib/api";
-import { useAction, useApi, useRole } from "@/lib/hooks";
-import type { GitHubRepository, Project, Usage } from "@/lib/types";
-import { formValues } from "@/lib/util";
+import { useApi, useRole } from "@/lib/hooks";
+import type { Project, Usage } from "@/lib/types";
 import { DocsLink } from "@/components/docs-link";
 import { Loaded } from "@/components/loaded";
-import { NameSlugFields } from "@/components/name-slug-fields";
 import { PageHeader } from "@/components/page-header";
-import { RepoPicker } from "@/components/repo-picker";
 import { Badge } from "@/components/ui/badge";
-import { Button, buttonClasses } from "@/components/ui/button";
+import { buttonClasses } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
-import { Dialog } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
-import { FormError } from "@/components/ui/input";
 import { Skeleton, TableSkeleton } from "@/components/ui/skeleton";
 import { Cell, Row, Table } from "@/components/ui/table";
 
-export function Projects({ org, opening }: { org: string; opening: boolean }) {
-  const router = useRouter();
+export function Projects({ org }: { org: string }) {
   const { query: role, admin } = useRole(org);
-  const [creating, setCreating] = useState(opening);
-  const [repo, setRepo] = useState<GitHubRepository>();
-  const [picker, setPicker] = useState(0);
   const projects = useApi<Project[]>(`/orgs/${org}/projects`);
-  const create = useAction(async (form: HTMLFormElement) => {
-    const v = formValues(form);
-    try {
-      const project = await api<Project>(`/orgs/${org}/projects`, {
-        method: "POST",
-        body: { slug: v.slug, name: v.name, repoFullName: v.repoFullName },
-      });
-      router.push(`/${org}/${project.slug}?new=service`);
-    } catch (e) {
-      if (!(e instanceof ApiError && e.code === "github_not_connected")) throw e;
-      setRepo(undefined);
-      setPicker((n) => n + 1);
-    }
-  });
-  const at = (field: string) => (create.field === field ? create.error : undefined);
-  const close = () => {
-    setCreating(false);
-    setRepo(undefined);
-    if (opening) window.history.replaceState(null, "", `/${org}`);
-  };
-  const newProject = admin && (
-    <Button variant="primary" onClick={() => setCreating(true)}>
-      New project
-    </Button>
+  const importRepository = admin && (
+    <Link href={`/new?org=${org}`} className={buttonClasses("primary")}>
+      Import repository
+    </Link>
   );
   return (
     <div className="flex flex-col gap-8">
@@ -63,7 +31,7 @@ export function Projects({ org, opening }: { org: string; opening: boolean }) {
             <Link href={`/${org}/settings`} className={buttonClasses("ghost")}>
               Settings
             </Link>
-            {newProject}
+            {!!projects.data?.length && importRepository}
           </>
         }
       />
@@ -74,11 +42,11 @@ export function Projects({ org, opening }: { org: string; opening: boolean }) {
               title="No projects yet"
               description={
                 <>
-                  {admin ? "Connect a GitHub repository to start deploying." : "An admin of this organization connects repositories."}{" "}
+                  {admin ? "Import a GitHub repository to start deploying." : "An admin of this organization imports repositories."}{" "}
                   <DocsLink page="getting-started">Getting started</DocsLink>
                 </>
               }
-              action={newProject}
+              action={importRepository}
             />
           ) : (
             <Table columns={["Name", "Repository", "Default branch"]}>
@@ -98,25 +66,6 @@ export function Projects({ org, opening }: { org: string; opening: boolean }) {
         }
       </Loaded>
       <UsageCard org={org} />
-      <Dialog open={admin && creating} title="New project" onClose={close}>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            create.run(e.currentTarget);
-          }}
-          className="flex flex-col gap-4"
-        >
-          <RepoPicker key={picker} next={`/${org}?new=project`} value={repo?.fullName} error={at("repoFullName")} onChange={setRepo} />
-          {repo && <NameSlugFields key={repo.fullName} prefill={repo.fullName.split("/")[1]} errorAt={at} />}
-          <FormError message={create.field ? undefined : create.error} />
-          <div className="flex justify-end gap-2">
-            <Button onClick={close}>Cancel</Button>
-            <Button type="submit" variant="primary" pending={create.pending} disabled={!repo}>
-              Create project
-            </Button>
-          </div>
-        </form>
-      </Dialog>
     </div>
   );
 }

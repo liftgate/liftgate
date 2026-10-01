@@ -5,12 +5,16 @@ import dev.liftgate.TestDatabase
 import dev.liftgate.auth.Access
 import dev.liftgate.auth.GitConnections
 import dev.liftgate.auth.Sessions
+import dev.liftgate.build.Detection
 import dev.liftgate.build.GitHubApp
+import dev.liftgate.cache.Cache
+import dev.liftgate.db.Memberships
 import dev.liftgate.db.Projects as ProjectsTable
 import dev.liftgate.org.Limits
 import dev.liftgate.org.Orgs
 import dev.liftgate.org.Plan
 import dev.liftgate.org.Plans
+import dev.liftgate.org.UserStatus
 import dev.liftgate.org.insertUser
 import dev.liftgate.project.EnvironmentKind
 import dev.liftgate.project.Project
@@ -20,6 +24,7 @@ import dev.liftgate.teardowns
 import dev.liftgate.testConfig
 import dev.liftgate.unlimitedCache
 import io.ktor.client.request.delete
+import io.ktor.client.request.get
 import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -31,9 +36,11 @@ import io.ktor.server.testing.testApplication
 import io.micrometer.prometheusmetrics.PrometheusConfig
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
+import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -143,6 +150,54 @@ class ProjectRoutesTest {
         assertEquals(updated, json.decodeFromString(Project.serializer(), patch("""{}""").bodyAsText()))
         client.delete("/api/v1/environments/${staging.id}") { session() }
         assertEquals(updated.copy(previewBaseEnvironmentId = null), app.projects.byId(project.id))
+    }
+
+    @Test
+    fun `detecting a project's repository is for active org admins, reads its default branch, and reads nothing once the importer lost write access`() = testApplication {
+        val org = orgs.create("acme", "Acme", user.id)
+        val project = app.projects.create(org.id, "shop", "Shop", "acme/shop", 42, "alice", defaultBranch = "trunk")
+        val grace = db.tx { insertUser("grace", null, null, null) }
+        db.tx {
+            Memberships.insert {
+                it[orgId] = org.id
+                it[userId] = grace.id
+                it[role] = "member"
+            }
+        }
+        every { app.access } returns Access(orgs)
+        every { app.cache } returns mockk<Cache> {
+            every { allow(any(), any(), any()) } returns true
+            every { detections } returns HashMap()
+        }
+        every { app.sessions } returns mockk<Sessions> {
+            coEvery { resolve("s") } returns user
+            coEvery { resolve("m") } returns grace
+            coEvery { resolve("p") } returns user.copy(status = UserStatus.PENDING)
+        }
+        val github = mockk<GitHubApp> {
+            coEvery { installationToken(42, "shop", any()) } returns "ghs_token"
+            coEvery { canPush("ghs_token", "acme/shop", "alice") } returns true
+            coEvery { commit("ghs_token", "acme/shop", "trunk") } returns GitHubApp.Head("abc123", "ship it", "t1")
+            coEvery { tree("ghs_token", "acme/shop", "t1") } returns (listOf("package.json") to false)
+            coEvery { files("ghs_token", "acme/shop", "abc123", listOf("package.json")) } returns mapOf("package.json" to """{"devDependencies":{"vite":"8"}}""")
+        }
+        every { app.github } returns github
+        application { liftgate(app) }
+        assertEquals(HttpStatusCode.Forbidden, client.get("/api/v1/projects/${project.id}/detect") { session("m") }.status)
+        val pending = client.get("/api/v1/projects/${project.id}/detect") { session("p") }
+        assertEquals(HttpStatusCode.Forbidden to "account_pending", pending.status to json.decodeFromString(ErrorBody.serializer(), pending.bodyAsText()).error)
+        val response = client.get("/api/v1/projects/${project.id}/detect") { session() }
+        assertEquals(HttpStatusCode.OK, response.status)
+        val detection = json.decodeFromString(Detection.serializer(), response.bodyAsText())
+        assertEquals(Triple("trunk", "vite", "shop"), Triple(detection.ref, detection.services.single().framework?.id, detection.services.single().spec.slug))
+        coEvery { github.canPush("ghs_token", "acme/shop", "alice") } returns false
+        val refused = client.get("/api/v1/projects/${project.id}/detect?ref=main") { session() }
+        assertEquals(HttpStatusCode.OK, refused.status)
+        val unread = json.decodeFromString(Detection.serializer(), refused.bodyAsText())
+        assertEquals(Triple(null, emptyList(), listOf("The GitHub account that imported acme/shop no longer has write access, so nothing was read and builds will fail. Re-import the project.")), Triple(unread.commit, unread.services, unread.warnings))
+        coVerify(exactly = 1) { github.commit(any(), any(), any()) }
+        coVerify(exactly = 1) { github.tree(any(), any(), any()) }
+        coVerify(exactly = 1) { github.files(any(), any(), any(), any()) }
     }
 
     @Test

@@ -1,45 +1,32 @@
-import type { Organization, Project, ProjectTree } from "../src/lib/types";
-import { build, environment, expect, org, project, Reply, service, test } from "./fixtures";
+import { expect, org, Reply, test } from "./fixtures";
 
-test("a new user goes from no organization to a streaming build without typing a repository name", async ({ page, api }) => {
-  const created = { ...service, slug: "shop", name: "Shop", current: null };
-  let orgs: Organization[] = [];
-  let projects: Project[] = [];
-  let tree: ProjectTree = { project, environments: [environment], services: [] };
-  api.on("GET /orgs", () => orgs);
-  api.on("POST /orgs", () => {
-    orgs = [org];
-    return new Reply(201, org);
-  });
-  api.on("GET /orgs/acme/projects", () => projects);
-  api.on("POST /orgs/acme/projects", () => {
-    projects = [project];
-    return new Reply(201, project);
-  });
-  api.on("GET /orgs/acme/projects/shop/tree", () => tree);
-  api.on(`POST /environments/${environment.id}/services`, () => {
-    tree = { ...tree, services: [created] };
-    return new Reply(201, { ...created, buildId: "build-2" });
-  });
-  api.on(`GET /services/${service.id}/builds`, [{ ...build, id: "build-2", status: "running", finishedAt: null }]);
-
+test("the first organization takes the user's name, hides its URL name until asked and opens a slug error", async ({ page, api }) => {
+  api.on("GET /orgs", []);
+  api.on("POST /orgs", new Reply(422, { error: "invalid", message: "the slug new is reserved", field: "slug" }));
   await page.goto("/dashboard");
-  await page.getByLabel("Name").fill("Acme");
-  await page.getByRole("button", { name: "Create organization" }).click();
-  await page.waitForURL("/acme");
+  await expect(page.getByLabel("Name")).toHaveValue("Ada Lovelace");
+  await expect(page.getByLabel("URL name")).toHaveCount(0);
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  await expect(page.getByLabel("URL name")).toHaveValue("ada-lovelace");
+  await page.getByLabel("URL name").fill("new");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByText("the slug new is reserved")).toBeVisible();
+  expect(api.sent("POST /orgs")[0].body).toEqual({ slug: "new", name: "Ada Lovelace" });
 
-  await page.getByRole("button", { name: "New project" }).first().click();
-  await page.getByRole("radio", { name: /acme\/shop/ }).check();
-  await expect(page.getByLabel("Slug")).toHaveValue("shop");
-  await page.getByRole("button", { name: "Create project" }).click();
-  await page.waitForURL("/acme/shop?new=service");
+  api.on("POST /orgs", new Reply(201, org));
+  await page.getByLabel("URL name").fill("acme");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.waitForURL("/new?org=acme");
+});
 
-  await expect(page.getByRole("heading", { name: "Configure and deploy" })).toBeVisible();
-  await page.getByRole("button", { name: "Deploy" }).click();
-  await page.waitForURL("/acme/shop/production/shop?tab=builds&build=build-2");
-  await expect(page.getByRole("region", { name: /Build 4f2a9c1 output/ })).toContainText("Listening on port 8080");
-  await expect(page.getByText("Live")).toBeVisible();
-
-  expect(api.sent("POST /orgs/acme/projects")[0].body).toEqual({ slug: "shop", name: "shop", repoFullName: "acme/shop" });
-  expect(api.sent(`POST /environments/${environment.id}/services`)[0].search).toBe("?deploy=true");
+test("old onboarding links and a fresh GitHub App install land on the import screen", async ({ page }) => {
+  for (const [from, to] of [
+    ["/dashboard?installed=1", "/new?org=acme"],
+    ["/acme?new=project", "/new?org=acme"],
+    ["/acme/shop?new=service", "/new?org=acme&project=shop"],
+  ]) {
+    await page.goto(from);
+    await page.waitForURL(to);
+  }
+  await expect(page.getByRole("heading", { name: "Add a service to Shop" })).toBeVisible();
 });

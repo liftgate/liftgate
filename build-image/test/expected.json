@@ -4,6 +4,7 @@
   "hello": { "provider": "node", "framework": "node" },
   "named-user": { "provider": null, "framework": null },
   "next": { "provider": "node", "framework": "next" },
+  "next-bun": { "provider": "node", "framework": "next" },
   "php": { "provider": "php", "framework": null },
   "php-mise": { "provider": "php", "framework": null },
   "pnpm-workspace": { "provider": "node", "framework": "node" },

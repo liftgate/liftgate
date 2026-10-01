@@ -11,7 +11,7 @@ token="secret-$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
 greeting="Hello from build time $$"
 
 cleanup() {
-  docker rm -fv "$run-registry" "$run-next" "$run-hello" "$run-fastapi" "$run-sveltekit-node" "$run-pnpm-workspace" "$run-vite" "$run-php" > /dev/null 2>&1 || true
+  docker rm -fv "$run-registry" "$run-next" "$run-next-bun" "$run-hello" "$run-fastapi" "$run-sveltekit-node" "$run-pnpm-workspace" "$run-vite" "$run-php" > /dev/null 2>&1 || true
   [ -z "${registry-}" ] || docker image ls --format '{{.Repository}}:{{.Tag}}' --filter "reference=$registry/test/*" | xargs -r docker image rm > /dev/null || true
   docker network rm "$run" > /dev/null 2>&1 || true
   rm -rf "$work"
@@ -83,6 +83,31 @@ environment() {
   docker image inspect -f '{{join .Config.Env "\n"}}' "$registry/test/$1:latest" | grep -v '^RAILPACK_BUILT_AT=' | sort
 }
 
+cached() {
+  curl --silent --show-error --dump-header - --output /dev/null "$1" | tr -d '\r' | awk -F ': ' 'tolower($1) == "x-nextjs-cache" { print $2 }'
+}
+
+nextjs() {
+  build "$1" "$1" --env LIFTGATE_BUILD_STRATEGY=auto \
+    --env "LIFTGATE_BUILD_ENV_NAMES=NEXT_PUBLIC_GREETING API_TOKEN" --env LIFTGATE_BUILD_ARG_NAMES=NEXT_PUBLIC_GREETING \
+    --env "LIFTGATE_ENV_NEXT_PUBLIC_GREETING=$greeting" --env "LIFTGATE_ENV_API_TOKEN=$token"
+  restricted --detach --name "$run-$1" --env PORT=3000 --publish 127.0.0.1::3000 "$registry/test/$1:latest" > /dev/null
+  next=http://$(docker port "$run-$1" 3000/tcp | head -n 1)
+  page=$(curl --silent --show-error --retry 60 --retry-all-errors --retry-delay 1 "$next/")
+  case "$page" in
+    *"$greeting"*) ;;
+    *) echo "the $1 page does not render NEXT_PUBLIC_GREETING: $page" >&2; exit 1 ;;
+  esac
+  resized="$next/_next/image?url=%2Fsample.png&w=64&q=75"
+  expect "x-nextjs-cache of the first image request in $1" "$(cached "$resized")" MISS
+  expect "x-nextjs-cache of the second image request in $1" "$(cached "$resized")" HIT
+  writable "$1" .next
+  if docker logs "$run-$1" 2>&1 | grep EACCES; then
+    echo "$1 was denied a write" >&2
+    exit 1
+  fi
+}
+
 docker network create "$run" > /dev/null
 docker run --detach --name "$run-registry" --network "$run" --network-alias registry --publish 127.0.0.1::5000 \
   registry:2.8.3@sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373 > /dev/null
@@ -107,25 +132,8 @@ expect "writes of uid 1000 to a WORKDIR the image gave uid 1001" \
   "$(restricted --rm --entrypoint /busybox "$named" sh -c '/busybox touch /srv/new /srv/data/new && echo y >> /srv/data/file && [ ! -e /srv/ignored.txt ] && /busybox stat -c %u /etc/passwd')" 0
 expect "the user of a Dockerfile image" "$(docker image inspect -f '{{.Config.User}}' "$named")" 1000:1000
 
-build next next --env LIFTGATE_BUILD_STRATEGY=auto \
-  --env "LIFTGATE_BUILD_ENV_NAMES=NEXT_PUBLIC_GREETING API_TOKEN" --env LIFTGATE_BUILD_ARG_NAMES=NEXT_PUBLIC_GREETING \
-  --env "LIFTGATE_ENV_NEXT_PUBLIC_GREETING=$greeting" --env "LIFTGATE_ENV_API_TOKEN=$token"
-restricted --detach --name "$run-next" --env PORT=3000 --publish 127.0.0.1::3000 "$registry/test/next:latest" > /dev/null
-next=http://$(docker port "$run-next" 3000/tcp | head -n 1)
-page=$(curl --silent --show-error --retry 60 --retry-all-errors --retry-delay 1 "$next/")
-case "$page" in
-  *"$greeting"*) ;;
-  *) echo "the Next.js page does not render NEXT_PUBLIC_GREETING: $page" >&2; exit 1 ;;
-esac
-resized="$next/_next/image?url=%2Fsample.png&w=64&q=75"
-curl --silent --show-error --output /dev/null "$resized"
-expect "x-nextjs-cache of the second image request" \
-  "$(curl --silent --show-error --dump-header - --output /dev/null "$resized" | tr -d '\r' | awk -F ': ' 'tolower($1) == "x-nextjs-cache" { print $2 }')" HIT
-writable next .next
-if docker logs "$run-next" 2>&1 | grep EACCES; then
-  echo "the Next.js app was denied a write" >&2
-  exit 1
-fi
+nextjs next
+nextjs next-bun
 
 build hello hello --env LIFTGATE_BUILD_STRATEGY=auto
 restricted --detach --name "$run-hello" --env PORT=8080 --publish 127.0.0.1::8080 "$registry/test/hello:latest" > /dev/null

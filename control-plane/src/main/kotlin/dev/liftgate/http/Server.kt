@@ -53,7 +53,7 @@ fun Application.liftgate(app: App) {
         callIdMdc("callId")
         disableDefaultColors()
     }
-    install(MicrometerMetrics) { registry = app.metrics }
+    requestMetrics(app)
     install(WebSockets) { maxFrameSize = WEBSOCKET_FRAME_LIMIT }
     install(DefaultHeaders) {
         header(HttpHeaders.Server, "Liftgate")
@@ -90,8 +90,14 @@ fun Application.liftgate(app: App) {
 }
 
 fun Application.health(app: App) {
-    install(MicrometerMetrics) { registry = app.metrics }
+    requestMetrics(app)
     routing { healthRoutes(app) }
+}
+
+private fun Application.requestMetrics(app: App) = install(MicrometerMetrics) {
+    registry = app.metrics
+    registerDistributionStatisticConfig = false
+    timers { _, _ -> publishPercentiles(0.5, 0.9, 0.95, 0.99) }
 }
 
 fun httpServer(app: App) = embeddedServer(Netty, port = app.config.httpPort, host = "0.0.0.0") { if (app.runs(Role.API)) liftgate(app) else health(app) }

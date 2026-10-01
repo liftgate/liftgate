@@ -115,7 +115,7 @@ object Detector {
         val warnings = listOfNotNull(SET_START.takeIf { run("start") == null && row.spec.kind != ServiceKind.STATIC }, "Check the first build".takeIf { workspace.pm != "pnpm" })
         val watchPaths = (listOf(dir) + watched).map { "$it/**" }.plus(listOfNotNull(workspace.lockfile, "package.json")).distinct().take(MAX_WATCH_PATHS)
         val image = dockerfile("", "$dir/Dockerfile", row) ?: dockerfile("", "Dockerfile", row)?.let { it.copy(selected = false, warnings = it.warnings + ROOT_DOCKERFILE) }
-        return image?.let { it.copy(spec = it.spec.copy(watchPaths = watchPaths)) } ?: row.copy(
+        return image?.let { it.copy(spec = it.spec.copy(watchPaths = (watchPaths + it.spec.dockerfilePath).distinct().take(MAX_WATCH_PATHS))) } ?: row.copy(
             spec = row.spec.copy(buildCommand = run("build"), startCommand = run("start"), watchPaths = watchPaths),
             defaults = DetectedService.Defaults(run("build"), run("start")),
             warnings = (row.warnings + warnings).distinct(),

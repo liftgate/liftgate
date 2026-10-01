@@ -251,7 +251,7 @@ class DetectorTest {
             detection.services.map { Triple(it.spec.name, it.spec.dockerfilePath, it.selected) },
         )
         assertTrue(detection.services.all { it.builder == "dockerfile" && it.spec.rootDir == "/" && it.spec.buildCommand == null && it.spec.startCommand == null })
-        assertEquals(listOf("apps/web/**", "pnpm-lock.yaml", "package.json"), detection.services[2].spec.watchPaths)
+        assertEquals(listOf("apps/web/**", "pnpm-lock.yaml", "package.json", "Dockerfile"), detection.services[2].spec.watchPaths)
         assertEquals(listOf("The root Dockerfile builds every app whose root directory is /"), detection.services[2].warnings)
     }
 

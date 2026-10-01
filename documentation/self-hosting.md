@@ -627,32 +627,59 @@ From 0.2.0-alpha.3 to 0.2.0-alpha.4:
 - The dashboard and the API send security headers. A proxy in front of them must pass them through, as
   [A proxy in front of Liftgate](#a-proxy-in-front-of-liftgate) says.
 
-From 0.2.0-alpha.4 to the release after it:
+From 0.2.0-alpha.4 to 0.2.0:
 
 - The chart can run the registry inside the cluster, which this guide now uses. Nothing changes until
   `inClusterRegistry.enabled` is set; [Moving to the in-cluster registry](#moving-to-the-in-cluster-registry)
   switches an installation with a registry on another machine.
-- Migration V31 adds preview columns to `projects` and `environments` and a `pull_requests` table. A
-  `helm rollback` does not undo it.
-- Pull request previews are off until a project turns them on. They need the App changes in
-  [step 6](#6-the-github-app): the Pull request event, Pull requests: Read-only and Issues: Read and write,
-  which each installation of the App has to accept. The plan field `previewEnvironments` is optional.
 
-From 0.2.0 to the release after it:
+From 0.2.0 to 0.3.0-alpha.1:
 
-- Migration V30 adds thirteen indexes in one transaction. Writes to a table wait from the start of its
-  index until the migration commits. The indexes on `usage_records` and `audit_log`, which are never
-  pruned, come first. Writes to those two tables wait until the migration commits, which takes longer
-  when they are large, and writes to any other table wait only while its own index and the later ones
-  are built. A `helm rollback` does not undo it.
+- Migrations V30, V31, V32 and V35 run in the `migrate` init container. A `helm rollback` does not undo
+  them, so going back means restoring the backup.
+  - V30 adds thirteen indexes in one transaction. The indexes on `usage_records` and `audit_log`, which
+    are never pruned, come first, and writes to those two tables wait until the migration commits, which
+    takes longer when they are large. Writes to any other table wait only while its own index and the
+    later ones are built.
+  - V31 adds preview columns to `projects` and `environments` and a `pull_requests` table.
+  - V32 adds the `databases` and `service_links` tables and the `services.volume` column.
+  - V35 adds `services.build_command` and `services.framework`.
+- The new values are optional:
+  - `operators` lists the `github:<login>` entries and emails whose accounts use the operator console,
+    as [step 8](#8-sign-in) describes. An email must be a verified email of one of the account's sign-in
+    methods, domains are not accepted, and an account counts only while it is active.
+  - `workloads.storageClass` turns on volumes and databases, as
+    [Volumes and databases](#volumes-and-databases) explains. While it is empty, the API answers
+    `409 storage_not_configured`.
+  - `databases.backup.*`: `enabled` turns on WAL archiving and scheduled base backups for tenant
+    databases and then needs `destinationPath`, `accessKeyId` and `secretAccessKey`. `endpointUrl`,
+    `region`, `retention` and `schedule` have defaults, and `allowedEgressCidrs` lists an object store on
+    a private address. The key is copied into every environment namespace that has a database, so give
+    tenant databases their own bucket and key rather than those of `postgres.backup`. With backups on,
+    each database also counts its backup sidecar (200m CPU, 512 MB) toward the plan.
+  - `controlPlane.roleResources.{api,reconciler,builder,meter}` replaces `controlPlane.resources` for
+    that role in the `ha` profile. It is empty by default, so nothing changes.
+  - `controlPlane.logFormat` is `text` (default) or `json`.
+  - The plan fields `previewEnvironments` and `storageGb`. The chart's `free` plan allows 1 preview and
+    5 GB, and a plan that leaves them out is unlimited.
 - `controlPlane.javaOpts` now defaults to `-XX:+UseG1GC -XX:MaxRAMPercentage=75 -XX:ActiveProcessorCount=2`.
   If you set your own `javaOpts`, add these flags to it.
-- The new values `controlPlane.logFormat` and `controlPlane.roleResources` are optional.
-- Migration V32 adds the `databases` and `service_links` tables and the `services.volume` column. A
-  `helm rollback` does not undo it. Volumes and databases stay off until `workloads.storageClass` is set,
-  as [Volumes and databases](#volumes-and-databases) explains.
-- The new value `operators` is optional. Set it to approve accounts in the dashboard, as
-  [step 8](#8-sign-in) describes.
+- Pull request previews need the App changes in [step 6](#6-the-github-app): the Pull request event,
+  Pull requests: Read-only and Issues: Read and write, which each installation of the App has to accept.
+  Without them no preview starts, and without Issues a preview deploys without its comment. Pushes
+  build either way.
+- Database pods run under the node's default runtime, because CloudNativePG has no runtime class field;
+  tenant code still runs only in sandboxed pods and reaches PostgreSQL over the network. Database pods
+  call the Kubernetes API: the chart allows that on Cilium, and with another CNI you have to allow egress
+  from pods labelled `liftgate.dev/database-id` to the API server. In the `ha` profile the `api` role can
+  read every Secret in namespaces that have a database.
+  [Databases and volumes](../charts/liftgate/README.md#databases-and-volumes) in the chart README covers
+  all of this.
+- A Railpack service that already had a start command now also builds with it, and Railpack then
+  leaves out its Caddy static server. The container behaves the same unless the start command itself
+  launched Caddy, as [Start and build commands](runtime-contract.md#start-and-build-commands) describes.
+- Python builds need the new build image, which includes bash. An empty `build.image` follows the
+  chart version; a pinned one needs `ghcr.io/liftgate/build-image:0.3.0-alpha.1`.
 
 From 0.3.0-alpha.1 to the release after it:
 

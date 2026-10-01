@@ -82,6 +82,7 @@ class Sweeper(private val app: App, private val kube: KubernetesClient) {
             Deployments.select(Deployments.serviceId).where { Deployments.status eq DeploymentStatus.RUNNING.sql }.withDistinct().map { it[Deployments.serviceId] }
         }
         running.each("resync of service") { reconciler.reapply(it, live[it.toString()]) }
+        app.databases.all().each("resync of database") { (namespace, id) -> reconciler.database(namespace, id) }
     }
 
     suspend fun pruneSecrets() {

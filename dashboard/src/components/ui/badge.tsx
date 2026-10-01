@@ -26,6 +26,7 @@ const statusTones: Record<string, Tone> = {
   queued: "warning",
   pending: "warning",
   releasing: "warning",
+  starting: "warning",
   superseded: "neutral",
   rolled_back: "neutral",
   healthy: "success",

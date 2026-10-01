@@ -21,6 +21,15 @@ rules:
   - apiGroups: [""]
     resources: [pods/log]
     verbs: [get]
+  - apiGroups: [""]
+    resources: [persistentvolumeclaims]
+    verbs: [get, list, watch, create, update, patch, delete, deletecollection]
+  - apiGroups: [postgresql.cnpg.io]
+    resources: [clusters, scheduledbackups]
+    verbs: [get, list, watch, create, update, patch, delete, deletecollection]
+  - apiGroups: [barmancloud.cnpg.io]
+    resources: [objectstores]
+    verbs: [get, create, update, patch]
   - apiGroups: [apps]
     resources: [deployments]
     verbs: [get, list, watch, create, update, patch, delete, deletecollection]
@@ -48,7 +57,7 @@ rules:
   - apiGroups: [rbac.authorization.k8s.io]
     resources: [clusterroles]
     verbs: [bind]
-    resourceNames: [{{ $fullname }}-log-reader]
+    resourceNames: [{{ $fullname }}-log-reader, {{ $fullname }}-database-reader]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -74,6 +83,20 @@ rules:
   - apiGroups: [""]
     resources: [pods/log]
     verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ $fullname }}-database-reader
+  labels:
+    {{- include "liftgate.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [get]
+  - apiGroups: [postgresql.cnpg.io]
+    resources: [clusters, backups]
+    verbs: [get, list]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role

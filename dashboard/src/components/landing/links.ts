@@ -2,7 +2,7 @@ export const repoUrl = "https://github.com/liftgate/liftgate";
 
 export const sourceUrl = (path: string, from?: number, to?: number) => `${repoUrl}/blob/main/${path}${from ? `#L${from}-L${to}` : ""}`;
 
-export const docsPages = ["getting-started", "runtime-contract", "custom-domains", "plans-and-limits"] as const;
+export const docsPages = ["getting-started", "runtime-contract", "custom-domains", "plans-and-limits", "self-hosting"] as const;
 
 export type DocsPage = (typeof docsPages)[number];
 

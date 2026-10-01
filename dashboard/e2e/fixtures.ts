@@ -2,7 +2,9 @@ import { test as base, expect, type Page } from "@playwright/test";
 import type {
   AuditEntry,
   AuthProviders,
+  Backup,
   Build,
+  Database,
   Deployment,
   Domain,
   EnvVar,
@@ -67,17 +69,33 @@ export const service: Service = {
   startCommand: null,
   healthCheckPath: "/healthz",
   watchPaths: [],
+  volume: null,
   internalHost: "web.env-acme-shop.svc.cluster.local",
   url: "https://web-shop-acme.apps.example.com",
   current: { deploymentId: deployment.id, status: "running", replicasReady: 1, commitSha: sha, createdAt: deployment.createdAt },
 };
 export const servicePath = `/${org.slug}/${project.slug}/${environment.slug}/${service.slug}`;
+export const database: Database = {
+  id: "database-main",
+  environmentId: environment.id,
+  slug: "main",
+  storageGb: 1,
+  cpuMillis: 500,
+  memoryMb: 512,
+  restoredFrom: null,
+  restoreTarget: null,
+  createdAt: ago(120),
+  links: [],
+  ready: true,
+};
+export const backups: Backup[] = [{ name: "main-20260930", phase: "completed", startedAt: ago(119), stoppedAt: ago(118) }];
 export const providers: AuthProviders = {
   oauth: ["github"],
   passkey: true,
   email: true,
   sso: true,
   customDomains: true,
+  storage: true,
   deployDomain: "apps.example.com",
   termsUrl: "https://example.com/terms",
   privacyUrl: "https://example.com/privacy",
@@ -128,6 +146,7 @@ const limits: Usage["limits"] = {
   buildsPerHour: 10,
   egressBandwidth: "10M",
   udp: false,
+  storageGb: 5,
 };
 const end = Math.floor(Date.now() / 1000);
 const series = (scale: number): MetricPoint[] => Array.from({ length: 60 }, (_, i) => ({ time: end - (59 - i) * 60, value: scale * (1.2 + Math.sin(i / 6)) }));
@@ -161,7 +180,7 @@ export class Api {
 
   constructor() {
     const tree: ProjectTree = { project, environments: [environment], services: [service] };
-    const usage: Usage = { plan: "free", limits, projects: 1, services: 1, customDomains: 0, replicas: 1, cpuMillis: 500, memoryMb: 512 };
+    const usage: Usage = { plan: "free", limits, projects: 1, services: 1, customDomains: 0, replicas: 1, cpuMillis: 500, memoryMb: 512, storageGb: 1 };
     const replies: Record<string, unknown> = {
       "GET /auth/providers": providers,
       "POST /auth/passkey/options": { publicKey: { challenge: "c2lnbi1pbi1jaGFsbGVuZ2U", rpId: "localhost", userVerification: "preferred" } },
@@ -188,6 +207,8 @@ export class Api {
       [`GET /services/${service.id}/env`]: storedEnv,
       [`GET /services/${service.id}/domains`]: [platformDomain],
       [`GET /services/${service.id}/metrics`]: metrics,
+      [`GET /environments/${environment.id}/databases`]: [database],
+      [`GET /databases/${database.id}/backups`]: backups,
     };
     for (const [key, reply] of Object.entries(replies)) this.on(key, reply);
   }

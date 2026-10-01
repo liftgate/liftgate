@@ -34,6 +34,7 @@ import dev.liftgate.service.EnvVars
 import dev.liftgate.service.ServiceKind
 import dev.liftgate.service.ServiceSpec
 import dev.liftgate.service.Services
+import dev.liftgate.service.Volume
 import dev.liftgate.teardowns
 import dev.liftgate.testConfig
 import dev.liftgate.waitingLocks
@@ -297,6 +298,16 @@ class PreviewsTest {
         assertEquals(error, json.decodeFromString(ErrorBody.serializer(), refused.bodyAsText()))
         assertNull(preview(13))
         assertEquals(error.message, db.tx { PullRequests.selectAll().where { PullRequests.number eq 13 }.single()[PullRequests.error] })
+    }
+
+    @Test
+    fun `without a storage class a production service with a volume gets no preview`() = testApplication {
+        services.update(web.id, web.spec().copy(volume = Volume("/data", 1)))
+        application { liftgate(app) }
+        val refused = deliver(event("opened"))
+        assertEquals(HttpStatusCode.Conflict, refused.status)
+        assertEquals("storage_not_configured", json.decodeFromString(ErrorBody.serializer(), refused.bodyAsText()).error)
+        assertNull(preview())
     }
 
     @Test

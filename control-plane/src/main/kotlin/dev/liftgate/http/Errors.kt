@@ -34,3 +34,5 @@ fun orgSuspended(message: String = "this organization is suspended"): Nothing = 
 fun planLimit(message: String, field: String? = null): Nothing = throw LiftgateException(HttpStatusCode.Conflict, "plan_limit", message, field)
 
 fun githubNotConnected(): Nothing = throw LiftgateException(HttpStatusCode.Conflict, "github_not_connected", "connect GitHub to import a repository")
+
+fun storageNotConfigured(): Nothing = throw LiftgateException(HttpStatusCode.Conflict, "storage_not_configured", "volumes and databases need a storage class that enforces capacity, and this installation has none configured")

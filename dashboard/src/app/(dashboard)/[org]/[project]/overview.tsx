@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 import { useAction, useApi, useRole } from "@/lib/hooks";
 import type { AuthProviders, ProjectTree, Service, ServiceSpec } from "@/lib/types";
 import { formValues, platformHost } from "@/lib/util";
+import { DatabaseCard } from "@/components/database-card";
 import { EnvironmentCard } from "@/components/environment-card";
 import { Loaded } from "@/components/loaded";
 import { NameSlugFields } from "@/components/name-slug-fields";
@@ -25,7 +26,7 @@ export function Overview({ org, projectSlug, onboarding }: { org: string; projec
   const [dialog, setDialog] = useState<"environment" | "service" | "deploy" | undefined>(onboarding ? "deploy" : undefined);
   const [environmentId, setEnvironmentId] = useState<string>();
   const tree = useApi<ProjectTree>(`/orgs/${org}/projects/${projectSlug}/tree`);
-  const deployDomain = useApi<AuthProviders>("/auth/providers").data?.deployDomain;
+  const providers = useApi<AuthProviders>("/auth/providers").data;
   const project = tree.data?.project;
   const environments = tree.data?.environments;
   const environment = environments?.find((e) => e.id === environmentId) ?? environments?.[0];
@@ -97,15 +98,20 @@ export function Overview({ org, projectSlug, onboarding }: { org: string; projec
               action={admin && <Button onClick={() => setDialog("environment")}>New environment</Button>}
             />
           ) : (
-            list.map((environment) => (
-              <EnvironmentCard
-                key={environment.id}
-                environment={environment}
-                services={services.filter((s) => s.environmentId === environment.id)}
-                href={`${href}/${environment.slug}`}
-                onNewService={admin ? () => newService(environment.id) : undefined}
-              />
-            ))
+            list.map((environment) => {
+              const inEnvironment = services.filter((s) => s.environmentId === environment.id);
+              return (
+                <EnvironmentCard
+                  key={environment.id}
+                  environment={environment}
+                  services={inEnvironment}
+                  href={`${href}/${environment.slug}`}
+                  onNewService={admin ? () => newService(environment.id) : undefined}
+                >
+                  <DatabaseCard environment={environment} services={inEnvironment} admin={admin} storage={providers?.storage} />
+                </EnvironmentCard>
+              );
+            })
           )
         }
       </Loaded>
@@ -154,7 +160,7 @@ export function Overview({ org, projectSlug, onboarding }: { org: string; projec
             )
           }
           prefill={dialog === "deploy" ? project?.name : undefined}
-          hostFor={environment && deployDomain ? (slug) => platformHost({ service: slug, environment: environment.slug, project: projectSlug, org }, deployDomain) : undefined}
+          hostFor={environment && providers ? (slug) => platformHost({ service: slug, environment: environment.slug, project: projectSlug, org }, providers.deployDomain) : undefined}
           pending={createService.pending}
           error={createService.error}
           errorField={createService.field}

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import type { BuildStrategy, Service, ServiceKind, ServiceSpec } from "@/lib/types";
+import { useApi } from "@/lib/hooks";
+import type { AuthProviders, BuildStrategy, Service, ServiceKind, ServiceSpec } from "@/lib/types";
 import { formValues, servesHttp } from "@/lib/util";
 import { DocsLink } from "./docs-link";
 import { NameSlugFields } from "./name-slug-fields";
@@ -14,7 +15,7 @@ const kinds: ServiceKind[] = ["web", "worker", "cron", "static"];
 const strategies: BuildStrategy[] = ["auto", "dockerfile"];
 const insideRepo = String.raw`(?!(.*\/)?\.\.(\/|$))[A-Za-z0-9._\/\-]*`;
 const buildFields = ["dockerfilePath", "port", "healthCheckPath", "watchPaths"];
-const resourceFields = ["replicas", "cpuMillis", "memoryMb"];
+const resourceFields = ["replicas", "cpuMillis", "memoryMb", "volume", "storageGb"];
 
 const toSpec = (v: Record<string, string>): ServiceSpec => ({
   slug: v.slug,
@@ -31,6 +32,7 @@ const toSpec = (v: Record<string, string>): ServiceSpec => ({
   startCommand: v.startCommand || null,
   healthCheckPath: v.healthCheckPath || null,
   watchPaths: v.watchPaths.split("\n").map((path) => path.trim()).filter(Boolean),
+  volume: v.volumeMountPath ? { mountPath: v.volumeMountPath, sizeGb: Number(v.volumeSizeGb) } : null,
 });
 
 const watchPathsError = (text: string) => {
@@ -67,6 +69,8 @@ export function ServiceForm({
   const [kind, setKind] = useState<ServiceKind>(initial?.kind ?? "web");
   const [strategy, setStrategy] = useState<BuildStrategy>(initial?.buildStrategy ?? "auto");
   const [port, setPort] = useState(initial?.port?.toString() ?? "");
+  const [volumePath, setVolumePath] = useState(initial?.volume?.mountPath ?? "");
+  const storage = useApi<AuthProviders>("/auth/providers").data?.storage;
   const at = (field: string) => (errorField === field ? error : undefined);
   return (
     <form
@@ -167,10 +171,10 @@ export function ServiceForm({
           />
         </Field>
       </Section>
-      <Section title="Resources" hint="Replicas, CPU and memory" open={false} failed={!!errorField && resourceFields.includes(errorField)}>
+      <Section title="Resources" hint="Replicas, CPU, memory and a volume" open={false} failed={!!errorField && resourceFields.includes(errorField)}>
         <div className="grid gap-4 sm:grid-cols-3">
-          <Field label="Replicas" error={at("replicas")}>
-            <Input name="replicas" type="number" min={0} max={10} required defaultValue={initial?.replicas ?? 1} />
+          <Field label="Replicas" hint={volumePath ? "At most 1 with a volume" : undefined} error={at("replicas")}>
+            <Input name="replicas" type="number" min={0} max={volumePath ? 1 : 10} required defaultValue={initial?.replicas ?? 1} />
           </Field>
           <Field label="CPU (millicores)" error={at("cpuMillis")}>
             <Input name="cpuMillis" type="number" min={1} max={4000} required defaultValue={initial?.cpuMillis ?? 500} />
@@ -179,6 +183,37 @@ export function ServiceForm({
             <Input name="memoryMb" type="number" min={1} max={8192} required defaultValue={initial?.memoryMb ?? 512} />
           </Field>
         </div>
+        {storage || initial?.volume ? (
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="sm:col-span-2">
+              <Field
+                label="Volume path"
+                hint={initial?.volume ? "A volume can grow and stays until the service is deleted" : "Optional. Files here survive deploys, and the service restarts instead of rolling"}
+                error={at("volume")}
+              >
+                <Input
+                  name="volumeMountPath"
+                  placeholder="/data"
+                  pattern="\/.+"
+                  required={!!initial?.volume}
+                  value={volumePath}
+                  onChange={(e) => setVolumePath(e.target.value)}
+                  className="w-full font-mono"
+                />
+              </Field>
+            </div>
+            <Field label="Volume size (GB)" error={at("storageGb")}>
+              <Input name="volumeSizeGb" type="number" min={initial?.volume?.sizeGb ?? 1} max={100} required disabled={!volumePath} defaultValue={initial?.volume?.sizeGb ?? 1} />
+            </Field>
+          </div>
+        ) : (
+          storage === false && (
+            <p className="text-sm text-graphite-400">
+              Volumes need a storage class that enforces capacity, and this installation has none configured.{" "}
+              <DocsLink page="self-hosting">Storage in the self-hosting guide</DocsLink>
+            </p>
+          )
+        )}
       </Section>
       <FormError message={errorField ? undefined : error} />
       <div className="flex justify-end gap-2">

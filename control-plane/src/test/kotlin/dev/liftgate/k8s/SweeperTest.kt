@@ -6,6 +6,7 @@ import dev.liftgate.TestNats
 import dev.liftgate.admin.Admin
 import dev.liftgate.build.BUILD_LABEL
 import dev.liftgate.build.BuildJobs
+import dev.liftgate.database.Databases
 import dev.liftgate.db.Builds as BuildsTable
 import dev.liftgate.db.Deployments as DeploymentsTable
 import dev.liftgate.db.Outbox
@@ -94,6 +95,7 @@ class SweeperTest {
         every { it.builds } returns builds
         every { it.envVars } returns EnvVars(db, SecretBox(ByteArray(32)))
         every { it.domains } returns Domains(db, "liftgate.app")
+        every { it.databases } returns Databases(db)
     }
     private val sweeper by lazy { Sweeper(app, client) }
 

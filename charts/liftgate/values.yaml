@@ -171,6 +171,7 @@ allowUnsandboxedTenants: false
 workloads:
   nodeSelector: {}
   tolerations: []
+  storageClass: ""
 
 plans:
   free:
@@ -189,6 +190,7 @@ plans:
     buildsPerHour: 10
     egressBandwidth: 20M
     udp: false
+    storageGb: 5
   unlimited: {}
 
 defaultPlan: unlimited
@@ -199,3 +201,15 @@ inClusterRegistry:
   enabled: false
   clusterIP: ""
   storage: 20Gi
+
+databases:
+  backup:
+    enabled: false
+    endpointUrl: ""
+    destinationPath: ""
+    accessKeyId: ""
+    secretAccessKey: ""
+    region: us-east-1
+    retention: 30d
+    schedule: "0 0 3 * * *"
+    allowedEgressCidrs: []

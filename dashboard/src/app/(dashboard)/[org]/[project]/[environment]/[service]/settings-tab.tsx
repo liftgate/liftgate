@@ -47,7 +47,7 @@ export function SettingsTab({ service, projectHref, onChanged }: { service: Serv
       <Card>
         <CardHeader
           title={<span className="text-danger">Delete service</span>}
-          description="Removes the service with its deployments, variables and domains. This cannot be undone."
+          description={`Removes the service with its deployments, variables${service.volume ? ", domains and the files on its volume" : " and domains"}. This cannot be undone.`}
           actions={
             <Button variant="danger" onClick={() => setDeleting(true)}>
               Delete service
@@ -64,7 +64,7 @@ export function SettingsTab({ service, projectHref, onChanged }: { service: Serv
         onConfirm={() => remove.run()}
         onClose={() => setDeleting(false)}
       >
-        <span className="font-medium text-white">{service.name}</span> is removed with its deployments, variables and domains.
+        <span className="font-medium text-white">{service.name}</span> is removed with its deployments, variables{service.volume ? ", domains and the files on its volume" : " and domains"}.
       </ConfirmDialog>
     </div>
   );

@@ -1,6 +1,8 @@
 package dev.liftgate.org
 
 import dev.liftgate.TestDatabase
+import dev.liftgate.database.DatabaseSpec
+import dev.liftgate.database.Databases
 import dev.liftgate.db.Environments
 import dev.liftgate.db.Organizations
 import dev.liftgate.db.Projects as ProjectsTable
@@ -12,6 +14,7 @@ import dev.liftgate.project.Projects
 import dev.liftgate.service.ServiceKind
 import dev.liftgate.service.ServiceSpec
 import dev.liftgate.service.Services
+import dev.liftgate.service.Volume
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -34,7 +37,7 @@ import kotlin.test.assertFailsWith
 class LimitsTest {
     private val db = TestDatabase.clean()
     private val free = Plan(
-        ownedOrgs = 1, projects = 1, environmentsPerProject = 2, services = 2, cpuMillis = 1000, memoryMb = 1024, replicas = 3, customDomains = 1,
+        ownedOrgs = 1, projects = 1, environmentsPerProject = 2, services = 2, cpuMillis = 1000, memoryMb = 1024, replicas = 3, customDomains = 1, storageGb = 10,
     )
     private val limits = Limits(Plans(mapOf("free" to free, "unlimited" to Plan()), "free"), customDomainsMax = 2)
     private val orgs = Orgs(db, limits)
@@ -156,8 +159,44 @@ class LimitsTest {
         services.create(production, spec("api"))
         domains.addCustom(web.id, "app.acme.dev")
         val orgId = requireNotNull(orgs.bySlug("acme")).id
-        assertEquals(Usage("free", free, 1, 2, 1, 3, 1000, 1024), orgs.usage(orgId))
+        assertEquals(Usage("free", free, 1, 2, 1, 3, 1000, 1024, 0), orgs.usage(orgId))
         db.tx { Organizations.update({ Organizations.id eq orgId }) { it[plan] = "unlimited" } }
-        assertEquals(Usage("unlimited", Plan(), 1, 2, 1, 3, 1000, 1024), orgs.usage(orgId))
+        assertEquals(Usage("unlimited", Plan(), 1, 2, 1, 3, 1000, 1024, 0), orgs.usage(orgId))
+    }
+
+    @Test
+    fun `volumes and databases share the storage limit, and a database reserves cpu and memory as one pod`() = runBlocking {
+        val production = production("acme")
+        val databases = Databases(db, limits)
+        val web = services.create(production, spec("web", cpuMillis = 250, memoryMb = 256).copy(volume = Volume("/data", 6)))
+        assertEquals(
+            "the free plan's storage limit is 10 GB across the organization, and this change needs 11 GB",
+            refused { databases.create(production, DatabaseSpec("main", storageGb = 5, cpuMillis = 250, memoryMb = 256)) },
+        )
+        databases.create(production, DatabaseSpec("main", storageGb = 4, cpuMillis = 250, memoryMb = 256))
+        assertEquals(
+            "the free plan's storage limit is 10 GB across the organization, and this change needs 11 GB",
+            refused { services.update(web.id, spec("web", cpuMillis = 250, memoryMb = 256).copy(volume = Volume("/data", 7))) },
+        )
+        assertEquals(
+            "the free plan's CPU limit is 1000m across the organization, and this change needs 1100m",
+            refused { databases.create(production, DatabaseSpec("events", storageGb = 0, cpuMillis = 600, memoryMb = 256)) },
+        )
+        assertEquals(Usage("free", free, 1, 1, 0, 2, 500, 512, 10), orgs.usage(requireNotNull(orgs.bySlug("acme")).id))
+    }
+
+    @Test
+    fun `with backups a database also reserves its backup sidecar, so the quota still fits a surge pod`() = runBlocking {
+        val production = production("acme")
+        val backups = Limits(Plans(mapOf("free" to free), "free"), backups = true)
+        val services = Services(db, backups)
+        val web = services.create(production, spec("web", cpuMillis = 250, memoryMb = 768))
+        assertEquals(
+            "the free plan's memory limit is 1024 MB across the organization, and this change needs 1536 MB",
+            refused { Databases(db, backups).create(production, DatabaseSpec("main", cpuMillis = 100, memoryMb = 256)) },
+        )
+        services.update(web.id, spec("web", cpuMillis = 250, memoryMb = 256))
+        Databases(db, backups).create(production, DatabaseSpec("main", cpuMillis = 100, memoryMb = 256))
+        assertEquals(Usage("free", free, 1, 1, 0, 2, 550, 1024, 1), Orgs(db, backups).usage(requireNotNull(orgs.bySlug("acme")).id))
     }
 }

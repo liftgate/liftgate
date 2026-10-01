@@ -4,6 +4,7 @@ import dev.liftgate.App
 import dev.liftgate.TestDatabase
 import dev.liftgate.TestNats
 import dev.liftgate.admin.Admin
+import dev.liftgate.database.Databases
 import dev.liftgate.deploy.Builds
 import dev.liftgate.deploy.DeploymentStatus
 import dev.liftgate.deploy.Deployments
@@ -73,6 +74,7 @@ class SuspensionTest {
         every { it.builds } returns builds
         every { it.envVars } returns EnvVars(db, SecretBox(ByteArray(32)))
         every { it.domains } returns Domains(db, "liftgate.app")
+        every { it.databases } returns Databases(db)
     }
     private val requests = ConcurrentLinkedQueue<Triple<String, String, String>>()
     private lateinit var namespace: String

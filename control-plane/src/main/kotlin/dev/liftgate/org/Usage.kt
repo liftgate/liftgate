@@ -16,4 +16,5 @@ data class Usage(
     val replicas: Int,
     val cpuMillis: Int,
     val memoryMb: Int,
+    val storageGb: Int,
 )

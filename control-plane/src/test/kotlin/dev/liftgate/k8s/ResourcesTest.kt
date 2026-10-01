@@ -1,12 +1,17 @@
 package dev.liftgate.k8s
 
+import dev.liftgate.config.DatabaseBackupConfig
+import dev.liftgate.database.Database
+import dev.liftgate.database.DatabaseScope
 import dev.liftgate.org.Plan
 import dev.liftgate.service.ServiceKind
+import dev.liftgate.service.Volume
 import io.fabric8.kubernetes.api.model.PodSpec
 import io.fabric8.kubernetes.api.model.Quantity
 import io.fabric8.kubernetes.api.model.TolerationBuilder
 import java.time.Instant
 import java.util.Base64
+import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -29,6 +34,10 @@ class ResourcesTest {
     )
     private val serviceLabels = environmentLabels + mapOf("liftgate.dev/service" to "api", "liftgate.dev/service-id" to testService.id.toString())
     private val deploymentLabels = serviceLabels + ("liftgate.dev/deployment" to testDeployment.id.toString())
+    private val database = Database(UUID.randomUUID(), testEnvironment.id, "main", 2, 500, 512, null, null, Instant.now())
+    private val databaseScope = DatabaseScope(database, testEnvironment, testProject, testOrg, free)
+    private val databaseLabels = environmentLabels + ("liftgate.dev/database-id" to database.id.toString())
+    private val backup = DatabaseBackupConfig("s3://tenants/", "http://garage.example.com:3900", "key", "secret", "garage", "30d", "0 0 3 * * *", listOf("192.0.2.10/32" to 3900))
 
     @Test
     fun `namespace is named after the environment and enforces the restricted profile`() {
@@ -317,6 +326,97 @@ class ResourcesTest {
         assertEquals(true, Resources.cronJob(suspended, null).spec.suspend)
         assertFalse(suspended.routable)
         assertEquals(false, Resources.cronJob(release, null).spec.suspend)
+    }
+
+    @Test
+    fun `a service with a volume renders the claim, mounts it and recreates its single replica`() {
+        val volumed = testRelease(testService.copy(replicas = 1, volume = Volume("/data", 5)))
+        val claim = requireNotNull(Resources.volumeClaim(volumed, "topolvm-provisioner"))
+        assertEquals("api-data" to release.namespace, claim.metadata.name to claim.metadata.namespace)
+        assertEquals(serviceLabels, claim.metadata.labels)
+        assertEquals(listOf("ReadWriteOnce"), claim.spec.accessModes)
+        assertEquals("topolvm-provisioner" to Quantity("5Gi"), claim.spec.storageClassName to claim.spec.resources.requests["storage"])
+
+        val deployment = Resources.deployment(volumed, null)
+        assertEquals("Recreate", deployment.spec.strategy.type)
+        assertNull(deployment.spec.strategy.rollingUpdate)
+        val pod = deployment.spec.template.spec
+        assertEquals("api-data", pod.volumes.single().persistentVolumeClaim.claimName)
+        assertEquals(1000L, pod.securityContext.fsGroup)
+        assertEquals(pod.volumes.single().name to "/data", pod.containers.single().volumeMounts.single().let { it.name to it.mountPath })
+        assertEquals("api-data", Resources.cronJob(volumed, null).spec.jobTemplate.spec.template.spec.volumes.single().persistentVolumeClaim.claimName)
+
+        assertNull(Resources.volumeClaim(release, null))
+        assertTrue(Resources.deployment(release, null).spec.template.spec.volumes.isNullOrEmpty())
+    }
+
+    @Test
+    fun `a linked database reaches the container as a reference to its app secret, never as a value`() {
+        val env = Resources.deployment(release.copy(links = mapOf("DATABASE_URL" to "main", "EVENTS_URL" to "events")), null).spec.template.spec.containers.single().env
+        assertEquals(
+            listOf(Triple("DATABASE_URL", "main-app", "uri"), Triple("EVENTS_URL", "events-app", "uri")),
+            env.filter { it.valueFrom != null }.map { Triple(it.name, it.valueFrom.secretKeyRef.name, it.valueFrom.secretKeyRef.key) },
+        )
+        assertTrue(env.all { it.value == null || it.name == "PORT" })
+    }
+
+    @Test
+    fun `a database is one cloudnative-pg cluster sized by its spec and plan, labelled for the environment and archiving its wal`() {
+        val cluster = Resources.cluster(databaseScope, backup, "topolvm-provisioner")
+        val spec = cluster.additionalProperties.getValue("spec") as Map<*, *>
+        assertEquals(listOf("postgresql.cnpg.io/v1", "Cluster", "main", release.namespace), listOf(cluster.apiVersion, cluster.kind, cluster.metadata.name, cluster.metadata.namespace))
+        assertEquals(databaseLabels, cluster.metadata.labels)
+        assertEquals(mapOf("labels" to databaseLabels), spec["inheritedMetadata"])
+        assertEquals(1, spec["instances"])
+        assertEquals(mapOf("size" to "2Gi", "storageClass" to "topolvm-provisioner"), spec["storage"])
+        val limits = mapOf("cpu" to "500m", "memory" to "512Mi", "ephemeral-storage" to "1024Mi")
+        assertEquals(mapOf("requests" to limits + ("cpu" to "125m"), "limits" to limits), spec["resources"])
+        assertEquals(mapOf("initdb" to mapOf("database" to "app", "owner" to "app")), spec["bootstrap"])
+        assertEquals(
+            listOf(mapOf("name" to "barman-cloud.cloudnative-pg.io", "parameters" to mapOf("barmanObjectName" to "liftgate-backup", "serverName" to database.id.toString()), "isWALArchiver" to true)),
+            spec["plugins"],
+        )
+        assertNull(spec["externalClusters"])
+        assertNull((Resources.cluster(databaseScope, null, null).additionalProperties["spec"] as Map<*, *>)["plugins"])
+    }
+
+    @Test
+    fun `a restored database recovers from its source's archive up to the point in time and archives under its own id`() {
+        val source = UUID.randomUUID()
+        val restored = databaseScope.copy(database = database.copy(restoredFrom = source, restoreTarget = Instant.parse("2026-09-30T12:00:00Z")))
+        val spec = Resources.cluster(restored, backup, null).additionalProperties.getValue("spec") as Map<*, *>
+        assertEquals(mapOf("recovery" to mapOf("source" to "origin", "recoveryTarget" to mapOf("targetTime" to "2026-09-30T12:00:00Z"))), spec["bootstrap"])
+        assertEquals(
+            listOf(mapOf("name" to "origin", "plugin" to mapOf("name" to "barman-cloud.cloudnative-pg.io", "parameters" to mapOf("barmanObjectName" to "liftgate-backup", "serverName" to source.toString())))),
+            spec["externalClusters"],
+        )
+        assertEquals(database.id.toString(), (((spec["plugins"] as List<*>).single() as Map<*, *>)["parameters"] as Map<*, *>)["serverName"])
+    }
+
+    @Test
+    fun `backups go to a folder per namespace with credentials from a secret beside the cluster, daily and once right away`() {
+        val configuration = (Resources.objectStore(databaseScope, backup).additionalProperties.getValue("spec") as Map<*, *>)["configuration"] as Map<*, *>
+        assertEquals("s3://tenants/${release.namespace}" to "http://garage.example.com:3900", configuration["destinationPath"] to configuration["endpointURL"])
+        assertEquals(mapOf("name" to BACKUP_STORE, "key" to "ACCESS_KEY_ID"), (configuration["s3Credentials"] as Map<*, *>)["accessKeyId"])
+        val secret = Resources.backupSecret(databaseScope, backup)
+        assertEquals(BACKUP_STORE to release.namespace, secret.metadata.name to secret.metadata.namespace)
+        assertEquals(mapOf("ACCESS_KEY_ID" to "key", "ACCESS_SECRET_KEY" to "secret", "ACCESS_REGION" to "garage"), secret.data.mapValues { String(Base64.getDecoder().decode(it.value)) })
+        val scheduled = Resources.scheduledBackup(databaseScope, backup)
+        val spec = scheduled.additionalProperties.getValue("spec") as Map<*, *>
+        assertEquals(databaseLabels, scheduled.metadata.labels)
+        assertEquals(listOf("0 0 3 * * *", true, "cluster", mapOf("name" to "main"), "plugin"), listOf("schedule", "immediate", "backupOwnerReference", "cluster", "method").map { spec[it] })
+    }
+
+    @Test
+    fun `database pods accept the operator and reach the backup store beyond their environment`() {
+        val policy = Resources.databasePolicy(databaseScope, backup.egress)
+        assertEquals("allow-databases" to release.namespace, policy.metadata.name to policy.metadata.namespace)
+        assertEquals(DATABASE_ID_LABEL to "Exists", policy.spec.podSelector.matchExpressions.single().let { it.key to it.operator })
+        val ingress = policy.spec.ingress.single()
+        assertEquals(mapOf("app.kubernetes.io/name" to "cloudnative-pg"), ingress.from.single().podSelector.matchLabels)
+        assertEquals(setOf(5432, 8000), ingress.ports.map { it.port.intVal }.toSet())
+        val egress = policy.spec.egress.single()
+        assertEquals("192.0.2.10/32" to 3900, egress.to.single().ipBlock.cidr to egress.ports.single().port.intVal)
     }
 
     private fun assertRestricted(pod: PodSpec) {

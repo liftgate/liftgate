@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import type { Environment, Service } from "@/lib/types";
 import { shortSha, timeAgo } from "@/lib/util";
 import { StatusBadge } from "./ui/badge";
@@ -7,7 +8,19 @@ import { Card, CardHeader } from "./ui/card";
 import { EmptyState } from "./ui/empty-state";
 import { Cell, Row, Table } from "./ui/table";
 
-export function EnvironmentCard({ environment, services, href, onNewService }: { environment: Environment; services: Service[]; href: string; onNewService?: () => void }) {
+export function EnvironmentCard({
+  environment,
+  services,
+  href,
+  onNewService,
+  children,
+}: {
+  environment: Environment;
+  services: Service[];
+  href: string;
+  onNewService?: () => void;
+  children?: ReactNode;
+}) {
   return (
     <Card>
       <CardHeader
@@ -57,6 +70,7 @@ export function EnvironmentCard({ environment, services, href, onNewService }: {
           </Table>
         )}
       </div>
+      {children}
     </Card>
   );
 }

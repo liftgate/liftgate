@@ -1,6 +1,8 @@
 package dev.liftgate.org
 
 import dev.liftgate.auth.OrgRole
+import dev.liftgate.database.DatabaseSpec
+import dev.liftgate.db.Databases
 import dev.liftgate.db.Domains
 import dev.liftgate.db.Environments
 import dev.liftgate.db.Memberships
@@ -11,6 +13,7 @@ import dev.liftgate.db.Users
 import dev.liftgate.db.sql
 import dev.liftgate.domain.DomainKind
 import dev.liftgate.http.planLimit
+import dev.liftgate.k8s.Resources
 import dev.liftgate.service.ServiceKind
 import dev.liftgate.service.ServiceSpec
 import dev.liftgate.service.toService
@@ -26,13 +29,13 @@ import org.jetbrains.exposed.v1.jdbc.transactions.TransactionManager
 import java.util.UUID
 
 private const val CUSTOM_DOMAINS_LOCK = 7_261_696_401L
-private val resources = listOf(Triple("replicas", "replicas", ""), Triple("cpuMillis", "CPU", "m"), Triple("memoryMb", "memory", " MB"))
+private val resources = listOf(Triple("replicas", "replicas", ""), Triple("cpuMillis", "CPU", "m"), Triple("memoryMb", "memory", " MB"), Triple("storageGb", "storage", " GB"))
 
 /**
  * @author Dean
  * @date 9/27/2026
  */
-class Limits(private val plans: Plans = Plans(), private val customDomainsMax: Int? = null) {
+class Limits(private val plans: Plans = Plans(), private val customDomainsMax: Int? = null, private val backups: Boolean = false) {
     fun ownedOrgs(ownerId: UUID) {
         Users.select(Users.id).where { Users.id eq ownerId }.forUpdate().toList()
         val owned = Memberships.selectAll().where { (Memberships.userId eq ownerId) and (Memberships.role eq OrgRole.OWNER.sql) }.count().toInt()
@@ -57,18 +60,23 @@ class Limits(private val plans: Plans = Plans(), private val customDomainsMax: I
     }
 
     fun service(environmentId: UUID, spec: ServiceSpec) {
-        val orgId = (Environments innerJoin Projects).select(Projects.orgId).where { Environments.id eq environmentId }.single()[Projects.orgId]
+        val orgId = orgOfEnvironment(environmentId)
         val (name, plan) = lock(orgId)
         val specs = specs(orgId)
         count(name, plan.services, "services", specs.size)
-        reserve(name, plan, specs.values, specs.values + spec)
+        reserve(name, plan, footprints(orgId, specs), UUID.randomUUID(), spec.footprint)
     }
 
     fun resize(serviceId: UUID, spec: ServiceSpec) {
         val orgId = orgOfService(serviceId)
         val (name, plan) = lock(orgId)
-        val specs = specs(orgId)
-        reserve(name, plan, specs.values, (specs - serviceId).values + spec)
+        reserve(name, plan, footprints(orgId), serviceId, spec.footprint)
+    }
+
+    fun database(environmentId: UUID, spec: DatabaseSpec) {
+        val orgId = orgOfEnvironment(environmentId)
+        val (name, plan) = lock(orgId)
+        reserve(name, plan, footprints(orgId), UUID.randomUUID(), databaseFootprint(spec.cpuMillis, spec.memoryMb, spec.storageGb))
     }
 
     fun customDomain(serviceId: UUID) {
@@ -83,15 +91,17 @@ class Limits(private val plans: Plans = Plans(), private val customDomainsMax: I
 
     fun usage(orgId: UUID): Usage {
         val name = plans.name(Organizations.select(Organizations.plan).where { Organizations.id eq orgId }.single()[Organizations.plan])
-        val specs = specs(orgId).values
-        val (replicas, cpuMillis, memoryMb) = reserved(specs)
-        return Usage(name, plans.of(name), projects(orgId), specs.size, customDomains(orgId), replicas, cpuMillis, memoryMb)
+        val specs = specs(orgId)
+        val (replicas, cpuMillis, memoryMb, storageGb) = footprints(orgId, specs).values.total()
+        return Usage(name, plans.of(name), projects(orgId), specs.size, customDomains(orgId), replicas, cpuMillis, memoryMb, storageGb)
     }
 
     private fun lock(orgId: UUID): Pair<String, Plan> {
         val name = plans.name(Organizations.select(Organizations.plan).where { Organizations.id eq orgId }.forUpdate().single()[Organizations.plan])
         return name to plans.of(name)
     }
+
+    private fun orgOfEnvironment(environmentId: UUID) = (Environments innerJoin Projects).select(Projects.orgId).where { Environments.id eq environmentId }.single()[Projects.orgId]
 
     private fun orgOfService(serviceId: UUID) =
         (Services innerJoin Environments innerJoin Projects).select(Projects.orgId).where { Services.id eq serviceId }.single()[Projects.orgId]
@@ -106,15 +116,22 @@ class Limits(private val plans: Plans = Plans(), private val customDomainsMax: I
         .where { Projects.orgId eq orgId }
         .associate { it[Services.id] to it.toService().spec() }
 
-    private val ServiceSpec.pods get() = if (kind == ServiceKind.CRON) 1 else replicas
+    private fun footprints(orgId: UUID, specs: Map<UUID, ServiceSpec> = specs(orgId)) = specs.mapValues { it.value.footprint } +
+        (Databases innerJoin Environments innerJoin Projects).select(Databases.id, Databases.cpuMillis, Databases.memoryMb, Databases.storageGb)
+            .where { Projects.orgId eq orgId }
+            .associate { it[Databases.id] to databaseFootprint(it[Databases.cpuMillis], it[Databases.memoryMb], it[Databases.storageGb]) }
 
-    private fun reserved(specs: Collection<ServiceSpec>) =
-        Triple(specs.sumOf { it.pods }, specs.sumOf { it.pods * it.cpuMillis }, specs.sumOf { it.pods * it.memoryMb })
+    private fun databaseFootprint(cpuMillis: Int, memoryMb: Int, storageGb: Int) =
+        if (backups) listOf(1, cpuMillis + Resources.SIDECAR_CPU_MILLIS, memoryMb + Resources.SIDECAR_MEMORY_MB, storageGb) else listOf(1, cpuMillis, memoryMb, storageGb)
 
-    private fun reserve(name: String, plan: Plan, before: Collection<ServiceSpec>, after: Collection<ServiceSpec>) {
-        val was = reserved(before).toList()
-        val will = reserved(after).toList()
-        listOf(plan.replicas, plan.cpuMillis, plan.memoryMb).forEachIndexed { i, limit ->
+    private val ServiceSpec.footprint get() = (if (kind == ServiceKind.CRON) 1 else replicas).let { listOf(it, it * cpuMillis, it * memoryMb, volume?.sizeGb ?: 0) }
+
+    private fun Collection<List<Int>>.total() = resources.indices.map { i -> sumOf { it[i] } }
+
+    private fun reserve(name: String, plan: Plan, current: Map<UUID, List<Int>>, id: UUID, footprint: List<Int>) {
+        val was = current.values.total()
+        val will = (current + (id to footprint)).values.total()
+        listOf(plan.replicas, plan.cpuMillis, plan.memoryMb, plan.storageGb).forEachIndexed { i, limit ->
             val (field, label, unit) = resources[i]
             if (limit != null && will[i] > limit && will[i] > was[i]) planLimit("the $name plan's $label limit is $limit$unit across the organization, and this change needs ${will[i]}$unit", field)
         }

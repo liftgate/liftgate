@@ -10,9 +10,11 @@ import dev.liftgate.service.ServiceSpec
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
+import org.junit.jupiter.api.assertTimeoutPreemptively
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.MethodSource
 import java.io.File
+import java.time.Duration
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -293,5 +295,24 @@ class DetectorTest {
         assertEquals(10, detection.services.size)
         assertEquals(41, detection.directories.size)
         assertTrue(detection.partial)
+    }
+
+    @Test
+    fun `hostile files and a huge tree are read in linear time`() {
+        val blank = "\n".repeat(64_000)
+        val files = mapOf(
+            "package.json" to """{"workspaces":["${"*".repeat(60_000)}"]}""",
+            "pnpm-workspace.yaml" to "packages:\n  - '**a**a**a**a**a**a**b'",
+            "Dockerfile" to "${blank}x",
+            "apps/health/Dockerfile" to "HEALTHCHECK ${"curl ".repeat(12_800)}",
+            "apps/fly/index.html" to "",
+            "apps/fly/fly.toml" to "[[http_service.checks]]\nx${blank}y",
+            "apps/rail/index.html" to "",
+            "apps/rail/railway.toml" to blank,
+            "apps/ruby/Gemfile" to blank,
+            "apps/rust/Cargo.toml" to blank,
+            "apps/${"a".repeat(80)}/package.json" to "{}",
+        ) + (1..20).associate { "apps/$it${"b".repeat(250)}/package.json" to "{}" } + (1..10_000).associate { "z/$it/index.html" to "" }
+        assertTimeoutPreemptively(Duration.ofSeconds(1)) { detect(files) }
     }
 }

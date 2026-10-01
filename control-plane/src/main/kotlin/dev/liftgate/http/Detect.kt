@@ -17,8 +17,6 @@ private val log = LoggerFactory.getLogger(Detector::class.java)
 suspend fun App.detect(installationId: Long, repoFullName: String, ref: String): Detection {
     val github = github ?: conflict("the GitHub App is not configured")
     var head: Detection.Commit? = null
-    var listing: Pair<List<String>, Boolean>? = null
-    var files = emptyMap<String, String>()
     val detection = try {
         withTimeoutOrNull(budget) {
             val token = github.installationToken(installationId, repoFullName.substringAfter('/'))
@@ -26,11 +24,10 @@ suspend fun App.detect(installationId: Long, repoFullName: String, ref: String):
             head = Detection.Commit(commit.sha, commit.message?.lineSequence()?.first())
             val key = "$repoFullName@${commit.sha}"
             cache.detections[key]?.let { runCatching { json.decodeFromString(Detection.serializer(), it) }.getOrNull() } ?: run {
-                val (paths, truncated) = github.tree(token, repoFullName, commit.treeSha).also { listing = it }
-                files = github.files(token, repoFullName, commit.sha, Detector.wanted(paths))
-                Detector.detect(repoFullName, paths, files, truncated).also { if (!it.partial) cache.detections[key] = json.encodeToString(Detection.serializer(), it) }
+                val (paths, truncated) = github.tree(token, repoFullName, commit.treeSha)
+                Detector.detect(repoFullName, paths, github.files(token, repoFullName, commit.sha, Detector.wanted(paths)), truncated).also { if (!it.partial) cache.detections[key] = json.encodeToString(Detection.serializer(), it) }
             }
-        } ?: listing?.let { (paths, truncated) -> Detector.detect(repoFullName, paths, files, truncated).copy(partial = true) } ?: unread(repoFullName)
+        } ?: unread(repoFullName)
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {

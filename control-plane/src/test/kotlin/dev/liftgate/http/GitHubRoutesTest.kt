@@ -34,6 +34,7 @@ import java.util.Collections
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -48,6 +49,7 @@ class GitHubRoutesTest {
     private val user = User(UUID.randomUUID(), "dean", null, null, null)
     private val sha = UUID.randomUUID().toString().replace("-", "")
     private val requests = Collections.synchronizedList(mutableListOf<HttpRequestData>())
+    private var blobs = """{"data":{"repository":{"p0":{"text":"{\"dependencies\":{\"next\":\"16\"}}","byteSize":30},"p1":{"text":"DATABASE_URL=postgres://u:p@h/db","byteSize":33}}}}"""
     private val github = GitHubApp(
         GitHubConfig("12345", TestKeys.privateKeyPem),
         HttpClient(MockEngine { request ->
@@ -64,9 +66,7 @@ class GitHubRoutesTest {
                 request.url.encodedPath == "/app/installations/42/access_tokens" -> respond("""{"token":"ghs_token"}""", HttpStatusCode.Created, headers)
                 request.url.encodedPath == "/repos/acme/shop/commits/main" -> ok("""{"sha":"$sha","commit":{"message":"ship it\n\nwith a body","tree":{"sha":"t1"}}}""")
                 request.url.encodedPath == "/repos/acme/shop/git/trees/t1" -> ok("""{"tree":[{"path":".env.example","type":"blob"},{"path":"package.json","type":"blob"}]}""")
-                request.url.encodedPath == "/graphql" -> ok(
-                    """{"data":{"repository":{"p0":{"text":"{\"dependencies\":{\"next\":\"16\"}}","byteSize":30},"p1":{"text":"DATABASE_URL=postgres://u:p@h/db","byteSize":33}}}}""",
-                )
+                request.url.encodedPath == "/graphql" -> ok(blobs)
                 request.url.encodedPath.startsWith("/repos/acme/broken/") -> respond("""{"message":"Server Error"}""", HttpStatusCode.InternalServerError, headers)
                 else -> ok(
                     """{"repositories":[{"full_name":"acme/shop","default_branch":"main","private":true,"permissions":{"push":true}},{"full_name":"acme/docs","default_branch":"main","permissions":{"push":false}}]}""",
@@ -154,12 +154,16 @@ class GitHubRoutesTest {
     }
 
     @Test
-    fun `a github failure answers 200 with a partial detection and a warning`() = testApplication {
+    fun `a github failure or a graphql error answers 200 with a partial detection, a warning and nothing cached`() = testApplication {
         every { app.cache } returns cache
         application { liftgate(app) }
-        val response = detect("acme/broken")
-        assertEquals(HttpStatusCode.OK, response.status)
-        val detection = json.decodeFromString(Detection.serializer(), response.bodyAsText())
-        assertEquals(Triple(true, emptyList(), listOf("Couldn't read acme/broken, so nothing was detected. Railpack will still detect the stack during the build.")), Triple(detection.partial, detection.services, detection.warnings))
+        blobs = """{"data":null,"errors":[{"message":"Something went wrong while executing your query."}]}"""
+        listOf("acme/broken", "acme/shop").forEach { repo ->
+            val response = detect(repo)
+            assertEquals(HttpStatusCode.OK, response.status)
+            val detection = json.decodeFromString(Detection.serializer(), response.bodyAsText())
+            assertEquals(Triple(true, emptyList(), listOf("Couldn't read $repo, so nothing was detected. Railpack will still detect the stack during the build.")), Triple(detection.partial, detection.services, detection.warnings))
+        }
+        assertNull(cache.detections["acme/shop@$sha"])
     }
 }

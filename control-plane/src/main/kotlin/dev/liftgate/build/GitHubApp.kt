@@ -23,6 +23,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import java.time.Instant
@@ -80,7 +81,7 @@ class GitHubApp(private val config: GitHubConfig, private val client: HttpClient
             github(installationToken)
             contentType(ContentType.Application.Json)
             setBody(buildJsonObject { put("query", query); put("variables", variables) })
-        }.body<Blobs>().data?.repository.orEmpty()
+        }.body<Blobs>().takeIf { it.errors == null }?.data?.repository ?: error("the GraphQL file query returned no repository")
         return paths.withIndex().mapNotNull { (i, path) -> blobs[aliases[i]]?.takeIf { !it.isBinary && it.byteSize <= MAX_BLOB_BYTES }?.text?.let { path to it } }.toMap()
     }
 
@@ -217,7 +218,7 @@ class GitHubApp(private val config: GitHubConfig, private val client: HttpClient
     }
 
     @Serializable
-    private data class Blobs(val data: Data? = null) {
+    private data class Blobs(val data: Data? = null, val errors: JsonArray? = null) {
         @Serializable
         data class Data(val repository: Map<String, Blob?>? = null)
 

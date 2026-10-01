@@ -1,5 +1,6 @@
 package dev.liftgate.build
 
+import dev.liftgate.http.MAX_WATCH_PATHS
 import dev.liftgate.http.envVarName
 import dev.liftgate.http.json
 import dev.liftgate.service.ServiceKind
@@ -21,7 +22,8 @@ object Detector {
     private const val MAX_DIRECTORIES = 50
     private const val MAX_DEPTH = 3
     private const val MAX_DESCRIPTION = 120
-    private const val MAX_WATCH_PATHS = 20
+    private const val MAX_GLOBS = 50
+    private const val MAX_GLOB_LENGTH = 100
     private const val RAILPACK = "railpack"
     private const val DOCKERFILE = "dockerfile"
     private const val CADDY = "Caddy"
@@ -70,7 +72,7 @@ object Detector {
             commit = null,
             partial = truncated,
             services = found.map { it.copy(selected = (found.size == 1 || it.selected) && (it.builder == DOCKERFILE || it.framework?.id !in setOf("java", "spring-boot"))) },
-            directories = dirs.take(MAX_DIRECTORIES).map { Detection.Directory(it.ifEmpty { "/" }, rows[it]?.firstOrNull()?.framework?.id) },
+            directories = dirs.map { Detection.Directory(it.ifEmpty { "/" }, rows[it]?.firstOrNull()?.framework?.id) },
             warnings = listOfNotNull("$repo commits a .env file. Liftgate didn't read it; rotate any secrets it holds.".takeIf { paths.any { name(it) in committedEnv } }),
         )
     }
@@ -78,7 +80,7 @@ object Detector {
     private fun candidates(paths: Collection<String>): List<String> =
         (listOf("") + paths.filter { name(it) in markers || name(it).endsWith(".csproj") }.map(::parent).filter { dir ->
             dir.split('/').let { segments -> segments.size <= MAX_DEPTH && segments.withIndex().none { (i, segment) -> segment.startsWith(".") || (segment in skipped && !(i == 1 && segments[0] == "apps")) } }
-        }).distinct().sortedWith(compareBy({ it.isNotEmpty() }, { !it.startsWith("apps/") }, { it }))
+        }).distinct().sortedWith(compareBy({ it.isNotEmpty() }, { !it.startsWith("apps/") }, { it })).take(MAX_DIRECTORIES)
 
     private fun Tree.rows(repo: String, dir: String, workspace: Workspace?): List<DetectedService> {
         val member = workspace?.members?.get(dir)
@@ -122,10 +124,10 @@ object Detector {
     private fun Tree.dockerfile(dir: String, file: String, label: DetectedService?): DetectedService? {
         if (!has(dir, file)) return null
         val text = text(dir, file).orEmpty().replace(Regex("""\\\r?\n"""), " ")
-        val exposed = Regex("""(?im)^\s*EXPOSE\s+(\d+)""").findAll(text).mapNotNull { validPort(it.groupValues[1]) }.toSet()
-        val port = exposed.singleOrNull() ?: Regex("""(?im)^\s*ENV\s+PORT[=\s]+["']?(\d+)""").find(text)?.groupValues?.get(1)?.let(::validPort)
-        val health = Regex("""(?im)^\s*HEALTHCHECK\b.*\b(?:curl|wget)\b.*?https?://(?:localhost|127\.0\.0\.1)(?::\d+)?(/[^\s"'|&;)]*)""").find(text)?.groupValues?.get(1)
-        val development = file.endsWith(".dev") || Regex("""(?im)^\s*(?:CMD|ENTRYPOINT)\b.*(?:npm run dev|--reload|nodemon)""").containsMatchIn(text)
+        val exposed = Regex("""(?im)^[ \t]*EXPOSE[ \t]+(\d+)""").findAll(text).mapNotNull { validPort(it.groupValues[1]) }.toSet()
+        val port = exposed.singleOrNull() ?: Regex("""(?im)^[ \t]*ENV[ \t]+PORT[= \t]+["']?(\d+)""").find(text)?.groupValues?.get(1)?.let(::validPort)
+        val health = Regex("""(?im)^[ \t]*HEALTHCHECK\b(?>.*?\b(?:curl|wget)\b).*?https?://(?:localhost|127\.0\.0\.1)(?::\d+)?(/[^\s"'|&;)]*)""").find(text)?.groupValues?.get(1)
+        val development = file.endsWith(".dev") || Regex("""(?im)^[ \t]*(?:CMD|ENTRYPOINT)\b.*(?:npm run dev|--reload|nodemon)""").containsMatchIn(text)
         val framework = label?.framework ?: fw(DOCKERFILE, "Dockerfile")
         val kind = if (label?.spec?.kind == ServiceKind.WORKER) ServiceKind.WORKER else ServiceKind.WEB
         return DetectedService(
@@ -171,7 +173,7 @@ object Detector {
 
     private fun Tree.rust(dir: String): DetectedService? {
         if (!has(dir, "Cargo.toml")) return null
-        val crate = Regex("""(?m)^\s*name\s*=\s*"([^"]+)"""").find(text(dir, "Cargo.toml").orEmpty())?.groupValues?.get(1)
+        val crate = Regex("""(?m)^[ \t]*name[ \t]*=[ \t]*"([^"]+)"""").find(text(dir, "Cargo.toml").orEmpty())?.groupValues?.get(1)
         val port = text(dir, "src/main.rs")?.takeIf { "env::var(\"PORT\"" !in it }
             ?.let { Regex(""""[^"\s]*:(\d{2,5})"|]\s*,\s*(\d{2,5})\s*\)""").find(it)?.groupValues?.drop(1)?.firstOrNull(String::isNotEmpty)?.let(::validPort) }
         return row(fw("rust", "Rust"), from("Cargo.toml"), port = port, start = crate?.let { "./bin/$it" }, specific = false)
@@ -179,7 +181,7 @@ object Detector {
 
     private fun Tree.ruby(dir: String): DetectedService? {
         if (!has(dir, "Gemfile")) return null
-        val rails = Regex("""(?m)^\s*gem\s+["']rails["']""").containsMatchIn(text(dir, "Gemfile").orEmpty()) || Regex("""(?m)^ {4}rails \(""").containsMatchIn(text(dir, "Gemfile.lock").orEmpty())
+        val rails = Regex("""(?m)^[ \t]*gem[ \t]+["']rails["']""").containsMatchIn(text(dir, "Gemfile").orEmpty()) || Regex("""(?m)^ {4}rails \(""").containsMatchIn(text(dir, "Gemfile.lock").orEmpty())
         return when {
             rails -> row(
                 fw("rails", "Rails"),
@@ -298,10 +300,10 @@ object Detector {
             kind = kind,
             cronSchedule = cron,
             startCommand = railway(dir, "startCommand") ?: row.spec.startCommand,
-            port = fly?.let { Regex("""(?m)^\s*internal_port\s*=\s*(\d+)""").find(it)?.groupValues?.get(1)?.let(::validPort) } ?: row.spec.port,
+            port = fly?.let { Regex("""(?m)^[ \t]*internal_port[ \t]*=[ \t]*(\d+)""").find(it)?.groupValues?.get(1)?.let(::validPort) } ?: row.spec.port,
             healthCheckPath = railway(dir, "healthcheckPath")
-                ?: fly?.let { Regex("""(?ms)^\s*\[\[http_service\.checks]]\s*$(.*?)(?=^\s*\[|\z)""").find(it)?.groupValues?.get(1) }
-                    ?.let { Regex("""(?m)^\s*path\s*=\s*["'](/[^"']*)["']""").find(it)?.groupValues?.get(1) }
+                ?: fly?.let { Regex("""(?ms)^[ \t]*\[\[http_service\.checks]][ \t]*$(.*?)(?=^[ \t]*\[|\z)""").find(it)?.groupValues?.get(1) }
+                    ?.let { Regex("""(?m)^[ \t]*path[ \t]*=[ \t]*["'](/[^"']*)["']""").find(it)?.groupValues?.get(1) }
                 ?: row.spec.healthCheckPath,
         ).let { if (kind == ServiceKind.CRON) it.copy(port = null, healthCheckPath = null) else it }
         val explicit = listOf("railway.json", "railway.toml", "fly.toml").filter { has(dir, it) } + listOfNotNull("Procfile".takeIf { web != null })
@@ -353,10 +355,10 @@ object Detector {
     private fun Tree.workspace(dirs: List<String>): Workspace? {
         val root = obj("", "package.json")?.get("workspaces")
         val globs = ((root as? JsonObject)?.get("packages") ?: root).strings() + pnpmPackages(text("", "pnpm-workspace.yaml")) + obj("", "lerna.json")?.get("packages").strings()
-        val (exclude, include) = globs.ifEmpty { if (has("", "turbo.json") || has("", "nx.json")) listOf("apps/*", "packages/*") else return null }
+        val (exclude, include) = globs.filter { it.length <= MAX_GLOB_LENGTH }.take(MAX_GLOBS).ifEmpty { if (has("", "turbo.json") || has("", "nx.json")) listOf("apps/*", "packages/*") else return null }
             .partition { it.startsWith("!") }
-            .let { (negated, positive) -> negated.map { glob(it.drop(1)) } to positive.map(::glob) }
-        val members = dirs.filter { dir -> dir.isNotEmpty() && include.any { it.matches(dir) } && exclude.none { it.matches(dir) } }
+            .let { (negated, positive) -> negated.map { it.drop(1) } to positive }
+        val members = dirs.filter { dir -> dir.isNotEmpty() && include.any { glob(it, dir) } && exclude.none { glob(it, dir) } }
             .mapNotNull { dir -> obj(dir, "package.json")?.let { dir to it } }
             .toMap()
         return Workspace(members, packageManager(""), lockfiles.keys.firstOrNull { has("", it) })
@@ -370,7 +372,7 @@ object Detector {
         }
     }
 
-    private fun glob(pattern: String) = Regex(pattern.trim().removePrefix("./").trimEnd('/').split("**").joinToString(".*") { part -> part.split('*').joinToString("[^/]*") { Regex.escape(it) } })
+    private fun glob(pattern: String, dir: String) = ServiceSpec.glob(pattern.trim().removePrefix("./").trimEnd('/'), dir)
 
     private fun Tree.packageManager(dir: String): String = listOf(dir, "").firstNotNullOfOrNull { obj(it, "package.json")?.str("packageManager")?.substringBefore('@') }
         ?: listOf(dir, "").firstNotNullOfOrNull { d -> lockfiles.entries.firstOrNull { has(d, it.key) }?.value }
@@ -380,7 +382,7 @@ object Detector {
 
     private fun Tree.railway(dir: String, key: String): String? =
         obj(dir, "railway.json")?.let { (it["deploy"] as? JsonObject)?.str(key) ?: (it["build"] as? JsonObject)?.str(key) }
-            ?: text(dir, "railway.toml")?.let { Regex("""(?m)^\s*$key\s*=\s*["']([^"']*)["']""").find(it)?.groupValues?.get(1) }
+            ?: text(dir, "railway.toml")?.let { Regex("""(?m)^[ \t]*$key[ \t]*=[ \t]*["']([^"']*)["']""").find(it)?.groupValues?.get(1) }
 
     private fun nothing(repo: String) = row(null, "No app found here", specific = false)
         .let { it.copy(spec = it.spec.copy(slug = slug(repo.substringAfterLast('/')), name = repo.substringAfterLast('/'))) }

@@ -1,6 +1,7 @@
 package dev.liftgate.org
 
 import dev.liftgate.auth.OrgRole
+import dev.liftgate.auth.audit
 import dev.liftgate.build.orphanRepositories
 import dev.liftgate.db.ApiTokens
 import dev.liftgate.db.AuditLog
@@ -9,6 +10,7 @@ import dev.liftgate.db.Memberships
 import dev.liftgate.db.Organizations
 import dev.liftgate.db.Projects
 import dev.liftgate.db.Users
+import dev.liftgate.db.now
 import dev.liftgate.db.sql
 import dev.liftgate.db.toEnum
 import dev.liftgate.http.LiftgateException
@@ -25,6 +27,7 @@ import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.innerJoin
+import org.jetbrains.exposed.v1.core.isNull
 import org.jetbrains.exposed.v1.core.leftJoin
 import org.jetbrains.exposed.v1.core.less
 import org.jetbrains.exposed.v1.core.neq
@@ -144,6 +147,12 @@ class Orgs(private val db: Db, private val limits: Limits = Limits()) {
     suspend fun usage(orgId: UUID): Usage = db.tx { limits.usage(orgId) }
 
     suspend fun delete(orgId: UUID) = db.tx { deleteOrgs(listOf(orgId)) }
+
+    suspend fun termsPending(userId: UUID) = db.tx { Users.select(Users.termsAcceptedAt).where { Users.id eq userId }.single()[Users.termsAcceptedAt] == null }
+
+    suspend fun acceptTerms(userId: UUID, terms: String) = db.tx {
+        if (Users.update({ (Users.id eq userId) and Users.termsAcceptedAt.isNull() }) { it[termsAcceptedAt] = now() } > 0) audit(userId, "terms.accept", "user", userId.toString(), mapOf("terms" to terms))
+    }
 
     suspend fun deleteUser(userId: UUID) = db.tx {
         val owned = (Memberships innerJoin Organizations).selectAll()

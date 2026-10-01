@@ -5,8 +5,9 @@ import { useEffect, useRef, useState } from "react";
 import { api, ApiError, describe } from "@/lib/api";
 import { useAction, useApi } from "@/lib/hooks";
 import type { AuthProviders } from "@/lib/types";
-import { formValues, linkTarget } from "@/lib/util";
+import { formValues } from "@/lib/util";
 import { getPasskey, isAbort } from "@/lib/webauthn";
+import { Consent } from "@/components/consent";
 import { Loaded } from "@/components/loaded";
 import { PageHeader } from "@/components/page-header";
 import { ProviderLink, providerNames } from "@/components/provider";
@@ -116,21 +117,10 @@ function Methods({ providers, next, error, onCodeSent }: { providers: AuthProvid
         </Link>
       )}
       <FormError message={start.error ?? passkey.error ?? autofillError ?? error} />
-      {providers.termsUrl && (
-        <p className="text-center text-xs text-graphite-400">
-          By continuing you agree to the <LegalLink href={providers.termsUrl}>Terms</LegalLink>
-          {providers.aupUrl && <> and <LegalLink href={providers.aupUrl}>Acceptable Use Policy</LegalLink></>}.
-        </p>
-      )}
+      <Consent providers={providers} />
     </div>
   );
 }
-
-const LegalLink = ({ href, children }: { href: string; children: string }) => (
-  <a href={href} {...linkTarget(href)} className="underline underline-offset-2 hover:text-white">
-    {children}
-  </a>
-);
 
 function CodeStep({ email, next, onBack }: { email: string; next: string; onBack: () => void }) {
   const [code, setCode] = useState("");

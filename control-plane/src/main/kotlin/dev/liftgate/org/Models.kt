@@ -16,7 +16,7 @@ import java.util.UUID
  * @date 9/17/2026
  */
 @Serializable
-data class User(val id: UUID, val login: String, val name: String?, val email: String?, val avatarUrl: String?, val status: UserStatus = UserStatus.ACTIVE, @EncodeDefault(EncodeDefault.Mode.NEVER) val operator: Boolean? = null)
+data class User(val id: UUID, val login: String, val name: String?, val email: String?, val avatarUrl: String?, val status: UserStatus = UserStatus.ACTIVE, @EncodeDefault(EncodeDefault.Mode.NEVER) val operator: Boolean? = null, @EncodeDefault(EncodeDefault.Mode.NEVER) val termsPending: Boolean? = null)
 
 /**
  * @author Dean

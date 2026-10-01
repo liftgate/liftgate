@@ -6,6 +6,7 @@ export type User = {
   avatarUrl: string | null;
   status: UserStatus;
   operator?: boolean;
+  termsPending?: boolean;
 };
 
 export type Organization = {

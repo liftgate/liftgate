@@ -71,10 +71,17 @@ private data class Invite(val role: OrgRole, val email: String? = null)
 private data class ChangeRole(val role: OrgRole)
 
 fun Route.orgRoutes(app: App) {
-    get("/me") { call.respond(call.principal.user.copy(operator = call.operator(app) != null)) }
+    get("/me") {
+        val user = call.principal.user
+        call.respond(user.copy(operator = call.operator(app) != null, termsPending = app.config.termsUrl?.let { app.orgs.termsPending(user.id) }))
+    }
     delete("/me") {
         app.orgs.deleteUser(call.sessionUser.id)
         call.endSession(app)
+        call.respond(HttpStatusCode.NoContent)
+    }
+    post("/me/terms") {
+        app.orgs.acceptTerms(call.sessionUser.id, app.config.termsUrl ?: notFound("terms"))
         call.respond(HttpStatusCode.NoContent)
     }
     route("/orgs") {

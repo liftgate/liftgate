@@ -109,7 +109,8 @@ export function Configure({ org, repo, projectSlug, environmentSlug }: { org: st
       setProject(parent);
     }
     const environment = parent && (repo ? production(await api<Environment[]>(`/projects/${parent.id}/environments`)) : target);
-    if (!parent || !environment) return;
+    if (!parent) return;
+    if (!environment) throw new Error("This project has no environment to deploy to.");
     const done = { ...created };
     for (const app of chosen) {
       const form = forms.current.get(app.key);

@@ -122,8 +122,8 @@ object Detector {
     private fun Tree.dockerfile(dir: String, file: String, label: DetectedService?): DetectedService? {
         if (!has(dir, file)) return null
         val text = text(dir, file).orEmpty().replace(Regex("""\\\r?\n"""), " ")
-        val exposed = Regex("""(?im)^\s*EXPOSE\s+(\d+)""").findAll(text).map { it.groupValues[1].toInt() }.toSet()
-        val port = exposed.singleOrNull() ?: Regex("""(?im)^\s*ENV\s+PORT[=\s]+["']?(\d+)""").find(text)?.groupValues?.get(1)?.toInt()
+        val exposed = Regex("""(?im)^\s*EXPOSE\s+(\d+)""").findAll(text).mapNotNull { validPort(it.groupValues[1]) }.toSet()
+        val port = exposed.singleOrNull() ?: Regex("""(?im)^\s*ENV\s+PORT[=\s]+["']?(\d+)""").find(text)?.groupValues?.get(1)?.let(::validPort)
         val health = Regex("""(?im)^\s*HEALTHCHECK\b.*\b(?:curl|wget)\b.*?https?://(?:localhost|127\.0\.0\.1)(?::\d+)?(/[^\s"'|&;)]*)""").find(text)?.groupValues?.get(1)
         val development = file.endsWith(".dev") || Regex("""(?im)^\s*(?:CMD|ENTRYPOINT)\b.*(?:npm run dev|--reload|nodemon)""").containsMatchIn(text)
         val framework = label?.framework ?: fw(DOCKERFILE, "Dockerfile")
@@ -153,7 +153,7 @@ object Detector {
         val gin = text(dir, "go.mod")?.contains("gin-gonic/gin") == true
         val sources = under(dir, goMains).mapNotNull { text(dir, it) }
         val port = sources.takeIf { it.none { source -> "os.Getenv(\"PORT\")" in source } }
-            ?.firstNotNullOfOrNull { Regex("""(?:ListenAndServe|Run|Listen)\(\s*"[^"]*:(\d{2,5})"""").find(it)?.groupValues?.get(1)?.toInt() }
+            ?.firstNotNullOfOrNull { Regex("""(?:ListenAndServe|Run|Listen)\(\s*"[^"]*:(\d{2,5})"""").find(it)?.groupValues?.get(1)?.let(::validPort) }
         return row(if (gin) fw("gin", "Gin") else fw("go", "Go"), from(file), port = port, start = "./out", specific = gin)
     }
 
@@ -173,7 +173,7 @@ object Detector {
         if (!has(dir, "Cargo.toml")) return null
         val crate = Regex("""(?m)^\s*name\s*=\s*"([^"]+)"""").find(text(dir, "Cargo.toml").orEmpty())?.groupValues?.get(1)
         val port = text(dir, "src/main.rs")?.takeIf { "env::var(\"PORT\"" !in it }
-            ?.let { Regex(""""[^"\s]*:(\d{2,5})"|]\s*,\s*(\d{2,5})\s*\)""").find(it)?.groupValues?.drop(1)?.firstOrNull(String::isNotEmpty)?.toInt() }
+            ?.let { Regex(""""[^"\s]*:(\d{2,5})"|]\s*,\s*(\d{2,5})\s*\)""").find(it)?.groupValues?.drop(1)?.firstOrNull(String::isNotEmpty)?.let(::validPort) }
         return row(fw("rust", "Rust"), from("Cargo.toml"), port = port, start = crate?.let { "./bin/$it" }, specific = false)
     }
 
@@ -276,7 +276,7 @@ object Detector {
             "@nestjs/core" in deps -> web(fw("nestjs", "NestJS"), "@nestjs/core", run("start:prod") ?: run("start"))
             http != null -> web(fw(http, httpServers.getValue(http)), http).let { row ->
                 val port = entries.firstNotNullOfOrNull { text(dir, it) }?.takeIf { "process.env.PORT" !in it }
-                    ?.let { Regex("""\.listen\(\s*(\d{2,5})\b""").find(it)?.groupValues?.get(1)?.toInt() }
+                    ?.let { Regex("""\.listen\(\s*(\d{2,5})\b""").find(it)?.groupValues?.get(1)?.let(::validPort) }
                 row.copy(spec = row.spec.copy(port = port))
             }
             bot != null -> web(fw(bot.replace('.', '-'), bots.getValue(bot)), bot, kind = ServiceKind.WORKER)
@@ -298,7 +298,7 @@ object Detector {
             kind = kind,
             cronSchedule = cron,
             startCommand = railway(dir, "startCommand") ?: row.spec.startCommand,
-            port = fly?.let { Regex("""(?m)^\s*internal_port\s*=\s*(\d+)""").find(it)?.groupValues?.get(1)?.toInt() } ?: row.spec.port,
+            port = fly?.let { Regex("""(?m)^\s*internal_port\s*=\s*(\d+)""").find(it)?.groupValues?.get(1)?.let(::validPort) } ?: row.spec.port,
             healthCheckPath = railway(dir, "healthcheckPath")
                 ?: fly?.let { Regex("""(?ms)^\s*\[\[http_service\.checks]]\s*$(.*?)(?=^\s*\[|\z)""").find(it)?.groupValues?.get(1) }
                     ?.let { Regex("""(?m)^\s*path\s*=\s*["'](/[^"']*)["']""").find(it)?.groupValues?.get(1) }
@@ -416,6 +416,8 @@ object Detector {
     private fun dependencies(pkg: JsonObject) = listOf("dependencies", "devDependencies").flatMap { key ->
         (pkg[key] as? JsonObject).orEmpty().map { (name, version) -> name to ((version as? JsonPrimitive)?.contentOrNull ?: "") }
     }.toMap()
+
+    private fun validPort(digits: String) = digits.toIntOrNull()?.takeIf { it in 1..65535 }
 
     private fun slug(name: String) = name.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-').take(40).trimEnd('-')
 

@@ -51,6 +51,7 @@ class DetectorTest {
             Case("0 Dockerfile for development", mapOf("Dockerfile" to "FROM node:24\nENV PORT=4000\nCMD npm run dev"), "dockerfile", builder = "dockerfile", spec = { copy(port = 4000) }) {
                 assertEquals(listOf("Looks like a development Dockerfile"), it.warnings)
             },
+            Case("0 Dockerfile with ports out of range", mapOf("Dockerfile" to "FROM node:24\nEXPOSE 99999999999\nENV PORT=70000"), "dockerfile", builder = "dockerfile"),
             Case("1 Laravel", mapOf("composer.json" to "{}", "artisan" to ""), "laravel") { assertEquals("/up", it.healthHint) },
             Case("1 PHP", mapOf("index.php" to "<?php"), "php"),
             Case("2 Gin with a literal port", mapOf("go.mod" to "module shop\nrequire github.com/gin-gonic/gin v1.10.0", "main.go" to "r.Run(\":8081\")"), "gin", spec = { copy(port = 8081) }) {
@@ -136,6 +137,7 @@ class DetectorTest {
                 "node",
                 spec = { copy(port = 3000, healthCheckPath = "/health") },
             ),
+            Case("fly.toml with a port out of range", mapOf("package.json" to pkg(), "fly.toml" to "[http_service]\n  internal_port = 99999999999"), "node"),
             Case(
                 "app.json",
                 mapOf("package.json" to pkg(), "app.json" to """{"env":{"SECRET_KEY_BASE":{"description":"Signs cookies","generator":"secret"},"API_URL":{"required":true},"LOG_LEVEL":"info"}}"""),

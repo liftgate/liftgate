@@ -49,6 +49,20 @@ test("a new user goes from sign-in to a streaming build in four clicks without t
   expect(post.body).not.toHaveProperty("env");
 });
 
+test("a single root app takes the project's URL name, so the address shown is the one it gets", async ({ page, api }) => {
+  deployable(api);
+  api.on("POST /orgs/acme/projects", new Reply(201, { ...project, slug: "shop-2" }));
+  api.on(posts, new Reply(409, { error: "plan_limit", message: "the free plan's services limit is 5" }));
+  await page.goto("/new?org=acme&repo=acme/shop");
+  await page.getByRole("button", { name: "Edit URL" }).click();
+  await page.getByRole("textbox", { name: "URL name" }).fill("shop-2");
+  await expect(page.getByText("https://shop-2-acme.apps.example.com").first()).toBeVisible();
+  await page.getByRole("button", { name: "Deploy", exact: true }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "the free plan's services limit is 5" })).toBeVisible();
+  expect(api.sent("POST /orgs/acme/projects")[0].body).toEqual({ slug: "shop-2", name: "shop", repoFullName: "acme/shop" });
+  expect(api.sent(posts)[0].body).toMatchObject({ slug: "shop-2", name: "shop" });
+});
+
 test("pasting a .env fills matching rows, adds the rest and never stores the values", async ({ page, api }) => {
   deployable(api);
   await page.goto("/new?org=acme&repo=acme/shop");

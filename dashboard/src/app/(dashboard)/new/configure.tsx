@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, ApiError, describe } from "@/lib/api";
 import { useAction, useApi } from "@/lib/hooks";
 import type { AuthProviders, DetectedService, Detection, Environment, Project, ProjectTree, Service, Usage } from "@/lib/types";
-import { classifyVariable, fitPlan, formValues, mergeDotenv, planName, platformHost, servesHttp, shortSha, type EnvRow } from "@/lib/util";
+import { classifyVariable, detectedRow, fitPlan, formValues, mergeDotenv, planName, platformHost, sameApp, servesHttp, shortSha, type EnvRow } from "@/lib/util";
 import { DetectedApp, directoryOf } from "@/components/detected-app";
 import { EnvRows, useEnvPaste } from "@/components/env-rows";
 import { NameSlugFields, toSlug } from "@/components/name-slug-fields";
@@ -14,7 +14,7 @@ import { PageHeader } from "@/components/page-header";
 import { ProviderGlyph, ProviderLink } from "@/components/provider";
 import { toSpec } from "@/components/service-form";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Card, CardHeader } from "@/components/ui/card";
 import { EmptyState, ErrorState } from "@/components/ui/empty-state";
 import { Field, FormError } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -24,12 +24,8 @@ type App = { key: string; detected: DetectedService | null };
 
 const STILL_READING_MS = 5000;
 const production = (environments: Environment[]) => environments.find((e) => e.kind === "production") ?? environments[0];
-const trimSlashes = (path: string) => path.replace(/^\/+|\/+$/g, "");
 const rank = (row: EnvRow) => (row.required ? 0 : classifyVariable(row.name).buildTime ? 1 : 2);
-const detectedRows = (detected: DetectedService | null): EnvRow[] =>
-  (detected?.variables ?? [])
-    .map((v) => ({ name: v.name, value: "", secret: classifyVariable(v.name, v.secretHint).secret, description: v.description, required: v.required }))
-    .sort((a, b) => rank(a) - rank(b));
+const detectedRows = (detected: DetectedService | null): EnvRow[] => (detected?.variables ?? []).map(detectedRow).sort((a, b) => rank(a) - rank(b));
 const elsewhere = (path: string): DetectedService => ({
   selected: true,
   framework: null,
@@ -45,7 +41,6 @@ const elsewhere = (path: string): DetectedService => ({
 
 export function Configure({ org, repo, projectSlug, environmentSlug }: { org: string; repo?: string; projectSlug?: string; environmentSlug?: string }) {
   const router = useRouter();
-  const variablesHeading = useId();
   const providers = useApi<AuthProviders>("/auth/providers").data;
   const deployDomain = providers?.deployDomain;
   const usage = useApi<Usage>(`/orgs/${org}/usage`).data;
@@ -75,9 +70,7 @@ export function Configure({ org, repo, projectSlug, environmentSlug }: { org: st
 
   const owner = project ?? tree.data?.project;
   const existing = tree.data?.services.filter((s) => s.environmentId === target?.id) ?? [];
-  const found = (detection.data?.services ?? []).filter(
-    (d) => !existing.some((s) => trimSlashes(s.rootDir) === trimSlashes(d.spec.rootDir) && (s.buildCommand ?? null) === (d.spec.buildCommand ?? null)),
-  );
+  const found = (detection.data?.services ?? []).filter((d) => !existing.some((s) => sameApp(s, d.spec)));
   const ready = !!detection.data || (late && (!!repo || !!tree.data));
   const apps: App[] = (found.length ? found.map((detected, i) => ({ key: String(i), detected })) : ready ? [{ key: "0", detected: null }] : []).map((app) =>
     app.key in swaps ? { ...app, detected: swaps[app.key] } : app,
@@ -93,7 +86,11 @@ export function Configure({ org, repo, projectSlug, environmentSlug }: { org: st
   const pasteTarget = groups.find((app) => app.key === focused) ?? groups[0];
   const paste = useEnvPaste(pasteTarget ? rowsFor(pasteTarget) : [], (rows) => pasteTarget && setRowsFor(pasteTarget.key)(rows));
   const rootApp = apps.length === 1 && (apps[0].detected?.spec.rootDir ?? "/") === "/";
-  const prefillFor = (app: App) => (repo && rootApp ? named.name : (app.detected?.spec.name ?? (repo ? repoName : "web")));
+  const prefillFor = (app: App) => {
+    if (repo && rootApp) return named;
+    const name = app.detected?.spec.name ?? (repo ? repoName : "web");
+    return { name, slug: toSlug(name) };
+  };
   const environmentLabel = repo ? "production" : (target?.slug ?? "production");
   const hostFor = (projectLabel: string) => (slug: string) =>
     deployDomain ? platformHost({ service: slug, environment: environmentLabel, project: projectLabel, org }, deployDomain) : undefined;
@@ -282,25 +279,26 @@ export function Configure({ org, repo, projectSlug, environmentSlug }: { org: st
       </Card>
 
       <Card>
-        <div className={`flex items-center justify-between gap-4 px-6 py-4 max-md:flex-col max-md:items-start max-sm:px-4 ${names.length || paste.panel ? "border-b border-graphite-700" : ""}`}>
-          <h2 id={variablesHeading} className="min-w-0 text-base font-medium">
-            {names.length ? `${names.length} variable${names.length === 1 ? "" : "s"}${sources.length ? ` from ${sources.join(", ")}` : ""}` : "Environment variables (optional)"}
-          </h2>
-          {ready && (
-            <div className="flex shrink-0 flex-wrap items-center gap-2">
-              {addVariable}
-              {paste.pasteButton}
-              {paste.importButton}
-            </div>
-          )}
-        </div>
+        <CardHeader
+          title={names.length ? `${names.length} variable${names.length === 1 ? "" : "s"}${sources.length ? ` from ${sources.join(", ")}` : ""}` : "Environment variables (optional)"}
+          divided={!!names.length || !!paste.panel}
+          actions={
+            ready && (
+              <>
+                {addVariable}
+                {paste.pasteButton}
+                {paste.importButton}
+              </>
+            )
+          }
+        />
         {paste.panel}
         {ready ? (
           groups.map((app) => (
             <div key={app.key} onFocusCapture={() => setFocused(app.key)}>
               {multi && rowsFor(app).length > 0 && (
                 <div className="flex min-h-12 items-center justify-between gap-2 border-b border-graphite-700 px-6 max-sm:px-4">
-                  <span className="font-mono text-xs text-graphite-200">{prefillFor(app)}</span>
+                  <span className="font-mono text-xs text-graphite-200">{prefillFor(app).name}</span>
                   {rowsFor(app).some((row) => row.value) && (
                     <Button variant="ghost" onClick={() => copyToAll(app)}>
                       Copy to all apps

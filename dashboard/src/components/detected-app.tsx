@@ -4,7 +4,6 @@ import { useId, useRef, useState } from "react";
 import { stackIcon } from "@/lib/stacks";
 import type { Detection, DetectedService, ServiceKind } from "@/lib/types";
 import { formValues, kindLabels, servesHttp } from "@/lib/util";
-import { toSlug } from "./name-slug-fields";
 import { BuildFields, GeneralFields, ResourceFields, RuntimeFields } from "./service-form";
 import { Button } from "./ui/button";
 
@@ -32,7 +31,7 @@ export function DetectedApp({
   multi: boolean;
   checked: boolean;
   onCheck: (checked: boolean) => void;
-  prefill: string;
+  prefill: { name: string; slug: string };
   hostFor: (slug: string) => string | undefined;
   showUrl: boolean;
   resources: { cpuMillis: number; memoryMb: number };
@@ -52,9 +51,9 @@ export function DetectedApp({
     setShownFailure(failure);
     if (failure?.field) setOpen(true);
   }
-  if (prefill !== shownPrefill) {
+  if (prefill.name !== shownPrefill.name || prefill.slug !== shownPrefill.slug) {
     setShownPrefill(prefill);
-    setValues((all) => ({ ...all, name: prefill, slug: toSlug(prefill) }));
+    setValues((all) => ({ ...all, ...prefill }));
   }
   const read = () => form.current && setValues(formValues(form.current));
   const value = (field: string, fallback?: string | number | null) => values[field] ?? (fallback == null ? "" : String(fallback));
@@ -62,7 +61,7 @@ export function DetectedApp({
   const framework = detected?.framework;
   const dockerfile = detected?.builder === "dockerfile";
   const icon = stackIcon(framework?.id);
-  const name = value("name", prefill);
+  const name = value("name", prefill.name);
   const title = !detected
     ? "Not detected"
     : !framework
@@ -72,7 +71,7 @@ export function DetectedApp({
         : framework.name;
   const port = value("port", spec?.port);
   const health = value("healthCheckPath", spec?.healthCheckPath);
-  const host = servesHttp(kind) ? hostFor(value("slug", toSlug(prefill))) : undefined;
+  const host = servesHttp(kind) ? hostFor(value("slug", prefill.slug)) : undefined;
   const railpack = (command?: string | null) => (command ? `${command} (Railpack)` : "Railpack");
   const facts = [
     ["Build", dockerfile ? value("dockerfilePath", spec?.dockerfilePath) : value("buildCommand", spec?.buildCommand) || railpack(detected?.defaults.build)],

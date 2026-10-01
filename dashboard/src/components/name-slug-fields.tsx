@@ -9,6 +9,7 @@ export const toSlug = (name: string) => slugify(name).slice(0, 40).replace(/-+$/
 export function NameSlugFields({
   initial,
   prefill = "",
+  prefillSlug,
   label = "Name",
   compact = false,
   editLabel = "Edit",
@@ -18,6 +19,7 @@ export function NameSlugFields({
 }: {
   initial?: { name: string; slug: string };
   prefill?: string;
+  prefillSlug?: string;
   label?: string;
   compact?: boolean;
   editLabel?: string;
@@ -25,7 +27,7 @@ export function NameSlugFields({
   errorAt?: (field: string) => string | undefined;
   onChange?: (value: { name: string; slug: string }) => void;
 }) {
-  const [value, setValue] = useState({ name: initial?.name ?? prefill, slug: initial?.slug ?? toSlug(prefill) });
+  const [value, setValue] = useState({ name: initial?.name ?? prefill, slug: initial?.slug ?? prefillSlug ?? toSlug(prefill) });
   const [editing, setEditing] = useState(false);
   const update = (next: { name: string; slug: string }) => {
     setValue(next);

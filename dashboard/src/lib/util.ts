@@ -1,4 +1,4 @@
-import type { Build, Deployment, EnvVar, ProjectTree, ServiceKind, Usage } from "./types";
+import type { Build, Deployment, DetectedVariable, EnvVar, ProjectTree, ServiceKind, ServiceSpec, Usage } from "./types";
 
 export function timeAgo(iso: string) {
   const seconds = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
@@ -76,6 +76,12 @@ export const findService = (tree: ProjectTree, environmentSlug: string, serviceS
 
 export const servesHttp = (kind: ServiceKind) => kind === "web" || kind === "static";
 
+const trimSlashes = (path: string) => path.replace(/^\/+|\/+$/g, "");
+
+type Placement = Pick<ServiceSpec, "rootDir" | "buildCommand">;
+
+export const sameApp = (a: Placement, b: Placement) => trimSlashes(a.rootDir) === trimSlashes(b.rootDir) && (a.buildCommand ?? null) === (b.buildCommand ?? null);
+
 export const platformHost = (labels: { service: string; environment: string; project: string; org: string }, deployDomain: string) => {
   const label = [labels.service === labels.project ? "" : labels.service, labels.environment === "production" ? "" : labels.environment, labels.project, labels.org].filter(Boolean).join("-");
   return label.length <= 63 ? `${label}.${deployDomain}` : undefined;
@@ -98,6 +104,8 @@ export const classifyVariable = (name: string, secretHint = false) => {
   const buildTime = buildTimePrefixes.some((prefix) => upper.startsWith(prefix));
   return { buildTime, secret: !buildTime && (secretHint || secretWords.test(upper) || secretNames.has(upper) || upper.endsWith("_CONNECTION_STRING")) };
 };
+
+export const detectedRow = (v: DetectedVariable): EnvRow => ({ name: v.name, value: "", secret: classifyVariable(v.name, v.secretHint).secret, description: v.description, required: v.required });
 
 export const mergeDotenv = (rows: EnvRow[], vars: { name: string; value: string }[]) => {
   const next = [...rows];

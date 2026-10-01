@@ -4,15 +4,13 @@ import { useEffect, useEffectEvent, useState } from "react";
 import { api } from "@/lib/api";
 import { useAction } from "@/lib/hooks";
 import type { DetectedVariable, Detection, EnvVar } from "@/lib/types";
-import { classifyVariable, envPayload, storedRows } from "@/lib/util";
+import { detectedRow, envPayload, sameApp, storedRows } from "@/lib/util";
 import { EnvRows, useEnvPaste } from "./env-rows";
 import { redeployRequested, SaveActions, saved } from "./save-actions";
 import { Button } from "./ui/button";
 import { Card, CardHeader } from "./ui/card";
 import { EmptyState } from "./ui/empty-state";
 import { FormError } from "./ui/input";
-
-const trimSlashes = (path: string) => path.replace(/^\/+|\/+$/g, "");
 
 type Repository = { projectId: string; branch: string; rootDir: string; buildCommand?: string | null };
 
@@ -35,9 +33,7 @@ export function EnvEditor({ serviceId, initial, repository, databaseHref }: { se
   const check = useAction(async (manual: boolean) => {
     if (!repository) return;
     const detection = await api<Detection>(`/projects/${repository.projectId}/detect?ref=${encodeURIComponent(repository.branch)}`);
-    const candidate = detection.services.find(
-      (s) => trimSlashes(s.spec.rootDir) === trimSlashes(repository.rootDir) && (s.spec.buildCommand ?? null) === (repository.buildCommand ?? null),
-    );
+    const candidate = detection.services.find((s) => sameApp(s.spec, repository));
     setFound({ variables: candidate?.variables ?? [], manual });
   });
   const automatic = !!repository && initial.length === 0;
@@ -86,7 +82,7 @@ export function EnvEditor({ serviceId, initial, repository, databaseHref }: { se
               {missing.length > 0 && (
                 <Button
                   onClick={() => {
-                    change([...rows, ...missing.map((v) => ({ name: v.name, value: "", secret: classifyVariable(v.name, v.secretHint).secret, description: v.description, required: v.required }))]);
+                    change([...rows, ...missing.map(detectedRow)]);
                     setFound(undefined);
                   }}
                 >

@@ -52,7 +52,7 @@ export function GeneralFields({
   errorAt,
 }: {
   initial?: Partial<ServiceSpec> & { name: string; slug: string };
-  prefill?: string;
+  prefill?: { name: string; slug: string };
   kind: ServiceKind;
   onKind: (kind: ServiceKind) => void;
   hostFor?: (slug: string) => string | undefined;
@@ -62,9 +62,10 @@ export function GeneralFields({
   return (
     <>
       <NameSlugFields
-        key={prefill}
+        key={prefill && `${prefill.name}\n${prefill.slug}`}
         initial={creating ? undefined : initial}
-        prefill={prefill}
+        prefill={prefill?.name}
+        prefillSlug={prefill?.slug}
         label={creating ? "Service name" : "Name"}
         compact={creating}
         errorAt={errorAt}

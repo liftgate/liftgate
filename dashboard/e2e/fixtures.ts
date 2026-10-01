@@ -12,6 +12,9 @@ import type {
   ImportableRepositories,
   Member,
   MetricPoint,
+  OperatorOrg,
+  OperatorSummary,
+  OperatorUser,
   Organization,
   Project,
   ProjectTree,
@@ -271,3 +274,17 @@ export const test = base.extend<{ api: Api; violations: string[] }>({
 export { expect };
 
 export const settled = (page: Page) => expect(page.locator(".animate-pulse")).toHaveCount(0);
+
+export const waiting: OperatorUser = {
+  user: { id: "user-grace", login: "grace", name: "Grace Hopper", email: "grace@example.com", avatarUrl: null, status: "pending" },
+  providers: ["github"],
+  orgs: 0,
+  createdAt: ago(30),
+};
+
+export const asOperator = (api: Api) => {
+  api.on("GET /me", { ...user, operator: true });
+  api.on("GET /operator/summary", { pending: 1, plans: ["free", "unlimited", "default"] } satisfies OperatorSummary);
+  api.on("GET /operator/users", [waiting]);
+  api.on("GET /operator/orgs", [{ org, members: 2, projects: 1, services: 1, createdAt: ago(9000) }] satisfies OperatorOrg[]);
+};

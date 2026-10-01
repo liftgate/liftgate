@@ -219,6 +219,8 @@ deniedEgressCidrs:
 signup:
   allow:
     - github:your-github-login
+operators:
+  - github:your-github-login
 github:
   appId: "123456"
   clientId: Iv23liExample
@@ -240,6 +242,7 @@ chmod 600 liftgate-values.yaml
 | `registryPullPassword`, `registryJanitorPassword` | The logins k3s pulls with and the control plane deletes old images with |
 | `deniedEgressCidrs` | Keeps apps, builds and notification webhooks away from the VM's own public address |
 | `signup.allow` | Makes your account active on its first sign-in; see step 8 |
+| `operators` | Lets your account approve the others in the dashboard; see step 8 |
 | `github` | The GitHub App from step 6 |
 | `secrets.masterKey` | Encrypts stored variables. Without it they cannot be read, so keep a copy |
 
@@ -269,8 +272,15 @@ Both certificates, `liftgate-liftgate-example-com` for the dashboard and `liftga
 Open `https://liftgate.example.com` and choose Continue with GitHub. Because `github:your-github-login`
 is in `signup.allow`, your account is active at once. Create an organization; you are its owner.
 
-Everyone else who signs in waits for approval, because the chart's sign-up mode is `approval`. List and
-approve them with the control plane's admin command:
+Everyone else who signs in waits for approval, because the chart's sign-up mode is `approval`. With
+`github:your-github-login` also in `operators`, the header shows Operator, which opens the operator
+console at `https://liftgate.example.com/dashboard/operator`. Its Pending tab lists the accounts that
+wait; approve them there. The Users and Organizations tabs suspend and unsuspend accounts and
+organizations and move organizations between plans. When `email.smtpUrl` and `email.from` are set,
+every operator whose account email is verified gets an email each time an account starts waiting.
+
+The control plane's admin command does the same from the cluster, and works when no operator can sign
+in:
 
 ```sh
 kubectl -n liftgate-system exec deploy/liftgate-control-plane -- /opt/liftgate/bin/liftgate-control-plane admin list-pending
@@ -296,9 +306,10 @@ curl -I https://web-hello-acme.apps.example.net
 
 ### Accounts
 
-The admin command also suspends organizations and users and moves organizations between plans. Sign-up
-and accounts in the [chart README](../charts/liftgate/README.md#sign-up-and-accounts) lists every
-subcommand, and [`infra/ABUSE.md`](../infra/ABUSE.md) is the runbook for abuse reports.
+The operator console and the admin command also suspend organizations and users and move organizations
+between plans. Sign-up and accounts in the [chart README](../charts/liftgate/README.md#sign-up-and-accounts)
+describes both and lists every subcommand, and [`infra/ABUSE.md`](../infra/ABUSE.md) is the runbook for
+abuse reports.
 
 ### Sign-in providers
 
@@ -306,7 +317,8 @@ GitHub sign-in works through the App. Google, GitLab, Bitbucket, emailed codes a
 and turn on with chart values; organization owners set up SAML single sign-on in the dashboard. Sign-in
 providers in the [chart README](../charts/liftgate/README.md#sign-in-providers) says where to create each
 set of credentials and which callback URL to register. The SMTP server for emailed codes also sends
-invitations and the admin command's approval and suspension notices.
+invitations, the approval and suspension notices, and the operators' notices of accounts waiting for
+approval.
 
 ### Custom domains
 
@@ -639,6 +651,8 @@ From 0.2.0 to the release after it:
 - Migration V32 adds the `databases` and `service_links` tables and the `services.volume` column. A
   `helm rollback` does not undo it. Volumes and databases stay off until `workloads.storageClass` is set,
   as [Volumes and databases](#volumes-and-databases) explains.
+- The new value `operators` is optional. Set it to approve accounts in the dashboard, as
+  [step 8](#8-sign-in) describes.
 
 Upgrading straight from 0.2.0-alpha.2 or older to a release after 0.2.0-alpha.3 skips the move of build
 images to their new names, so builds that run during the upgrade may need a retry.
@@ -710,7 +724,7 @@ kubectl get --raw /api/v1/namespaces/liftgate-system/services/liftgate-control-p
 | The control plane restarts and its log names a missing `LIFTGATE_` variable | The matching chart value is empty. The chart README's Values table maps each variable to its value |
 | A certificate stays not ready | `kubectl -n liftgate-system describe certificate <name>`, `kubectl get challenges --all-namespaces` and `kubectl -n cert-manager logs deploy/cert-manager`. The dashboard's certificate needs its `A` record and port 80; the wildcard needs the TSIG key, a DNS server the cluster can reach and an update policy that covers `_acme-challenge` |
 | Sign-in with GitHub fails at the callback | The App's Callback URL must match `publicUrl` exactly |
-| "Your account is waiting for approval" | Approve the account with `admin approve`, as in step 8 |
+| "Your account is waiting for approval" | Approve the account in the operator console or with `admin approve`, as in step 8 |
 | The repository picker is empty | Install the App on the account that owns the repository; your GitHub account must be able to push to it. Then choose Refresh |
 | Pushes do not start builds | The App's Advanced tab lists recent webhook deliveries and their responses. The webhook secret must match `github.webhookSecret`, and the push must be to an environment's branch |
 | A build fails while pushing the image | `kubectl -n liftgate-system get pods liftgate-registry-0` and `kubectl -n liftgate-system logs liftgate-registry-0 --all-containers`. With a registry on another machine: `curl -u liftgate:<password> http://192.168.100.3:5000/v2/` from the VM, `build.allowedEgressCidrs` and `build.registryCredentials` |

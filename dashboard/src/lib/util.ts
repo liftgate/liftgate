@@ -31,6 +31,9 @@ export const slugify = (value: string) =>
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 
+export const pageUrl = (path: string, size: number, before?: string | number) =>
+  `${path}${path.includes("?") ? "&" : "?"}limit=${size}${before === undefined ? "" : `&before=${encodeURIComponent(before)}`}`;
+
 export const formValues = (form: HTMLFormElement) =>
   Object.fromEntries([...new FormData(form)].map(([name, value]) => [name, String(value).trim()]));
 

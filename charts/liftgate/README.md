@@ -439,8 +439,19 @@ Identities in `signup.allow` are active from their first sign-in: verified email
 the first admin there. SAML users who join an organization through a verified email domain are
 active while that organization has an active owner and is not suspended.
 
-Operators approve and suspend with the control plane's admin commands. In the `ha` profile run
-them in `deploy/<fullname>-api` instead:
+The accounts in `operators` run the operator console at `<dashboardUrl>/dashboard/operator`, linked
+from the header and the account page. It lists pending accounts first, then every account and every
+organization, and approves, suspends and unsuspends them and changes plans, with the same effects and
+emails as the admin commands below; each change's `audit_log` row names the operator. An entry is a
+GitHub login (`github:dean`), matched against the GitHub account connected to the Liftgate account,
+which every GitHub sign-in refreshes and Disconnect on the account page removes, or an email,
+matched against the verified emails of the account's sign-in methods. Domains are not accepted. An account is an operator only while it is
+active, and the control plane checks on every request; its console routes answer everyone else with
+`404`, including API tokens. With `email.smtpUrl` and `email.from` set, every operator whose account
+email is verified is emailed when an account starts waiting for approval.
+
+The admin commands are the fallback, for example before any operator has signed in. In the `ha`
+profile run them in `deploy/<fullname>-api` instead:
 
 ```sh
 kubectl -n liftgate-system exec deploy/liftgate-control-plane -- /opt/liftgate/bin/liftgate-control-plane admin list-pending
@@ -587,6 +598,7 @@ other than 2xx is retried with a growing delay for an hour.
 | `prometheusUrl` | `http://prometheus.liftgate-system:9090` | `LIFTGATE_PROMETHEUS_URL` |
 | `signup.mode` | `approval` | `LIFTGATE_SIGNUP`: `open`, `approval` or `closed`; see [Sign-up and accounts](#sign-up-and-accounts) |
 | `signup.allow` | `[]` | `LIFTGATE_SIGNUP_ALLOW`: emails, `@domains` and `github:<login>` entries that are active from their first sign-in |
+| `operators` | `[]` | `LIFTGATE_OPERATORS`: emails and `github:<login>` entries whose accounts use the operator console; see [Sign-up and accounts](#sign-up-and-accounts) |
 | `legal.termsUrl` | `""` | `LIFTGATE_TERMS_URL` |
 | `legal.privacyUrl` | `""` | `LIFTGATE_PRIVACY_URL` |
 | `legal.aupUrl` | `""` | `LIFTGATE_AUP_URL`, the acceptable use policy |

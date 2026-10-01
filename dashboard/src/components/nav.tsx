@@ -5,9 +5,10 @@ import { useState, type ReactNode } from "react";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAction, useApi } from "@/lib/hooks";
-import type { Organization, User } from "@/lib/types";
+import type { OperatorSummary, Organization, User } from "@/lib/types";
 import { CreateOrgForm } from "./create-org-form";
 import { Mark } from "./mark";
+import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Dialog } from "./ui/dialog";
 import { Select } from "./ui/select";
@@ -20,6 +21,7 @@ export function Nav({ actions }: { actions?: ReactNode }) {
   const inApp = !onLogin && !actions;
   const me = useApi<User>(inApp && "/me");
   const orgs = useApi<Organization[]>(inApp && "/orgs");
+  const summary = useApi<OperatorSummary>(inApp && me.data?.operator && "/operator/summary");
   const [creating, setCreating] = useState(false);
   const signOut = useAction(async () => {
     await api("/auth/logout", { method: "POST" });
@@ -62,6 +64,17 @@ export function Nav({ actions }: { actions?: ReactNode }) {
                 ))}
                 <option value="">New organization…</option>
               </Select>
+            )}
+            {me.data?.operator && (
+              <Link href="/dashboard/operator" className="flex items-center gap-2 text-sm text-graphite-400 hover:text-white max-sm:hidden">
+                Operator
+                {!!summary.data?.pending && (
+                  <Badge tone="warning">
+                    {summary.data.pending}
+                    <span className="sr-only"> pending</span>
+                  </Badge>
+                )}
+              </Link>
             )}
             {me.data && (
               <Link href="/account" className="text-sm text-graphite-400 hover:text-white">

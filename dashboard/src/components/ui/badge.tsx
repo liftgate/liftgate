@@ -32,6 +32,8 @@ const statusTones: Record<string, Tone> = {
   healthy: "success",
   degraded: "warning",
   down: "danger",
+  active: "success",
+  suspended: "danger",
 };
 
 export function StatusBadge({ status }: { status: string }) {

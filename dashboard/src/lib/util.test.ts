@@ -9,6 +9,7 @@ import {
   findService,
   keepsStoredValue,
   linkTarget,
+  pageUrl,
   platformHost,
   safeNext,
   shortSha,
@@ -125,4 +126,10 @@ test("rollback is offered only to replaced deployments whose image is still reta
   for (const status of ["running", "failed", "pending", "releasing"] as const) assert.equal(canRollBack(at(status), build), false, status);
   assert.equal(canRollBack(at("superseded"), { imagePruned: true } as Build), false);
   assert.equal(canRollBack(at("superseded")), false);
+});
+
+test("pageUrl adds the page size and the cursor to any path", () => {
+  assert.equal(pageUrl("/orgs/acme/audit", 50), "/orgs/acme/audit?limit=50");
+  assert.equal(pageUrl("/orgs/acme/audit", 50, 0), "/orgs/acme/audit?limit=50&before=0");
+  assert.equal(pageUrl("/operator/users?status=pending", 50, "user-1"), "/operator/users?status=pending&limit=50&before=user-1");
 });

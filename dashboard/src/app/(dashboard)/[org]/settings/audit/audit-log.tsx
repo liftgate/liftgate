@@ -1,39 +1,27 @@
 "use client";
 
-import { useState } from "react";
-import { api } from "@/lib/api";
-import { useAction, useApi } from "@/lib/hooks";
+import { usePages } from "@/lib/hooks";
 import type { AuditEntry } from "@/lib/types";
 import { timeAgo } from "@/lib/util";
+import { LoadMore } from "@/components/load-more";
 import { Loaded } from "@/components/loaded";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { FormError } from "@/components/ui/input";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { Cell, Row, Table } from "@/components/ui/table";
 
-const PAGE = 50;
-
 export function AuditLog({ org }: { org: string }) {
-  const path = `/orgs/${org}/audit?limit=${PAGE}`;
-  const latest = useApi<AuditEntry[]>(path);
-  const [older, setOlder] = useState<AuditEntry[][]>([]);
-  const more = useAction(async (before: number) => {
-    const page = await api<AuditEntry[]>(`${path}&before=${before}`);
-    setOlder((pages) => [...pages, page]);
-  });
+  const log = usePages<AuditEntry>(`/orgs/${org}/audit`, (entry) => entry.id);
   return (
     <div className="flex flex-col gap-8">
       <PageHeader title="Audit log" description="Changes made in this organization from the dashboard and the API, newest first." />
-      {latest.error?.status === 403 ? (
+      {log.query.error?.status === 403 ? (
         <EmptyState title="Only admins can read the audit log" description="Ask an owner or admin of this organization what changed." />
       ) : (
-        <Loaded query={latest} skeleton={<TableSkeleton rows={5} />}>
-          {(first) => {
-            const entries = [first, ...older].flat();
-            const last = [first, ...older].at(-1) ?? [];
+        <Loaded query={log.query} skeleton={<TableSkeleton rows={5} />}>
+          {() => {
+            const entries = log.items;
             if (entries.length === 0) return <EmptyState title="Nothing recorded yet" description="Changes to projects, services, members and tokens show up here." />;
             return (
               <>
@@ -65,14 +53,7 @@ export function AuditLog({ org }: { org: string }) {
                     </Row>
                   ))}
                 </Table>
-                <FormError message={more.error} />
-                {last.length === PAGE && (
-                  <div className="flex justify-center">
-                    <Button pending={more.pending} onClick={() => more.run(entries[entries.length - 1].id)}>
-                      Load older entries
-                    </Button>
-                  </div>
-                )}
+                <LoadMore pages={log}>Load older entries</LoadMore>
               </>
             );
           }}

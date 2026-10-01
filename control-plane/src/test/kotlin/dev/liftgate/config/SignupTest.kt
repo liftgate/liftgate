@@ -26,4 +26,11 @@ class SignupTest {
         assertTrue("LIFTGATE_SIGNUP" in assertFailsWith<IllegalStateException> { Config.fromEnv(minimalEnv + ("LIFTGATE_SIGNUP" to "invite")) }.message.orEmpty())
         assertTrue("dean" in assertFailsWith<IllegalStateException> { Config.fromEnv(minimalEnv + ("LIFTGATE_SIGNUP_ALLOW" to "dean")) }.message.orEmpty())
     }
+
+    @Test
+    fun `operators are lowercased github logins and emails, never domains`() {
+        assertEquals(emptyList(), Config.fromEnv(minimalEnv).operators)
+        assertEquals(listOf("github:octo-ops", "ops@example.com"), Config.fromEnv(minimalEnv + ("LIFTGATE_OPERATORS" to " github:Octo-Ops, Ops@Example.com ,")).operators)
+        assertTrue("@example.com" in assertFailsWith<IllegalStateException> { Config.fromEnv(minimalEnv + ("LIFTGATE_OPERATORS" to "@example.com")) }.message.orEmpty())
+    }
 }

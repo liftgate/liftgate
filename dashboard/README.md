@@ -11,6 +11,7 @@ The web UI for the Liftgate control plane: Next.js 16 (App Router), React 19, Ty
 | `/account` | Profile, sign-in methods, passkeys, git connections |
 | `/` | The landing page with `LIFTGATE_LANDING=true`, otherwise a redirect to `/dashboard` |
 | `/dashboard` | Redirects to the first organization, or creates one; `?installed=1`, the GitHub App's setup URL, opens the new project dialog |
+| `/dashboard/operator` | The operator console, for the accounts in `operators` only: pending accounts, all accounts and organizations, with approve, suspend, unsuspend and plan changes; `?view=` picks `pending`, `users` or `orgs` |
 | `/[org]` | Projects; `?new=project` opens the new project dialog with the repository picker |
 | `/[org]/settings/sso` | SAML connection, owners only |
 | `/[org]/settings/members` | Members and roles: owners change roles and remove, admins invite, anyone leaves |

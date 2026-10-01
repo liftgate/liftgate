@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useState } from "react";
 import { api } from "@/lib/api";
 import { useAction, useApi } from "@/lib/hooks";
@@ -10,7 +11,7 @@ import { createPasskey } from "@/lib/webauthn";
 import { Loaded } from "@/components/loaded";
 import { PageHeader } from "@/components/page-header";
 import { ProviderLabel, ProviderLink, providerNames } from "@/components/provider";
-import { Button } from "@/components/ui/button";
+import { Button, buttonClasses } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -64,6 +65,11 @@ export function Account({ error }: { error?: string }) {
                     {user.email && ` · ${user.email}`}
                   </p>
                 </div>
+                {user.operator && (
+                  <Link href="/dashboard/operator" className={buttonClasses("secondary", "ml-auto")}>
+                    Operator console
+                  </Link>
+                )}
               </div>
             )}
           </Loaded>

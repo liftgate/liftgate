@@ -77,6 +77,7 @@ data class Config(
     val natsReplicas: Int,
     val signup: Signup,
     val signupAllow: List<String>,
+    val operators: List<String>,
     val termsUrl: String?,
     val privacyUrl: String?,
     val aupUrl: String?,
@@ -143,9 +144,8 @@ data class Config(
             val nodeSelector = selector("NODE_SELECTOR").orEmpty()
             val signup = text("SIGNUP", "approval").let { name -> Signup.entries.firstOrNull { it.name.equals(name, ignoreCase = true) } }
                 ?: error("LIFTGATE_SIGNUP must be one of open, approval, closed")
-            val allowEntry = Regex("github:[a-z0-9-]+|@[^@\\s]+|[^@\\s]+@[^@\\s]+")
-            val signupAllow = optional("SIGNUP_ALLOW")?.split(',')?.map { it.trim().lowercase() }?.filter(String::isNotEmpty).orEmpty()
-                .onEach { if (!allowEntry.matches(it)) error("LIFTGATE_SIGNUP_ALLOW entries must be emails, @domains or github:<login>, not $it") }
+            fun accounts(name: String, entry: Regex, kinds: String) = optional(name)?.split(',')?.map { it.trim().lowercase() }?.filter(String::isNotEmpty).orEmpty()
+                .onEach { if (!entry.matches(it)) error("LIFTGATE_$name entries must be $kinds, not $it") }
             val trustedProxyCidrs = optional("TRUSTED_PROXY_CIDRS")?.split(',')?.map {
                 runCatching { IpSubnetFilterRule(it.trim(), IpFilterRuleType.ACCEPT) }.getOrElse { error("LIFTGATE_TRUSTED_PROXY_CIDRS must be CIDRs such as 10.0.0.0/8[,fd00::/8]") }
             }.orEmpty()
@@ -225,7 +225,8 @@ data class Config(
                 leaderElection = leaderElection,
                 natsReplicas = text("NATS_REPLICAS", "1").toInt(),
                 signup = signup,
-                signupAllow = signupAllow,
+                signupAllow = accounts("SIGNUP_ALLOW", Regex("github:[a-z0-9-]+|@[^@\\s]+|[^@\\s]+@[^@\\s]+"), "emails, @domains or github:<login>"),
+                operators = accounts("OPERATORS", Regex("github:[a-z0-9-]+|[^@\\s]+@[^@\\s]+"), "emails or github:<login>"),
                 termsUrl = optional("TERMS_URL"),
                 privacyUrl = optional("PRIVACY_URL"),
                 aupUrl = optional("AUP_URL"),

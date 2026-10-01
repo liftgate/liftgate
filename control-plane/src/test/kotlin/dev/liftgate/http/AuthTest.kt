@@ -83,7 +83,7 @@ class AuthTest {
         application { liftgate(app) }
         val response = client.get("/api/v1/me") { cookie(SESSION_COOKIE, "session-1") }
         assertEquals(HttpStatusCode.OK, response.status)
-        assertEquals(json.encodeToString(User.serializer(), user), response.bodyAsText())
+        assertEquals(json.encodeToString(User.serializer(), user.copy(operator = false)), response.bodyAsText())
     }
 
     @Test

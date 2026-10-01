@@ -99,6 +99,7 @@ export function Nav({ actions }: { actions?: ReactNode }) {
       )}
       <Dialog open={creating} title="New organization" onClose={() => setCreating(false)}>
         <CreateOrgForm
+          prefill={me.data?.name ?? me.data?.login}
           onCreated={() => {
             setCreating(false);
             orgs.reload();

@@ -9,8 +9,8 @@ export default defineConfig({
   use: { baseURL: origin, trace: "retain-on-failure" },
   projects: [
     { name: "1440", use: { viewport: { width: 1440, height: 900 } } },
-    { name: "768", use: { viewport: { width: 768, height: 1024 } }, testMatch: "routes.spec.ts" },
-    { name: "375", use: { viewport: { width: 375, height: 812 } }, testMatch: "routes.spec.ts" },
+    { name: "768", use: { viewport: { width: 768, height: 1024 } }, testMatch: ["routes.spec.ts", "import.spec.ts"] },
+    { name: "375", use: { viewport: { width: 375, height: 812 } }, testMatch: ["routes.spec.ts", "import.spec.ts"] },
   ],
   webServer: [
     { command: "node --no-warnings --experimental-strip-types e2e/control-plane.ts", port: 3102, reuseExistingServer: !process.env.CI },

@@ -2,22 +2,23 @@
 
 import { useState, type ReactNode } from "react";
 import { useApi } from "@/lib/hooks";
-import type { AuthProviders, BuildStrategy, Service, ServiceKind, ServiceSpec } from "@/lib/types";
-import { formValues, servesHttp } from "@/lib/util";
+import type { AuthProviders, BuildStrategy, Detection, Service, ServiceKind, ServiceSpec } from "@/lib/types";
+import { formValues, kindLabels, servesHttp } from "@/lib/util";
 import { DocsLink } from "./docs-link";
 import { NameSlugFields } from "./name-slug-fields";
 import { redeployRequested } from "./save-actions";
-import { Button } from "./ui/button";
 import { Field, FormError, Input, Textarea } from "./ui/input";
 import { Select } from "./ui/select";
 
-const kinds: ServiceKind[] = ["web", "worker", "cron", "static"];
+const kinds: ServiceKind[] = ["web", "static", "worker", "cron"];
 const strategies: BuildStrategy[] = ["auto", "dockerfile"];
 const insideRepo = String.raw`(?!(.*\/)?\.\.(\/|$))[A-Za-z0-9._\/\-]*`;
-const buildFields = ["dockerfilePath", "port", "healthCheckPath", "watchPaths"];
+const buildFields = ["rootDir", "buildCommand", "dockerfilePath", "watchPaths", "startCommand", "port", "healthCheckPath"];
 const resourceFields = ["replicas", "cpuMillis", "memoryMb", "volume", "storageGb"];
 
-const toSpec = (v: Record<string, string>): ServiceSpec => ({
+type ErrorAt = (field: string) => string | undefined;
+
+export const toSpec = (v: Record<string, string>): ServiceSpec => ({
   slug: v.slug,
   name: v.name,
   kind: v.kind as ServiceKind,
@@ -31,8 +32,9 @@ const toSpec = (v: Record<string, string>): ServiceSpec => ({
   cronSchedule: v.cronSchedule || null,
   startCommand: v.startCommand || null,
   healthCheckPath: v.healthCheckPath || null,
-  watchPaths: v.watchPaths.split("\n").map((path) => path.trim()).filter(Boolean),
+  watchPaths: (v.watchPaths ?? "").split("\n").map((path) => path.trim()).filter(Boolean),
   volume: v.volumeMountPath ? { mountPath: v.volumeMountPath, sizeGb: Number(v.volumeSizeGb) } : null,
+  buildCommand: v.buildCommand || null,
 });
 
 const watchPathsError = (text: string) => {
@@ -41,76 +43,107 @@ const watchPathsError = (text: string) => {
   return paths.some((path) => path.trim().length > 100) ? "Keep each watch path to 100 characters." : "";
 };
 
-export function ServiceForm({
+export function GeneralFields({
   initial,
-  before,
   prefill,
+  kind,
+  onKind,
   hostFor,
-  pending,
-  error,
-  errorField,
-  submitLabel,
-  actions,
-  onSubmit,
-  onCancel,
+  errorAt,
 }: {
-  initial?: Service;
-  before?: ReactNode;
+  initial?: Partial<ServiceSpec> & { name: string; slug: string };
   prefill?: string;
+  kind: ServiceKind;
+  onKind: (kind: ServiceKind) => void;
   hostFor?: (slug: string) => string | undefined;
-  pending: boolean;
-  error?: string;
-  errorField?: string;
-  submitLabel?: string;
-  actions?: ReactNode;
-  onSubmit: (spec: ServiceSpec, values: Record<string, string>, redeploy: boolean) => void;
-  onCancel?: () => void;
+  errorAt?: ErrorAt;
 }) {
-  const [kind, setKind] = useState<ServiceKind>(initial?.kind ?? "web");
-  const [strategy, setStrategy] = useState<BuildStrategy>(initial?.buildStrategy ?? "auto");
-  const [port, setPort] = useState(initial?.port?.toString() ?? "");
-  const [volumePath, setVolumePath] = useState(initial?.volume?.mountPath ?? "");
-  const storage = useApi<AuthProviders>("/auth/providers").data?.storage;
-  const at = (field: string) => (errorField === field ? error : undefined);
+  const creating = prefill !== undefined;
   return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        const values = formValues(e.currentTarget);
-        onSubmit(toSpec(values), values, redeployRequested(e));
-      }}
-      onInvalidCapture={(e) => (e.target as HTMLElement).closest("details")?.setAttribute("open", "")}
-      className="flex flex-col gap-4"
-    >
-      {before}
+    <>
       <NameSlugFields
-        initial={initial}
+        key={prefill}
+        initial={creating ? undefined : initial}
         prefill={prefill}
-        errorAt={at}
+        label={creating ? "Service name" : "Name"}
+        compact={creating}
+        errorAt={errorAt}
         preview={hostFor && servesHttp(kind) ? (slug) => <UrlPreview host={hostFor(slug)} /> : undefined}
       />
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Kind">
-          <Select name="kind" value={kind} onChange={(e) => setKind(e.target.value as ServiceKind)}>
+        <Field label="Runs as">
+          <Select name="kind" value={kind} onChange={(e) => onKind(e.target.value as ServiceKind)}>
             {kinds.map((kind) => (
               <option key={kind} value={kind}>
-                {kind}
+                {kindLabels[kind]}
               </option>
             ))}
           </Select>
         </Field>
-        <Field label="Root directory" hint="Where the service lives in the repository" error={at("rootDir")}>
-          <Input name="rootDir" defaultValue={initial?.rootDir ?? "/"} pattern={insideRepo} className="font-mono" />
-        </Field>
         {kind === "cron" && (
-          <Field label="Cron schedule" error={at("cronSchedule")}>
+          <Field label="Cron schedule" error={errorAt?.("cronSchedule")}>
             <Input name="cronSchedule" required pattern=".*\S.*" placeholder="*/5 * * * *" defaultValue={initial?.cronSchedule ?? ""} className="font-mono" />
           </Field>
         )}
       </div>
-      <Section title="Build and runtime" hint="Strategy, port, start command, health check" open={!!initial} failed={!!errorField && buildFields.includes(errorField)}>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Build strategy" hint="Auto detects the stack with Railpack">
+    </>
+  );
+}
+
+export function BuildFields({
+  initial,
+  withStrategy = false,
+  buildDefault,
+  dockerfile = false,
+  directories,
+  directory,
+  onDirectory,
+  errorAt,
+}: {
+  initial?: Partial<ServiceSpec>;
+  withStrategy?: boolean;
+  buildDefault?: string | null;
+  dockerfile?: boolean;
+  directories?: Detection["directories"];
+  directory?: string;
+  onDirectory?: (path: string) => void;
+  errorAt?: ErrorAt;
+}) {
+  const [strategy, setStrategy] = useState<BuildStrategy>(initial?.buildStrategy ?? "auto");
+  const [other, setOther] = useState(!!directories && !directories.some((d) => d.path === directory));
+  const rootInput = (
+    <Input name="rootDir" defaultValue={initial?.rootDir ?? "/"} pattern={insideRepo} className="font-mono" />
+  );
+  return (
+    <>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Root directory" hint={directories ? undefined : "Where the service lives in the repository"} error={errorAt?.("rootDir")}>
+          {directories?.length ? (
+            <Select
+              value={other ? "" : directory}
+              onChange={(e) => {
+                setOther(!e.target.value);
+                if (e.target.value) onDirectory?.(e.target.value);
+              }}
+              className="font-mono"
+            >
+              {directories.map((d) => (
+                <option key={d.path} value={d.path}>
+                  {d.path}
+                </option>
+              ))}
+              <option value="">Other…</option>
+            </Select>
+          ) : (
+            rootInput
+          )}
+        </Field>
+        {!!directories?.length && (other ? <Field label="Path">{rootInput}</Field> : <input type="hidden" name="rootDir" value={initial?.rootDir ?? "/"} />)}
+        <Field label="Build command" error={errorAt?.("buildCommand")}>
+          <Input name="buildCommand" defaultValue={initial?.buildCommand ?? ""} placeholder={buildDefault ?? "Railpack default"} maxLength={1000} className="font-mono" />
+        </Field>
+        {withStrategy && (
+          <Field label="Build strategy">
             <Select name="buildStrategy" value={strategy} onChange={(e) => setStrategy(e.target.value as BuildStrategy)}>
               {strategies.map((strategy) => (
                 <option key={strategy} value={strategy}>
@@ -119,126 +152,166 @@ export function ServiceForm({
               ))}
             </Select>
           </Field>
-          {strategy === "dockerfile" && (
-            <Field label="Dockerfile path" hint="Relative to the root directory" error={at("dockerfilePath")}>
-              <Input
-                name="dockerfilePath"
-                required
-                pattern={`(?!\\/)${insideRepo}`}
-                defaultValue={initial?.dockerfilePath ?? "Dockerfile"}
-                className="font-mono"
-              />
-            </Field>
-          )}
-          {kind !== "cron" && (
-            <Field
-              label="Port"
-              hint={
-                <>
-                  {servesHttp(kind) ? "Your app should listen on $PORT, which is 8080 unless set here." : "Optional. Lets other services in this environment reach the worker."}{" "}
-                  <DocsLink page="runtime-contract">Runtime contract</DocsLink>
-                </>
-              }
-              error={at("port")}
-            >
-              <Input name="port" type="number" min={1} max={65535} placeholder={servesHttp(kind) ? "8080" : undefined} value={port} onChange={(e) => setPort(e.target.value)} />
-            </Field>
-          )}
-          <Field label="Start command" hint="Overrides the image entrypoint">
-            <Input name="startCommand" defaultValue={initial?.startCommand ?? ""} className="font-mono" />
-          </Field>
-          {(servesHttp(kind) || (kind !== "cron" && !!port)) && (
-            <Field label="Health check path" hint="Probed over HTTP on the port; empty only checks that the port accepts connections" error={at("healthCheckPath")}>
-              <Input
-                name="healthCheckPath"
-                placeholder="/healthz"
-                pattern="\/.*"
-                maxLength={256}
-                defaultValue={initial?.healthCheckPath ?? ""}
-                className="font-mono"
-              />
-            </Field>
-          )}
-        </div>
-        <Field label="Watch paths" hint="One glob per line. A push that changes no matching file skips this service; empty watches the root directory" error={at("watchPaths")}>
-          <Textarea
-            name="watchPaths"
-            rows={3}
-            placeholder={"apps/web/**\npackages/ui/**"}
-            defaultValue={initial?.watchPaths.join("\n") ?? ""}
-            onInput={(e) => e.currentTarget.setCustomValidity(watchPathsError(e.currentTarget.value))}
-            className="font-mono"
-          />
-        </Field>
-      </Section>
-      <Section title="Resources" hint="Replicas, CPU, memory and a volume" open={false} failed={!!errorField && resourceFields.includes(errorField)}>
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Field label="Replicas" hint={volumePath ? "At most 1 with a volume" : undefined} error={at("replicas")}>
-            <Input name="replicas" type="number" min={0} max={volumePath ? 1 : 10} required defaultValue={initial?.replicas ?? 1} />
-          </Field>
-          <Field label="CPU (millicores)" error={at("cpuMillis")}>
-            <Input name="cpuMillis" type="number" min={1} max={4000} required defaultValue={initial?.cpuMillis ?? 500} />
-          </Field>
-          <Field label="Memory (MB)" error={at("memoryMb")}>
-            <Input name="memoryMb" type="number" min={1} max={8192} required defaultValue={initial?.memoryMb ?? 512} />
-          </Field>
-        </div>
-        {storage || initial?.volume ? (
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div className="sm:col-span-2">
-              <Field
-                label="Volume path"
-                hint={initial?.volume ? "A volume can grow and stays until the service is deleted" : "Optional. Files here survive deploys, and the service restarts instead of rolling"}
-                error={at("volume")}
-              >
-                <Input
-                  name="volumeMountPath"
-                  placeholder="/data"
-                  pattern="\/.+"
-                  required={!!initial?.volume}
-                  value={volumePath}
-                  onChange={(e) => setVolumePath(e.target.value)}
-                  className="w-full font-mono"
-                />
-              </Field>
-            </div>
-            <Field label="Volume size (GB)" error={at("storageGb")}>
-              <Input name="volumeSizeGb" type="number" min={initial?.volume?.sizeGb ?? 1} max={100} required disabled={!volumePath} defaultValue={initial?.volume?.sizeGb ?? 1} />
-            </Field>
-          </div>
-        ) : (
-          storage === false && (
-            <p className="text-sm text-graphite-400">
-              Volumes need a storage class that enforces capacity, and this installation has none configured.{" "}
-              <DocsLink page="self-hosting">Storage in the self-hosting guide</DocsLink>
-            </p>
-          )
         )}
-      </Section>
-      <FormError message={errorField ? undefined : error} />
-      <div className="flex justify-end gap-2">
-        {onCancel && <Button onClick={onCancel}>Cancel</Button>}
-        {actions ?? (
-          <Button type="submit" variant="primary" pending={pending}>
-            {submitLabel}
-          </Button>
+        {(dockerfile || (withStrategy && strategy === "dockerfile")) && (
+          <Field label="Dockerfile path" hint="Relative to the root directory" error={errorAt?.("dockerfilePath")}>
+            <Input name="dockerfilePath" required pattern={`(?!\\/)${insideRepo}`} defaultValue={initial?.dockerfilePath ?? "Dockerfile"} className="font-mono" />
+          </Field>
         )}
       </div>
+      <Field label="Watch paths" hint="One glob per line. A push that changes no matching file skips this service; empty watches the root directory" error={errorAt?.("watchPaths")}>
+        <Textarea
+          name="watchPaths"
+          rows={3}
+          placeholder={"apps/web/**\npackages/ui/**"}
+          defaultValue={initial?.watchPaths?.join("\n") ?? ""}
+          onInput={(e) => e.currentTarget.setCustomValidity(watchPathsError(e.currentTarget.value))}
+          className="font-mono"
+        />
+      </Field>
+    </>
+  );
+}
+
+export function RuntimeFields({
+  initial,
+  kind,
+  startDefault,
+  startRequired = false,
+  errorAt,
+}: {
+  initial?: Partial<ServiceSpec>;
+  kind: ServiceKind;
+  startDefault?: string | null;
+  startRequired?: boolean;
+  errorAt?: ErrorAt;
+}) {
+  const [port, setPort] = useState(initial?.port?.toString() ?? "");
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <Field label="Start command" hint={initial && startDefault === undefined ? "Overrides the image entrypoint" : undefined} error={errorAt?.("startCommand")}>
+        <Input name="startCommand" required={startRequired} pattern={startRequired ? String.raw`.*\S.*` : undefined} defaultValue={initial?.startCommand ?? ""} placeholder={startDefault ?? undefined} className="font-mono" />
+      </Field>
+      {kind !== "cron" && (
+        <Field
+          label="Port"
+          hint={
+            <>
+              {servesHttp(kind) ? "Empty uses $PORT, which is 8080." : "Optional. Lets other services in this environment reach the worker."}{" "}
+              <DocsLink page="runtime-contract">Runtime contract</DocsLink>
+            </>
+          }
+          error={errorAt?.("port")}
+        >
+          <Input name="port" type="number" min={1} max={65535} placeholder={servesHttp(kind) ? "8080" : undefined} value={port} onChange={(e) => setPort(e.target.value)} />
+        </Field>
+      )}
+      {(servesHttp(kind) || (kind !== "cron" && !!port)) && (
+        <Field label="Health check path" hint="Empty checks that the port accepts connections." error={errorAt?.("healthCheckPath")}>
+          <Input name="healthCheckPath" placeholder="/healthz" pattern="\/.*" maxLength={256} defaultValue={initial?.healthCheckPath ?? ""} className="font-mono" />
+        </Field>
+      )}
+    </div>
+  );
+}
+
+export function ResourceFields({ initial, errorAt }: { initial?: Partial<ServiceSpec>; errorAt?: ErrorAt }) {
+  const [volumePath, setVolumePath] = useState(initial?.volume?.mountPath ?? "");
+  const storage = useApi<AuthProviders>("/auth/providers").data?.storage;
+  const stored = initial?.volume ?? undefined;
+  return (
+    <>
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Field label="Replicas" hint={volumePath ? "At most 1 with a volume" : undefined} error={errorAt?.("replicas")}>
+          <Input name="replicas" type="number" min={0} max={volumePath ? 1 : 10} required defaultValue={initial?.replicas ?? 1} />
+        </Field>
+        <Field label="CPU (millicores)" error={errorAt?.("cpuMillis")}>
+          <Input name="cpuMillis" type="number" min={1} max={4000} required defaultValue={initial?.cpuMillis ?? 500} />
+        </Field>
+        <Field label="Memory (MB)" error={errorAt?.("memoryMb")}>
+          <Input name="memoryMb" type="number" min={1} max={8192} required defaultValue={initial?.memoryMb ?? 512} />
+        </Field>
+      </div>
+      {storage || stored ? (
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div className="sm:col-span-2">
+            <Field
+              label="Volume path"
+              hint={stored ? "A volume can grow and stays until the service is deleted" : "Optional. Files here survive deploys, and the service restarts instead of rolling"}
+              error={errorAt?.("volume")}
+            >
+              <Input
+                name="volumeMountPath"
+                placeholder="/data"
+                pattern="\/.+"
+                required={!!stored}
+                value={volumePath}
+                onChange={(e) => setVolumePath(e.target.value)}
+                className="w-full font-mono"
+              />
+            </Field>
+          </div>
+          <Field label="Volume size (GB)" error={errorAt?.("storageGb")}>
+            <Input name="volumeSizeGb" type="number" min={stored?.sizeGb ?? 1} max={100} required disabled={!volumePath} defaultValue={stored?.sizeGb ?? 1} />
+          </Field>
+        </div>
+      ) : (
+        storage === false && (
+          <p className="text-sm text-graphite-400">
+            Volumes need a storage class that enforces capacity, and this installation has none configured.{" "}
+            <DocsLink page="self-hosting">Storage in the self-hosting guide</DocsLink>
+          </p>
+        )
+      )}
+    </>
+  );
+}
+
+export function ServiceForm({
+  initial,
+  error,
+  errorField,
+  actions,
+  onSubmit,
+}: {
+  initial: Service;
+  error?: string;
+  errorField?: string;
+  actions: ReactNode;
+  onSubmit: (spec: ServiceSpec, redeploy: boolean) => void;
+}) {
+  const [kind, setKind] = useState<ServiceKind>(initial.kind);
+  const at = (field: string) => (errorField === field ? error : undefined);
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSubmit(toSpec(formValues(e.currentTarget)), redeployRequested(e));
+      }}
+      onInvalidCapture={(e) => (e.target as HTMLElement).closest("details")?.setAttribute("open", "")}
+      className="flex flex-col gap-4"
+    >
+      <GeneralFields initial={initial} kind={kind} onKind={setKind} errorAt={at} />
+      <Section title="Build and runtime" hint="Root directory, commands, port, health check" open failed={!!errorField && buildFields.includes(errorField)}>
+        <BuildFields initial={initial} withStrategy errorAt={at} />
+        <RuntimeFields initial={initial} kind={kind} errorAt={at} />
+      </Section>
+      <Section title="Resources" hint="Replicas, CPU, memory and a volume" open={false} failed={!!errorField && resourceFields.includes(errorField)}>
+        <ResourceFields initial={initial} errorAt={at} />
+      </Section>
+      <FormError message={errorField ? undefined : error} />
+      <div className="flex justify-end gap-2">{actions}</div>
     </form>
   );
 }
 
 function UrlPreview({ host }: { host?: string }) {
-  return (
-    <p className="text-xs text-graphite-400">
-      {host ? (
-        <>
-          Serves at <span className="font-mono text-graphite-200">https://{host}</span>
-        </>
-      ) : (
-        "Too long for a readable hostname, so it gets a shortened one with a suffix."
-      )}
-    </p>
+  return host ? (
+    <>
+      Serves at <span className="font-mono text-graphite-200">https://{host}</span>
+    </>
+  ) : (
+    "Too long for a readable hostname, so it gets a shortened one with a suffix."
   );
 }
 

@@ -36,11 +36,10 @@ export function SettingsTab({ service, projectHref, onChanged }: { service: Serv
           )}
           <ServiceForm
             initial={service}
-            pending={save.pending}
             error={save.error}
             errorField={save.field}
             actions={<SaveActions pending={save.pending} status={status} />}
-            onSubmit={(spec, _, andRedeploy) => save.run(spec, andRedeploy)}
+            onSubmit={(spec, andRedeploy) => save.run(spec, andRedeploy)}
           />
         </div>
       </Card>

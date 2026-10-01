@@ -24,11 +24,11 @@ export function OrgChooser({ installed }: { installed: boolean }) {
         />
       </Card>
     );
-  if (orgs.data[0]) redirect(`/${orgs.data[0].slug}${installed ? "?new=project" : ""}`);
+  if (orgs.data[0]) redirect(installed ? `/new?org=${orgs.data[0].slug}` : `/${orgs.data[0].slug}`);
   return (
     <Card className="mx-auto mt-16 w-full max-w-lg">
       <CardHeader title="Create your organization" description="Projects and members belong to an organization." />
-      <CreateOrgForm className="p-6" />
+      <CreateOrgForm className="p-6" prefill={me.data.name ?? me.data.login} />
     </Card>
   );
 }

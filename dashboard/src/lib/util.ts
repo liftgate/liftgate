@@ -1,4 +1,4 @@
-import type { Build, Deployment, EnvVar, ProjectTree, ServiceKind } from "./types";
+import type { Build, Deployment, EnvVar, ProjectTree, ServiceKind, Usage } from "./types";
 
 export function timeAgo(iso: string) {
   const seconds = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
@@ -56,7 +56,7 @@ const authErrors: Record<string, string> = {
 
 export const authError = (code: unknown) => (typeof code === "string" && code ? (authErrors[code] ?? "Sign-in failed. Try again.") : undefined);
 
-type EnvRow = EnvVar & { stored?: boolean };
+export type EnvRow = EnvVar & { stored?: boolean; description?: string | null; required?: boolean; updated?: boolean };
 
 export const storedRows = (vars: EnvVar[]): EnvRow[] => vars.map((r) => (r.secret ? { ...r, value: null, stored: true } : r));
 
@@ -84,3 +84,50 @@ export const platformHost = (labels: { service: string; environment: string; pro
 export const currentDeployment = <T extends { status: string }>(newestFirst: T[]) => newestFirst.find((d) => d.status === "running") ?? newestFirst[0];
 
 export const canRollBack = (deployment: Deployment, build?: Build) => ["superseded", "rolled_back"].includes(deployment.status) && !!build && !build.imagePruned;
+
+export const planName = (plan: string) => plan.charAt(0).toUpperCase() + plan.slice(1);
+
+export const kindLabels: Record<ServiceKind, string> = { web: "Web service", static: "Static site", worker: "Worker", cron: "Cron job" };
+
+const buildTimePrefixes = ["NEXT_PUBLIC_", "VITE_", "PUBLIC_", "NUXT_PUBLIC_", "REACT_APP_", "EXPO_PUBLIC_", "GATSBY_", "VUE_APP_"];
+const secretWords = /(^|_)(SECRET|TOKEN|PASSWORD|PASSWD|PWD|PASS|PRIVATE|KEY|APIKEY|CREDENTIALS?|AUTH|SALT|SIGNING|DSN|WEBHOOK|COOKIE|SESSION)(_|$)/;
+const secretNames = new Set(["DATABASE_URL", "REDIS_URL", "MONGODB_URI", "MONGO_URL", "SENTRY_DSN"]);
+
+export const classifyVariable = (name: string, secretHint = false) => {
+  const upper = name.toUpperCase();
+  const buildTime = buildTimePrefixes.some((prefix) => upper.startsWith(prefix));
+  return { buildTime, secret: !buildTime && (secretHint || secretWords.test(upper) || secretNames.has(upper) || upper.endsWith("_CONNECTION_STRING")) };
+};
+
+export const mergeDotenv = (rows: EnvRow[], vars: { name: string; value: string }[]) => {
+  const next = [...rows];
+  let added = 0;
+  let updated = 0;
+  for (const { name, value } of vars) {
+    const i = next.findIndex((row) => row.name === name);
+    if (i < 0) {
+      next.push({ name, value, secret: classifyVariable(name).secret });
+      added++;
+    } else if (next[i].value !== value) {
+      next[i] = { ...next[i], value, updated: true };
+      updated++;
+    }
+  }
+  return { rows: next, added, updated };
+};
+
+export const pasteSummary = (added: number, updated: number, skipped: number[]) =>
+  `Added ${added}, updated ${updated}, skipped ${skipped.length}${skipped.length ? ` (line${skipped.length > 1 ? "s" : ""} ${skipped.join(", ")})` : ""}.`;
+
+export const fitPlan = (wanted: number, usage: Usage) => {
+  const left = (limit: number | null, used: number) => (limit === null ? Infinity : Math.max(0, limit - used));
+  const share = (total: number, count: number, step: number, most: number) => Math.min(most, Math.floor(total / count / step) * step);
+  const cpu = left(usage.limits.cpuMillis, usage.cpuMillis);
+  const memory = left(usage.limits.memoryMb, usage.memoryMb);
+  const room = Math.min(left(usage.limits.services, usage.services), left(usage.limits.replicas, usage.replicas));
+  for (let count = Math.min(wanted, room); count > 0; count--) {
+    const fitted = { count, cpuMillis: share(cpu, count, 250, 500), memoryMb: share(memory, count, 256, 512) };
+    if (fitted.cpuMillis >= 250 && fitted.memoryMb >= 256) return fitted;
+  }
+  return { count: 0, cpuMillis: 500, memoryMb: 512 };
+};

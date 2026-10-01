@@ -1,41 +1,5 @@
-import {
-  siAngular,
-  siAstro,
-  siBun,
-  siDjango,
-  siFastapi,
-  siFlask,
-  siGo,
-  siLaravel,
-  siNextdotjs,
-  siNodedotjs,
-  siNuxt,
-  siRubyonrails,
-  siRust,
-  siSpringboot,
-  siSvelte,
-  siVite,
-} from "simple-icons";
+import { stacks } from "@/lib/stacks";
 import { inlineLink } from "./styles";
-
-const stacks = [
-  { name: "Next.js", icon: siNextdotjs },
-  { name: "Nuxt", icon: siNuxt },
-  { name: "Astro", icon: siAstro },
-  { name: "SvelteKit", icon: siSvelte },
-  { name: "Vite", icon: siVite },
-  { name: "Angular", icon: siAngular },
-  { name: "Node.js", icon: siNodedotjs },
-  { name: "Bun", icon: siBun },
-  { name: "Django", icon: siDjango },
-  { name: "FastAPI", icon: siFastapi },
-  { name: "Flask", icon: siFlask },
-  { name: "Ruby on Rails", icon: siRubyonrails },
-  { name: "Laravel", icon: siLaravel },
-  { name: "Spring Boot", icon: siSpringboot },
-  { name: "Go", icon: siGo },
-  { name: "Rust", icon: siRust },
-];
 
 export function Stacks() {
   return (

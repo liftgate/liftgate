@@ -1,20 +1,26 @@
 "use client";
 
 import { useApi } from "@/lib/hooks";
-import type { EnvVar, Service } from "@/lib/types";
+import type { AuthProviders, Environment, EnvVar, Service } from "@/lib/types";
 import { EnvEditor } from "@/components/env-editor";
 import { Loaded } from "@/components/loaded";
 import { EmptyState } from "@/components/ui/empty-state";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { Cell, Row, Table } from "@/components/ui/table";
 
-export function EnvTab({ service, admin }: { service: Service; admin: boolean }) {
+export function EnvTab({ service, environment, projectHref, admin }: { service: Service; environment: Environment; projectHref: string; admin: boolean }) {
   const vars = useApi<EnvVar[]>(`/services/${service.id}/env`);
+  const storage = useApi<AuthProviders>("/auth/providers").data?.storage;
   return (
     <Loaded query={vars} skeleton={<TableSkeleton />}>
       {(initial) =>
         admin ? (
-          <EnvEditor serviceId={service.id} initial={initial} />
+          <EnvEditor
+            serviceId={service.id}
+            initial={initial}
+            repository={{ projectId: environment.projectId, branch: environment.branch, rootDir: service.rootDir, buildCommand: service.buildCommand }}
+            databaseHref={storage ? projectHref : undefined}
+          />
         ) : initial.length === 0 ? (
           <EmptyState title="No variables" description="An admin of this organization sets the variables." />
         ) : (

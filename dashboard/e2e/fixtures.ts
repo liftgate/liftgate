@@ -6,6 +6,8 @@ import type {
   Build,
   Database,
   Deployment,
+  DetectedService,
+  Detection,
   Domain,
   EnvVar,
   Environment,
@@ -20,6 +22,7 @@ import type {
   ProjectTree,
   Service,
   ServiceMetrics,
+  ServiceSpec,
   Usage,
   User,
 } from "../src/lib/types";
@@ -151,6 +154,84 @@ const limits: Usage["limits"] = {
   udp: false,
   storageGb: 5,
 };
+export const usage: Usage = { plan: "free", limits, projects: 1, services: 1, customDomains: 0, replicas: 1, cpuMillis: 500, memoryMb: 512, storageGb: 1 };
+const spec = (slug: string, overrides: Partial<ServiceSpec> = {}): ServiceSpec => ({
+  slug,
+  name: slug,
+  kind: "web",
+  rootDir: "/",
+  buildStrategy: "auto",
+  dockerfilePath: "Dockerfile",
+  port: null,
+  replicas: 1,
+  cpuMillis: 500,
+  memoryMb: 512,
+  cronSchedule: null,
+  startCommand: null,
+  healthCheckPath: null,
+  watchPaths: [],
+  volume: null,
+  buildCommand: null,
+  framework: null,
+  ...overrides,
+});
+const detected = (slug: string, framework: [string, string], overrides: Partial<DetectedService> = {}, specOverrides: Partial<ServiceSpec> = {}): DetectedService => ({
+  selected: true,
+  framework: { id: framework[0], name: framework[1] },
+  packageManager: "pnpm",
+  builder: "railpack",
+  spec: spec(slug, { framework: framework[0], ...specOverrides }),
+  defaults: { build: "pnpm run build", start: "pnpm run start" },
+  evidence: `From package.json (${framework[0]}) and pnpm-lock.yaml`,
+  warnings: [],
+  healthHint: null,
+  variables: [],
+  ...overrides,
+});
+const exampleVariable = (name: string, overrides: Partial<DetectedService["variables"][number]> = {}) => ({ name, description: null, source: ".env.example", required: false, secretHint: false, ...overrides });
+export const detection: Detection = {
+  ref: "main",
+  commit: { sha, message: "Add the checkout page" },
+  partial: false,
+  services: [
+    detected("shop", ["next", "Next.js"], {
+      variables: [
+        exampleVariable("DATABASE_URL", { description: "Postgres connection string", secretHint: true }),
+        exampleVariable("STRIPE_SECRET_KEY"),
+        exampleVariable("NEXT_PUBLIC_SITE_URL"),
+        exampleVariable("LOG_LEVEL"),
+        exampleVariable("SMTP_HOST", { source: "app.json", required: true }),
+        exampleVariable("SENTRY_DSN"),
+      ],
+    }),
+  ],
+  directories: [{ path: "/", framework: "next" }],
+  warnings: [],
+};
+export const monorepo: Detection = {
+  ...detection,
+  services: ["web", "api", "docs"].map((slug, i) =>
+    detected(slug, [["next", "Next.js"], ["nestjs", "NestJS"], ["astro", "Astro"]][i] as [string, string], {}, {
+      buildCommand: `pnpm --filter ${slug} build`,
+      startCommand: `pnpm --filter ${slug} start`,
+      watchPaths: [`apps/${slug}/**`, "packages/ui/**", "pnpm-lock.yaml", "package.json"],
+    }),
+  ),
+  directories: [{ path: "/", framework: null }, ...["web", "api", "docs"].map((slug) => ({ path: `apps/${slug}`, framework: slug }))],
+};
+export const projectDetection: Detection = {
+  ...detection,
+  services: [
+    detected("shop", ["next", "Next.js"], {
+      variables: ["DATABASE_URL", "LOG_LEVEL", "STRIPE_SECRET_KEY", "NEXT_PUBLIC_SITE_URL"].map((name) => exampleVariable(name)),
+    }),
+    detected("worker", ["python", "Python"], { packageManager: null, defaults: { build: null, start: null }, evidence: "From requirements.txt and bot.py" }, { kind: "worker", rootDir: "worker" }),
+  ],
+  directories: [
+    { path: "/", framework: "next" },
+    { path: "worker", framework: "python" },
+  ],
+};
 const end = Math.floor(Date.now() / 1000);
 const series = (scale: number): MetricPoint[] => Array.from({ length: 60 }, (_, i) => ({ time: end - (59 - i) * 60, value: scale * (1.2 + Math.sin(i / 6)) }));
 const metrics: ServiceMetrics = {
@@ -183,7 +264,6 @@ export class Api {
 
   constructor(private readonly page: Page) {
     const tree: ProjectTree = { project, environments: [environment], services: [service] };
-    const usage: Usage = { plan: "free", limits, projects: 1, services: 1, customDomains: 0, replicas: 1, cpuMillis: 500, memoryMb: 512, storageGb: 1 };
     const replies: Record<string, unknown> = {
       "GET /auth/providers": providers,
       "POST /auth/passkey/options": { publicKey: { challenge: "c2lnbi1pbi1jaGFsbGVuZ2U", rpId: "localhost", userVerification: "preferred" } },
@@ -192,6 +272,7 @@ export class Api {
       "GET /me/passkeys": [],
       "GET /me/connections": [{ provider: "github", accountLogin: "ada", connectedAt: ago(9000) }],
       "GET /me/github/repositories": repositories,
+      "GET /me/github/repositories/detect": detection,
       "GET /invitations/welcome": { slug: org.slug, name: org.name, role: "member", invitedBy: user.login },
       "GET /orgs": [org],
       "GET /orgs/acme": org,
@@ -205,6 +286,7 @@ export class Api {
       "GET /orgs/acme/sso/sp": { entityId: "https://liftgate.example.com/api/v1/auth/sso/acme/metadata", acsUrl: "https://liftgate.example.com/api/v1/auth/sso/acme/acs" },
       "GET /orgs/acme/projects/shop/tree": tree,
       [`GET /projects/${project.id}/previews`]: { missing: [], pullRequests: [] },
+      [`GET /projects/${project.id}/detect`]: projectDetection,
       [`GET /services/${service.id}/deployments`]: [deployment],
       [`GET /services/${service.id}/builds`]: [build],
       [`GET /services/${service.id}/env`]: storedEnv,
@@ -238,7 +320,7 @@ export class Api {
       this.calls.push({ method: request.method(), path, search, body });
       const handler = this.handlers.get(key);
       if (!handler) this.unmocked.push(key);
-      const result = handler ? handler(body) : failure(404, "not_found", `${key} is not mocked`);
+      const result = handler ? await handler(body) : failure(404, "not_found", `${key} is not mocked`);
       const reply = result instanceof Reply ? result : result === undefined ? new Reply(204) : new Reply(200, result);
       await route.fulfill({ status: reply.status, contentType: "application/json", body: reply.body === undefined ? "" : JSON.stringify(reply.body) });
     });

@@ -17,11 +17,11 @@ export type ButtonVariant = keyof typeof variants;
 export const buttonClasses = (variant: ButtonVariant = "secondary", className = "", size: keyof typeof sizes = "md") =>
   `inline-flex ${sizes[size]} shrink-0 items-center whitespace-nowrap justify-center gap-2 rounded-md font-medium transition-colors motion-safe:active:translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50 ${variants[variant]} ${className}`;
 
-type Props = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; pending?: boolean };
+type Props = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; size?: keyof typeof sizes; pending?: boolean };
 
-export function Button({ variant, pending = false, className, children, disabled, type = "button", ...rest }: Props) {
+export function Button({ variant, size, pending = false, className, children, disabled, type = "button", ...rest }: Props) {
   return (
-    <button {...rest} type={type} disabled={disabled || pending} className={buttonClasses(variant, className)}>
+    <button {...rest} type={type} disabled={disabled || pending} className={buttonClasses(variant, className, size)}>
       {pending && <Spinner />}
       {children}
     </button>

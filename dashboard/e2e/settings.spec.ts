@@ -105,6 +105,20 @@ test("the old builds link opens the deployments tab with that build's log, next 
   await expect(page.getByRole("region", { name: /Build 9c1e7b3/ })).toHaveCount(0);
 });
 
+test("a live deployment with finished builds stops polling and leaves an older failed build closed", async ({ page, api }) => {
+  const failed = { ...build, id: "build-0", commitSha: "9c1e7b3d5a6f8e9c0b1a2d3e4f5a6b7c8d9e4f2a", status: "failed", createdAt: new Date(Date.now() - 86_400_000).toISOString() };
+  api.on(`GET /services/${service.id}/builds`, [build, failed]);
+  await page.clock.install();
+  await page.goto(servicePath);
+  await settled(page);
+  await expect(page.getByRole("row", { name: /9c1e7b3/ })).toBeVisible();
+  await expect(page.getByRole("region", { name: /^Build .* output$/ })).toHaveCount(0);
+  const polled = api.sent(`GET /services/${service.id}/deployments`).length;
+  await page.clock.runFor(30_000);
+  await page.waitForTimeout(500);
+  expect(api.sent(`GET /services/${service.id}/deployments`)).toHaveLength(polled);
+});
+
 test("only owners see delete organization, and it waits for the slug", async ({ page, api }) => {
   api.on("DELETE /orgs/acme", () => {
     api.on("GET /orgs", []);

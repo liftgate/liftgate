@@ -12,7 +12,8 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { FormError } from "@/components/ui/input";
 import { TableSkeleton } from "@/components/ui/skeleton";
 
-const inProgress = (status: string) => ["queued", "running", "pending", "releasing"].includes(status.toLowerCase());
+const building = (build: Build) => build.status === "queued" || build.status === "running";
+const releasing = (deployment: Deployment) => deployment.status === "pending" || deployment.status === "releasing";
 
 export function DeploymentsTab({
   service,
@@ -37,13 +38,13 @@ export function DeploymentsTab({
     await api(`/deployments/${id}/rollback`, { method: "POST" });
     deployments.reload();
   });
-  usePolling(!!deployments.data?.some((d) => inProgress(d.status)) || !!builds.data?.some((b) => inProgress(b.status)), () => {
+  usePolling(!!deployments.data?.some(releasing) || !!builds.data?.some(building), () => {
     deployments.reload();
     builds.reload();
     onChanged();
   });
-  const opening = builds.data?.find((b) => b.status === "running" || b.status === "failed");
-  if (selected === undefined && opening) setSelected(opening.id);
+  const newest = builds.data?.[0];
+  if (selected === undefined && (newest?.status === "running" || newest?.status === "failed")) setSelected(newest.id);
   const toggle = (id: string) => {
     const next = id === selected ? null : id;
     setSelected(next);

@@ -151,8 +151,8 @@ an egress bandwidth limit caps the pod's outgoing traffic, for example to 20 Mbi
 
 ## Private services
 
-A service with a port gets a private address, `<service>.<namespace>.svc.cluster.local`, shown under
-Settings as Private address. Services in the same environment reach it on port 80 and on the service's
+A service with a port gets a private address, `<service>.<namespace>.svc.cluster.local`, shown on the
+Domains tab as Private address. Services in the same environment reach it on port 80 and on the service's
 own port. Give a worker a port if other services need to reach it. Services in other environments and
 the internet cannot reach it.
 

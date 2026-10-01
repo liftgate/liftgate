@@ -11,11 +11,13 @@ token="secret-$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
 greeting="Hello from build time $$"
 
 cleanup() {
-  docker rm -f "$run-registry" "$run-next" "$run-hello" "$run-fastapi" "$run-sveltekit-node" "$run-pnpm-workspace" "$run-vite" "$run-php" > /dev/null 2>&1 || true
+  docker rm -fv "$run-registry" "$run-next" "$run-hello" "$run-fastapi" "$run-sveltekit-node" "$run-pnpm-workspace" "$run-vite" "$run-php" > /dev/null 2>&1 || true
+  [ -z "${registry-}" ] || docker image ls --format '{{.Repository}}:{{.Tag}}' --filter "reference=$registry/test/*" | xargs -r docker image rm > /dev/null || true
   docker network rm "$run" > /dev/null 2>&1 || true
   rm -rf "$work"
 }
 trap cleanup EXIT
+trap 'exit 1' HUP INT TERM
 
 expect() {
   [ "$2" = "$3" ] || { echo "$1: expected '$3', got '$2'" >&2; exit 1; }

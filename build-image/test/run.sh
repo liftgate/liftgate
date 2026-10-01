@@ -28,7 +28,7 @@ build() {
   name=$2
   shift 2
   case $fixture in
-    php*) ;;
+    php* | named-user) ;;
     *) set -- --add-host registry-1.docker.io:127.0.0.1 "$@" ;;
   esac
   if ! docker run --rm --network "$run" --security-opt seccomp=unconfined --security-opt apparmor=unconfined \
@@ -126,6 +126,7 @@ build dockerfile preview --env LIFTGATE_BUILD_STRATEGY=dockerfile --env PRODUCTI
   --env "LIFTGATE_ENV_FOO=$foo" --env "LIFTGATE_ENV_API_TOKEN=preview $token"
 expect "secret mount of a preview build" "$(docker run --rm "$registry/test/preview:latest" cat /api-token.sha256)" "$(sha "preview $token")"
 
+expect "the base of named-user/Dockerfile" "$(awk 'NR == 1 { print $2 }' "$fixtures/named-user/Dockerfile")" "$(docker run --rm --entrypoint printenv "$image" LIFTGATE_BUSYBOX)"
 build named-user named-user --env LIFTGATE_BUILD_STRATEGY=dockerfile
 named=$registry/test/named-user:latest
 expect "writes of uid 1000 to a WORKDIR the image gave uid 1001" \

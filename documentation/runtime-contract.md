@@ -103,6 +103,8 @@ In an image Liftgate builds with Railpack:
 - User 1000 owns the working directory, `/app`, and everything in it except the files inside
   `node_modules` directories, which stay owned by root and read-only. The directories inside
   `node_modules` are writable, so files such as `node_modules/.cache` can be created.
+- Files that a `deploy.inputs` entry of your own `railpack.json` copies from an image, from the
+  repository, or with an include of `/` keep the owner they arrive with.
 - `HOME` is `/home/liftgate`, owned by user 1000. The image has a user named `liftgate` for uid 1000,
   unless it already had a user with that uid.
 - `/tmp` is writable.

@@ -47,6 +47,23 @@ class SignInTest {
     }
 
     @Test
+    fun `a later sign-in fills a missing email with a verified one and never replaces or takes one`() = runBlocking {
+        fun github(email: String?, verified: Boolean) = VerifiedIdentity(GITHUB, "e1", email, verified, login = "dean")
+        suspend fun email(userId: UUID) = db.tx { Users.selectAll().where { Users.id eq userId }.single().let { it[Users.email] to it[Users.emailVerified] } }
+        val dean = signIn.complete(github(null, false)).userId
+        signIn.complete(github("public@example.dev", false))
+        assertEquals(null to false, email(dean))
+        val taken = db.tx { insertUser("taken", null, "taken@example.dev", null) }.id
+        assertEquals(dean, signIn.complete(github("Taken@example.dev", true)).userId)
+        assertEquals(null to false, email(dean))
+        signIn.complete(github("Dean@example.dev", true))
+        assertEquals("Dean@example.dev" to true, email(dean))
+        signIn.complete(github("other@example.dev", true))
+        assertEquals("Dean@example.dev" to true, email(dean))
+        assertEquals("taken@example.dev" to true, email(taken))
+    }
+
+    @Test
     fun `linking refuses an identity owned by someone else`() = runBlocking {
         val dean = signIn.complete(identity("l1", null, false)).userId
         val other = signIn.complete(identity("l2", null, false)).userId

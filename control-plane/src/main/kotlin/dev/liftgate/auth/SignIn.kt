@@ -131,6 +131,7 @@ class SignIn(
     }
 
     private fun confirmEmail(userId: UUID, identity: VerifiedIdentity) = identity.email?.takeIf { identity.emailVerified && verifiedEmailOwner(identity) == null }?.let { email ->
+        Users.update({ (Users.id eq userId) and Users.email.isNull() }) { it[Users.email] = email }
         Users.update({ (Users.id eq userId) and (Users.email.lowerCase() eq email.lowercase()) }) { it[emailVerified] = true }
     }
 

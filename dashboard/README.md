@@ -10,7 +10,7 @@ The web UI for the Liftgate control plane: Next.js 16 (App Router), React 19, Ty
 | `/login/sso` | SAML sign-in: finds the organization by email domain |
 | `/account` | Profile, sign-in methods, passkeys, git connections |
 | `/` | The landing page with `LIFTGATE_LANDING=true`, otherwise a redirect to `/dashboard` |
-| `/dashboard` | Redirects to the first organization, or creates one; `?installed=1`, the GitHub App's setup URL, opens the new project dialog |
+| `/dashboard` | Redirects to the first organization, or creates one; `?installed=1`, the GitHub App's setup URL, opens the new project dialog. An account that has not accepted the configured terms accepts them here first |
 | `/dashboard/operator` | The operator console, for the accounts in `operators` only: pending accounts, all accounts and organizations, with approve, suspend, unsuspend and plan changes; `?view=` picks `pending`, `users` or `orgs` |
 | `/[org]` | Projects; `?new=project` opens the new project dialog with the repository picker |
 | `/[org]/settings/sso` | SAML connection, owners only |

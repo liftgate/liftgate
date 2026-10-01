@@ -36,11 +36,15 @@ export function OrgChooser({ installed }: { installed: boolean }) {
           description="Your account was created before this Liftgate instance asked for agreement to its terms."
         />
         <Loaded query={providers} skeleton={<Skeleton className="h-4" />}>
-          {(list) => <Consent providers={list} />}
+          {(list) => (
+            <>
+              <Consent providers={list} />
+              <Button variant="primary" pending={accept.pending} onClick={() => accept.run()} className="w-full">
+                Accept
+              </Button>
+            </>
+          )}
         </Loaded>
-        <Button variant="primary" pending={accept.pending} onClick={() => accept.run()} className="w-full">
-          Accept
-        </Button>
         <FormError message={accept.error} />
       </Card>
     );

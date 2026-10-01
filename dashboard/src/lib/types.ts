@@ -123,6 +123,7 @@ export type AuthProviders = {
   email: boolean;
   sso: boolean;
   customDomains: boolean;
+  storage: boolean;
   deployDomain: string;
   termsUrl?: string;
   privacyUrl?: string;

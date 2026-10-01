@@ -166,6 +166,7 @@ class AuditTest {
                 "LIFTGATE_DATABASE_BACKUP_DESTINATION" to "s3://tenants/",
                 "LIFTGATE_DATABASE_BACKUP_ACCESS_KEY_ID" to "key",
                 "LIFTGATE_DATABASE_BACKUP_SECRET_ACCESS_KEY" to "secret",
+                "LIFTGATE_STORAGE_CLASS" to "topolvm-provisioner",
             ),
         )
         every { it.cache } returns unlimitedCache

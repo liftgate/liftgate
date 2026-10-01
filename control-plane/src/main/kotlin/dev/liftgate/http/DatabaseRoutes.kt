@@ -38,6 +38,7 @@ fun Route.databaseRoutes(app: App) {
         }
         post {
             val environment = call.environment(app, OrgRole.ADMIN)
+            if (app.config.storageClass == null) storageNotConfigured()
             call.respond(HttpStatusCode.Created, app.databases.create(environment.id, call.receive<DatabaseSpec>().validated()))
         }
     }
@@ -56,6 +57,7 @@ fun Route.databaseRoutes(app: App) {
         }
         post("/restore") {
             val scope = call.database(app, OrgRole.ADMIN)
+            if (app.config.storageClass == null) storageNotConfigured()
             if (app.config.databaseBackup == null) conflict("database backups are not configured on this installation")
             val body = call.receive<Restore>()
             val target = body.pointInTime.truncatedTo(ChronoUnit.SECONDS)

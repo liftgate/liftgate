@@ -1,5 +1,5 @@
 import type { Database } from "../src/lib/types";
-import { database, deployment, environment, expect, Reply, service, test } from "./fixtures";
+import { database, deployment, environment, expect, providers, Reply, service, servicePath, test } from "./fixtures";
 
 const list = `GET /environments/${environment.id}/databases`;
 
@@ -51,4 +51,19 @@ test("a database is added, linked with a redeploy, reveals its connection and re
   const restore = api.sent(`POST /databases/${database.id}/restore`)[1].body as { slug: string; pointInTime: string };
   expect(restore.slug).toBe("main-restored");
   expect(new Date(restore.pointInTime).getTime()).toBe(new Date("2026-09-30T12:00:00").getTime());
+});
+
+test("without a storage class databases and volumes explain why instead of offering forms", async ({ page, api }) => {
+  api.on("GET /auth/providers", { ...providers, storage: false });
+  api.on(list, []);
+  await page.goto("/acme/shop");
+  const databases = page.getByRole("region", { name: "Databases", exact: true });
+  await expect(databases.getByText("Databases need a storage class that enforces capacity")).toBeVisible();
+  await expect(databases.getByRole("link", { name: "Storage in the self-hosting guide" })).toHaveAttribute("href", /documentation\/self-hosting\.md$/);
+  await expect(page.getByRole("button", { name: "Add database" })).toHaveCount(0);
+
+  await page.goto(`${servicePath}?tab=settings`);
+  await page.locator("summary", { hasText: "Resources" }).click();
+  await expect(page.getByText("Volumes need a storage class that enforces capacity")).toBeVisible();
+  await expect(page.getByLabel("Volume path")).toHaveCount(0);
 });

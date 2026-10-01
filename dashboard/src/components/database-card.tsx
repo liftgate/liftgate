@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { useAction, useApi, usePolling } from "@/lib/hooks";
 import type { Backup, Database, Environment, Service } from "@/lib/types";
 import { formValues, timeAgo } from "@/lib/util";
+import { DocsLink } from "./docs-link";
 import { Loaded } from "./loaded";
 import { saved } from "./save-actions";
 import { StatusBadge } from "./ui/badge";
@@ -18,7 +19,7 @@ import { Cell, Row, Table } from "./ui/table";
 
 const slugPattern = "(?=.{2,40}$)[a-z][a-z0-9]*(-[a-z0-9]+)*";
 
-export function DatabaseCard({ environment, services, admin }: { environment: Environment; services: Service[]; admin: boolean }) {
+export function DatabaseCard({ environment, services, admin, storage }: { environment: Environment; services: Service[]; admin: boolean; storage?: boolean }) {
   const path = `/environments/${environment.id}/databases`;
   const databases = useApi<Database[]>(path);
   const [adding, setAdding] = useState(false);
@@ -39,12 +40,21 @@ export function DatabaseCard({ environment, services, admin }: { environment: En
         <h3 id={heading} className="text-sm font-medium">
           Databases
         </h3>
-        {admin && <Button onClick={() => setAdding(true)}>Add database</Button>}
+        {admin && storage && <Button onClick={() => setAdding(true)}>Add database</Button>}
       </div>
       <Loaded query={databases} skeleton={<TableSkeleton rows={1} />}>
         {(list) =>
           list.length === 0 ? (
-            <p className="text-sm text-graphite-400">Managed PostgreSQL for this environment. A linked service gets its connection URL as a variable.</p>
+            <p className="text-sm text-graphite-400">
+              {storage === false ? (
+                <>
+                  Databases need a storage class that enforces capacity, and this installation has none configured.{" "}
+                  <DocsLink page="self-hosting">Storage in the self-hosting guide</DocsLink>
+                </>
+              ) : (
+                "Managed PostgreSQL for this environment. A linked service gets its connection URL as a variable."
+              )}
+            </p>
           ) : (
             <Table columns={["Database", "Status", "Storage", "Linked to", ""]} label={`Databases in ${environment.name}`}>
               {list.map((d) => (
@@ -102,6 +112,7 @@ export function DatabaseCard({ environment, services, admin }: { environment: En
             services={services}
             serviceName={serviceName}
             admin={admin}
+            storage={!!storage}
             onChanged={databases.reload}
             onClose={() => setSelected(undefined)}
           />
@@ -116,6 +127,7 @@ function DatabaseDetails({
   services,
   serviceName,
   admin,
+  storage,
   onChanged,
   onClose,
 }: {
@@ -123,6 +135,7 @@ function DatabaseDetails({
   services: Service[];
   serviceName: (id: string) => string;
   admin: boolean;
+  storage: boolean;
   onChanged: () => void;
   onClose: () => void;
 }) {
@@ -231,7 +244,7 @@ function DatabaseDetails({
             )
           }
         </Loaded>
-        {admin && backups.data?.some((b) => b.phase === "completed") && (
+        {admin && storage && backups.data?.some((b) => b.phase === "completed") && (
           <form
             onSubmit={(e) => {
               e.preventDefault();

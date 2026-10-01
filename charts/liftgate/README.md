@@ -229,13 +229,25 @@ Restoring, the point-in-time drill and key escrow are in
 
 ## Databases and volumes
 
+Volumes and databases are offered only when `workloads.storageClass` names a storage class that
+enforces the size of each claim: a quota-backed provisioner such as TopoLVM, OpenEBS LVM LocalPV or
+ZFS LocalPV, or a cloud block-storage CSI driver. Rancher's `local-path`, the default class of k3s
+and kind, does not: its volumes are directories on the node's filesystem, so neither a claim's size
+nor the plan's `storageGb` stops a pod from filling that filesystem, which also holds the node's
+other volumes, such as those of Liftgate's own PostgreSQL and NATS on a single-node install. With a
+class that enforces capacity, WAL that piles up while archiving fails fills only its database's own
+volume. Until `workloads.storageClass` is set, the API answers `409 storage_not_configured` to a
+service create or update that adds or grows a volume, to a new database and to a restore, a pull
+request gets no preview when a service it copies has a volume, and the dashboard explains why
+instead of offering the fields.
+
 A service can keep one volume, `volume: {mountPath, sizeGb}` in its spec. The reconciler creates
-the PersistentVolumeClaim `<service>-data` (ReadWriteOnce, in `workloads.storageClass` or the
-cluster's default class), mounts it and switches the Deployment to the `Recreate` strategy, so a
-service with a volume runs at most one replica. Redeploys and rollbacks keep the claim mounted,
-including a rollback to a deployment from before the volume was added. A volume grows when its
-storage class allows expansion and otherwise keeps its size; it cannot shrink or be removed.
-Deleting the service deletes the claim, and with the usual `Delete` reclaim policy its data.
+the PersistentVolumeClaim `<service>-data` (ReadWriteOnce, in `workloads.storageClass`), mounts it
+and switches the Deployment to the `Recreate` strategy, so a service with a volume runs at most one
+replica. Redeploys and rollbacks keep the claim mounted, including a rollback to a deployment from
+before the volume was added. A volume grows when its storage class allows expansion and otherwise
+keeps its size; it cannot shrink or be removed. Deleting the service deletes the claim, and with the
+usual `Delete` reclaim policy its data.
 
 `POST /api/v1/environments/<id>/databases` creates a CloudNativePG `Cluster` named after the
 database in the environment's namespace: one instance with the database `app` owned by the role
@@ -564,7 +576,7 @@ other than 2xx is retried with a growing delay for an hour.
 | `allowUnsandboxedTenants` | `false` | With an empty `runtimeClass`, renders `LIFTGATE_ALLOW_RUNC=true` so tenant pods run under runc on the node kernel. Only for clusters where every tenant is trusted |
 | `workloads.nodeSelector` | `{}` | `LIFTGATE_WORKLOAD_NODE_SELECTOR`; node labels for tenant pods, `nodeSelector` when empty |
 | `workloads.tolerations` | `[]` | `LIFTGATE_WORKLOAD_TOLERATIONS`; taints tenant pods tolerate, written as for `kubectl taint`: `key=value:Effect`, `key:Effect` or `key` |
-| `workloads.storageClass` | `""` | `LIFTGATE_STORAGE_CLASS`; storage class of service volumes and tenant databases, the cluster default when empty |
+| `workloads.storageClass` | `""` | `LIFTGATE_STORAGE_CLASS`; storage class of service volumes and tenant databases. It must enforce capacity, which `local-path` does not; empty turns volumes and databases off, see [Databases and volumes](#databases-and-volumes) |
 | `nodeSelector` | `{}` | Node labels that pin the control plane, dashboard and CloudNativePG cluster; rendered into `LIFTGATE_NODE_SELECTOR` as `key=value,key=value`, which tenant pods and build jobs use when `workloads.nodeSelector` or `build.nodeSelector` is empty. See [Node pools](#node-pools) for NATS |
 | `registryInsecure` | `false` | `LIFTGATE_REGISTRY_INSECURE`; build jobs push to `registry` over plain HTTP |
 | `registryAuth` | `shared` | `LIFTGATE_REGISTRY_AUTH`: `shared` or `token`, see [Registry authentication](#registry-authentication) |

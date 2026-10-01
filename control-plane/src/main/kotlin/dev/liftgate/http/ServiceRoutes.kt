@@ -39,7 +39,9 @@ fun Route.serviceRoutes(app: App) {
         get { call.respond(app.services.withStatus(app.services.forEnvironment(call.environment(app).id))) }
         post {
             val environment = call.environment(app, OrgRole.ADMIN)
-            val service = app.services.create(environment.id, call.receive<ServiceSpec>().validated())
+            val spec = call.receive<ServiceSpec>().validated()
+            if (spec.volume != null && app.config.storageClass == null) storageNotConfigured()
+            val service = app.services.create(environment.id, spec)
             val build = try {
                 val scope = app.services.scope(service.id) ?: notFound("service")
                 app.claimPlatformDomain(scope)
@@ -61,6 +63,7 @@ fun Route.serviceRoutes(app: App) {
             val spec = json.decodeFromJsonElement<ServiceSpec>(merged).validated()
             if (spec.slug != scope.service.slug) invalid("slug cannot be changed")
             scope.service.volume?.let { if (spec.volume == null || spec.volume.sizeGb < it.sizeGb) invalid("a volume can grow but not shrink or go away; delete the service to remove it", "volume") }
+            if (spec.volume != scope.service.volume && app.config.storageClass == null) storageNotConfigured()
             app.claimPlatformDomain(scope.copy(service = scope.service.copy(slug = spec.slug, kind = spec.kind)))
             call.respond(app.services.update(scope.service.id, spec))
         }

@@ -4,6 +4,9 @@ import dev.liftgate.App
 import dev.liftgate.auth.Access
 import dev.liftgate.auth.Sessions
 import dev.liftgate.build.GitHubApp
+import dev.liftgate.database.Database
+import dev.liftgate.database.DatabaseScope
+import dev.liftgate.database.Databases
 import dev.liftgate.db.sql
 import dev.liftgate.deploy.BuildStatus
 import dev.liftgate.deploy.Builds
@@ -132,7 +135,8 @@ class ServiceRoutesTest {
 
     @Test
     fun `a volume keeps its service to one replica and can grow but not shrink or go away`() = testApplication {
-        coEvery { services.scope(service.id) } returns ServiceScope(service.copy(volume = Volume("/data", 2)), environment, project, org)
+        every { app.config } returns testConfig(mapOf("LIFTGATE_STORAGE_CLASS" to "topolvm-provisioner"))
+        coEvery { services.scope(service.id, any()) } returns ServiceScope(service.copy(volume = Volume("/data", 2)), environment, project, org)
         val spec = slot<ServiceSpec>()
         coEvery { services.update(service.id, capture(spec)) } answers { service }
         application { liftgate(app) }
@@ -143,6 +147,29 @@ class ServiceRoutesTest {
         }
         assertEquals(HttpStatusCode.OK, client.patch("/api/v1/services/${service.id}") { jsonBody("""{"volume":{"mountPath":"/srv","sizeGb":3}}""") }.status)
         assertEquals(Volume("/srv", 3), spec.captured.volume)
+    }
+
+    @Test
+    fun `without a storage class new volumes, databases and restores answer 409 storage_not_configured`() = testApplication {
+        val database = Database(UUID.randomUUID(), environment.id, "main", 1, 500, 512, null, null, Instant.now())
+        every { app.databases } returns mockk<Databases> { coEvery { scope(database.id) } returns DatabaseScope(database, environment, project, org) }
+        val stored = service.copy(id = UUID.randomUUID(), volume = Volume("/data", 2))
+        coEvery { services.scope(stored.id, any()) } returns ServiceScope(stored, environment, project, org)
+        coEvery { services.update(stored.id, any()) } answers { stored }
+        application { liftgate(app) }
+        val volume = """"volume":{"mountPath":"/data","sizeGb":1}"""
+        listOf(
+            client.post("/api/v1/environments/${environment.id}/services") { jsonBody("""{"slug":"files","name":"Files","kind":"worker",$volume}""") },
+            client.patch("/api/v1/services/${service.id}") { jsonBody("{$volume}") },
+            client.patch("/api/v1/services/${stored.id}") { jsonBody("""{"volume":{"mountPath":"/data","sizeGb":3}}""") },
+            client.post("/api/v1/environments/${environment.id}/databases") { jsonBody("""{"slug":"main"}""") },
+            client.post("/api/v1/databases/${database.id}/restore") { jsonBody("""{"slug":"restored","pointInTime":"2026-09-30T01:00:00Z"}""") },
+        ).forEach {
+            assertEquals(HttpStatusCode.Conflict, it.status, it.call.request.url.encodedPath)
+            assertEquals("storage_not_configured", json.decodeFromString(ErrorBody.serializer(), it.bodyAsText()).error)
+        }
+        assertEquals(HttpStatusCode.OK, client.patch("/api/v1/services/${stored.id}") { jsonBody("""{"replicas":0}""") }.status)
+        coVerify(exactly = 0) { services.create(any(), any()) }
     }
 
     @Test

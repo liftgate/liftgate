@@ -331,11 +331,11 @@ class ResourcesTest {
     @Test
     fun `a service with a volume renders the claim, mounts it and recreates its single replica`() {
         val volumed = testRelease(testService.copy(replicas = 1, volume = Volume("/data", 5)))
-        val claim = requireNotNull(Resources.volumeClaim(volumed, "local-path"))
+        val claim = requireNotNull(Resources.volumeClaim(volumed, "topolvm-provisioner"))
         assertEquals("api-data" to release.namespace, claim.metadata.name to claim.metadata.namespace)
         assertEquals(serviceLabels, claim.metadata.labels)
         assertEquals(listOf("ReadWriteOnce"), claim.spec.accessModes)
-        assertEquals("local-path" to Quantity("5Gi"), claim.spec.storageClassName to claim.spec.resources.requests["storage"])
+        assertEquals("topolvm-provisioner" to Quantity("5Gi"), claim.spec.storageClassName to claim.spec.resources.requests["storage"])
 
         val deployment = Resources.deployment(volumed, null)
         assertEquals("Recreate", deployment.spec.strategy.type)
@@ -362,13 +362,13 @@ class ResourcesTest {
 
     @Test
     fun `a database is one cloudnative-pg cluster sized by its spec and plan, labelled for the environment and archiving its wal`() {
-        val cluster = Resources.cluster(databaseScope, backup, "local-path")
+        val cluster = Resources.cluster(databaseScope, backup, "topolvm-provisioner")
         val spec = cluster.additionalProperties.getValue("spec") as Map<*, *>
         assertEquals(listOf("postgresql.cnpg.io/v1", "Cluster", "main", release.namespace), listOf(cluster.apiVersion, cluster.kind, cluster.metadata.name, cluster.metadata.namespace))
         assertEquals(databaseLabels, cluster.metadata.labels)
         assertEquals(mapOf("labels" to databaseLabels), spec["inheritedMetadata"])
         assertEquals(1, spec["instances"])
-        assertEquals(mapOf("size" to "2Gi", "storageClass" to "local-path"), spec["storage"])
+        assertEquals(mapOf("size" to "2Gi", "storageClass" to "topolvm-provisioner"), spec["storage"])
         val limits = mapOf("cpu" to "500m", "memory" to "512Mi", "ephemeral-storage" to "1024Mi")
         assertEquals(mapOf("requests" to limits + ("cpu" to "125m"), "limits" to limits), spec["resources"])
         assertEquals(mapOf("initdb" to mapOf("database" to "app", "owner" to "app")), spec["bootstrap"])

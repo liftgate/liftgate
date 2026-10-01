@@ -95,6 +95,7 @@ export const providers: AuthProviders = {
   email: true,
   sso: true,
   customDomains: true,
+  storage: true,
   deployDomain: "apps.example.com",
   termsUrl: "https://example.com/terms",
   privacyUrl: "https://example.com/privacy",

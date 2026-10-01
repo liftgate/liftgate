@@ -322,6 +322,17 @@ Every organization is on the `unlimited` plan until you change `defaultPlan` or 
 `admin plan`. [Plans and limits](plans-and-limits.md) describes the plans and the limits that apply to
 all of them.
 
+### Volumes and databases
+
+Service volumes and managed PostgreSQL databases stay off until `workloads.storageClass` names a storage
+class that enforces the size of each claim: a quota-backed provisioner such as TopoLVM, OpenEBS LVM
+LocalPV or ZFS LocalPV, or a cloud block-storage CSI driver. The `local-path` class that k3s installs does
+not. Its volumes are directories on the VM's disk, so one app could fill the disk that Liftgate's own
+PostgreSQL and NATS use, whatever its plan's `storageGb` says. Until the value is set, the API refuses
+volumes and databases with `409 storage_not_configured` and the dashboard says why.
+[Databases and volumes](../charts/liftgate/README.md#databases-and-volumes) in the chart README covers the
+rest.
+
 ### The registry
 
 Once a day the control plane deletes the images Liftgate no longer needs; Image retention in the
@@ -625,6 +636,9 @@ From 0.2.0 to the release after it:
 - `controlPlane.javaOpts` now defaults to `-XX:+UseG1GC -XX:MaxRAMPercentage=75 -XX:ActiveProcessorCount=2`.
   If you set your own `javaOpts`, add these flags to it.
 - The new values `controlPlane.logFormat` and `controlPlane.roleResources` are optional.
+- Migration V32 adds the `databases` and `service_links` tables and the `services.volume` column. A
+  `helm rollback` does not undo it. Volumes and databases stay off until `workloads.storageClass` is set,
+  as [Volumes and databases](#volumes-and-databases) explains.
 
 Upgrading straight from 0.2.0-alpha.2 or older to a release after 0.2.0-alpha.3 skips the move of build
 images to their new names, so builds that run during the upgrade may need a retry.

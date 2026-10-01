@@ -26,7 +26,7 @@ export function Overview({ org, projectSlug, onboarding }: { org: string; projec
   const [dialog, setDialog] = useState<"environment" | "service" | "deploy" | undefined>(onboarding ? "deploy" : undefined);
   const [environmentId, setEnvironmentId] = useState<string>();
   const tree = useApi<ProjectTree>(`/orgs/${org}/projects/${projectSlug}/tree`);
-  const deployDomain = useApi<AuthProviders>("/auth/providers").data?.deployDomain;
+  const providers = useApi<AuthProviders>("/auth/providers").data;
   const project = tree.data?.project;
   const environments = tree.data?.environments;
   const environment = environments?.find((e) => e.id === environmentId) ?? environments?.[0];
@@ -108,7 +108,7 @@ export function Overview({ org, projectSlug, onboarding }: { org: string; projec
                   href={`${href}/${environment.slug}`}
                   onNewService={admin ? () => newService(environment.id) : undefined}
                 >
-                  <DatabaseCard environment={environment} services={inEnvironment} admin={admin} />
+                  <DatabaseCard environment={environment} services={inEnvironment} admin={admin} storage={providers?.storage} />
                 </EnvironmentCard>
               );
             })
@@ -160,7 +160,7 @@ export function Overview({ org, projectSlug, onboarding }: { org: string; projec
             )
           }
           prefill={dialog === "deploy" ? project?.name : undefined}
-          hostFor={environment && deployDomain ? (slug) => platformHost({ service: slug, environment: environment.slug, project: projectSlug, org }, deployDomain) : undefined}
+          hostFor={environment && providers ? (slug) => platformHost({ service: slug, environment: environment.slug, project: projectSlug, org }, providers.deployDomain) : undefined}
           pending={createService.pending}
           error={createService.error}
           errorField={createService.field}

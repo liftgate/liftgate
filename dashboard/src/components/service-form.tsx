@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import type { BuildStrategy, Service, ServiceKind, ServiceSpec } from "@/lib/types";
+import { useApi } from "@/lib/hooks";
+import type { AuthProviders, BuildStrategy, Service, ServiceKind, ServiceSpec } from "@/lib/types";
 import { formValues, servesHttp } from "@/lib/util";
 import { DocsLink } from "./docs-link";
 import { NameSlugFields } from "./name-slug-fields";
@@ -69,6 +70,7 @@ export function ServiceForm({
   const [strategy, setStrategy] = useState<BuildStrategy>(initial?.buildStrategy ?? "auto");
   const [port, setPort] = useState(initial?.port?.toString() ?? "");
   const [volumePath, setVolumePath] = useState(initial?.volume?.mountPath ?? "");
+  const storage = useApi<AuthProviders>("/auth/providers").data?.storage;
   const at = (field: string) => (errorField === field ? error : undefined);
   return (
     <form
@@ -181,28 +183,37 @@ export function ServiceForm({
             <Input name="memoryMb" type="number" min={1} max={8192} required defaultValue={initial?.memoryMb ?? 512} />
           </Field>
         </div>
-        <div className="grid gap-4 sm:grid-cols-3">
-          <div className="sm:col-span-2">
-            <Field
-              label="Volume path"
-              hint={initial?.volume ? "A volume can grow and stays until the service is deleted" : "Optional. Files here survive deploys, and the service restarts instead of rolling"}
-              error={at("volume")}
-            >
-              <Input
-                name="volumeMountPath"
-                placeholder="/data"
-                pattern="\/.+"
-                required={!!initial?.volume}
-                value={volumePath}
-                onChange={(e) => setVolumePath(e.target.value)}
-                className="w-full font-mono"
-              />
+        {storage || initial?.volume ? (
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="sm:col-span-2">
+              <Field
+                label="Volume path"
+                hint={initial?.volume ? "A volume can grow and stays until the service is deleted" : "Optional. Files here survive deploys, and the service restarts instead of rolling"}
+                error={at("volume")}
+              >
+                <Input
+                  name="volumeMountPath"
+                  placeholder="/data"
+                  pattern="\/.+"
+                  required={!!initial?.volume}
+                  value={volumePath}
+                  onChange={(e) => setVolumePath(e.target.value)}
+                  className="w-full font-mono"
+                />
+              </Field>
+            </div>
+            <Field label="Volume size (GB)" error={at("storageGb")}>
+              <Input name="volumeSizeGb" type="number" min={initial?.volume?.sizeGb ?? 1} max={100} required disabled={!volumePath} defaultValue={initial?.volume?.sizeGb ?? 1} />
             </Field>
           </div>
-          <Field label="Volume size (GB)" error={at("storageGb")}>
-            <Input name="volumeSizeGb" type="number" min={initial?.volume?.sizeGb ?? 1} max={100} required disabled={!volumePath} defaultValue={initial?.volume?.sizeGb ?? 1} />
-          </Field>
-        </div>
+        ) : (
+          storage === false && (
+            <p className="text-sm text-graphite-400">
+              Volumes need a storage class that enforces capacity, and this installation has none configured.{" "}
+              <DocsLink page="self-hosting">Storage in the self-hosting guide</DocsLink>
+            </p>
+          )
+        )}
       </Section>
       <FormError message={errorField ? undefined : error} />
       <div className="flex justify-end gap-2">

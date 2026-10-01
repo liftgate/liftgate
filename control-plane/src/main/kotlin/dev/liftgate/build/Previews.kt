@@ -10,6 +10,7 @@ import dev.liftgate.db.sql
 import dev.liftgate.http.LiftgateException
 import dev.liftgate.http.claimPlatformDomain
 import dev.liftgate.http.conflict
+import dev.liftgate.http.storageNotConfigured
 import dev.liftgate.project.Environment
 import dev.liftgate.project.EnvironmentKind
 import dev.liftgate.project.Project
@@ -162,6 +163,7 @@ class Previews(private val app: App) {
             .firstOrNull()?.get(Environments.id) ?: conflict("${project.slug} has no production environment to copy")
         val environment = app.projects.insertPreview(project.id, pull.number, pull.headRef)
         ServicesTable.selectAll().where { ServicesTable.environmentId eq base }.map { it.toService() }.forEach { service ->
+            if (service.volume != null && app.config.storageClass == null) storageNotConfigured()
             val copy = app.services.insert(environment.id, service.spec())
             EnvVarsTable.batchInsert(EnvVarsTable.selectAll().where { EnvVarsTable.serviceId eq service.id }.toList()) { row ->
                 this[EnvVarsTable.id] = UUID.randomUUID()

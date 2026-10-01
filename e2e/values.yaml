@@ -33,6 +33,9 @@ gateway:
 runtimeClass: ""
 allowUnsandboxedTenants: true
 
+workloads:
+  storageClass: standard
+
 deniedEgressCidrs:
   - 1.0.0.1/32
 

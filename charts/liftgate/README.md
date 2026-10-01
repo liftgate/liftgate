@@ -473,8 +473,8 @@ and an outbox event in one transaction.
 
 Set `legal.termsUrl`, `legal.privacyUrl` and `legal.aupUrl` to show a consent line on sign-in
 and a footer with the documents; new accounts then record when they accepted the terms, and
-accounts created before that, operators included, accept them on the dashboard home before they
-continue. Left empty, neither appears.
+accounts created before that, operators included, see the terms in place of every dashboard page
+but their account page until they accept them. Left empty, neither appears.
 
 ## Notifications
 

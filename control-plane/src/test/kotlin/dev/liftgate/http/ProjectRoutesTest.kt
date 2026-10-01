@@ -14,6 +14,7 @@ import dev.liftgate.org.Limits
 import dev.liftgate.org.Orgs
 import dev.liftgate.org.Plan
 import dev.liftgate.org.Plans
+import dev.liftgate.org.UserStatus
 import dev.liftgate.org.insertUser
 import dev.liftgate.project.EnvironmentKind
 import dev.liftgate.project.Project
@@ -152,7 +153,7 @@ class ProjectRoutesTest {
     }
 
     @Test
-    fun `detecting a project's repository is for org admins, reads its default branch, and reads nothing once the importer lost write access`() = testApplication {
+    fun `detecting a project's repository is for active org admins, reads its default branch, and reads nothing once the importer lost write access`() = testApplication {
         val org = orgs.create("acme", "Acme", user.id)
         val project = app.projects.create(org.id, "shop", "Shop", "acme/shop", 42, "alice", defaultBranch = "trunk")
         val grace = db.tx { insertUser("grace", null, null, null) }
@@ -171,6 +172,7 @@ class ProjectRoutesTest {
         every { app.sessions } returns mockk<Sessions> {
             coEvery { resolve("s") } returns user
             coEvery { resolve("m") } returns grace
+            coEvery { resolve("p") } returns user.copy(status = UserStatus.PENDING)
         }
         val github = mockk<GitHubApp> {
             coEvery { installationToken(42, "shop", any()) } returns "ghs_token"
@@ -182,6 +184,8 @@ class ProjectRoutesTest {
         every { app.github } returns github
         application { liftgate(app) }
         assertEquals(HttpStatusCode.Forbidden, client.get("/api/v1/projects/${project.id}/detect") { session("m") }.status)
+        val pending = client.get("/api/v1/projects/${project.id}/detect") { session("p") }
+        assertEquals(HttpStatusCode.Forbidden to "account_pending", pending.status to json.decodeFromString(ErrorBody.serializer(), pending.bodyAsText()).error)
         val response = client.get("/api/v1/projects/${project.id}/detect") { session() }
         assertEquals(HttpStatusCode.OK, response.status)
         val detection = json.decodeFromString(Detection.serializer(), response.bodyAsText())

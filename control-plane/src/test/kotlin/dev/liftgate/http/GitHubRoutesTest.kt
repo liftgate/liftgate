@@ -9,6 +9,7 @@ import dev.liftgate.build.TestKeys
 import dev.liftgate.cache.Cache
 import dev.liftgate.config.GitHubConfig
 import dev.liftgate.org.User
+import dev.liftgate.org.UserStatus
 import dev.liftgate.testConfig
 import dev.liftgate.unlimitedCache
 import io.ktor.client.HttpClient
@@ -130,6 +131,18 @@ class GitHubRoutesTest {
         assertTrue("u:p@" !in first.bodyAsText())
         assertEquals(detection, json.decodeFromString(Detection.serializer(), detect("acme/shop").bodyAsText()))
         assertEquals(listOf(1, 1), listOf("/repos/acme/shop/git/trees/t1", "/graphql").map { path -> requests.count { it.url.encodedPath == path } })
+    }
+
+    @Test
+    fun `detection answers account_pending without reading github while the account waits for approval and detects once it is active`() = testApplication {
+        every { app.cache } returns cache
+        every { app.sessions } returns mockk<Sessions> { coEvery { resolve("s") } returns user.copy(status = UserStatus.PENDING) }
+        application { liftgate(app) }
+        val refused = detect("acme/shop")
+        assertEquals(HttpStatusCode.Forbidden to "account_pending", refused.status to json.decodeFromString(ErrorBody.serializer(), refused.bodyAsText()).error)
+        assertTrue(requests.isEmpty())
+        every { app.sessions } returns mockk<Sessions> { coEvery { resolve("s") } returns user }
+        assertEquals(HttpStatusCode.OK, detect("acme/shop").status)
     }
 
     @Test

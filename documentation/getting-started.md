@@ -76,8 +76,9 @@ Liftgate reads the repository's file list and manifests such as `package.json`, 
   fit your plan are checked.
 - Variables named in `.env.example`, `.env.sample` or `app.json`, each with an empty value. Fill in the
   ones you need, or choose Paste .env or Import file to fill them from a `.env` file, which is read in
-  your browser. Empty variables are skipped. Liftgate never reads values from the repository, and never
-  reads a committed `.env` file.
+  your browser. Empty variables are skipped. Liftgate reads the example values in memory only to mark a
+  variable as required or as a likely secret, then discards them; they are never stored, cached, returned
+  or logged. It never reads a committed `.env` file.
 
 What Liftgate shows is its best reading of the repository; every field can be changed, and Railpack still
 detects the stack during the build.

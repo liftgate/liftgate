@@ -15,6 +15,7 @@ import io.micrometer.prometheusmetrics.PrometheusMeterRegistry
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -85,7 +86,7 @@ class LogFormatTest {
     fun `a failed release logs one json line carrying its deployment id and stack trace`() = runBlocking {
         val deploymentId = UUID.randomUUID()
         val nats = TestNats.clean()
-        val consumers = CoroutineScope(SupervisorJob())
+        val consumers = CoroutineScope(SupervisorJob() + CoroutineExceptionHandler { _, _ -> })
         val app = mockk<App> {
             every { this@mockk.nats } returns nats
             every { scope } returns consumers

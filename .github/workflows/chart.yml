@@ -190,8 +190,10 @@ jobs:
           printf 'mirrors:\n  "10.43.0.50:5000":\n    endpoint:\n      - "http://10.43.0.50:5000"\n' | sudo tee /etc/rancher/k3s/registries.yaml
           curl -sSfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.34.8+k3s1 INSTALL_K3S_EXEC='server --flannel-backend=none --disable-network-policy --disable-kube-proxy --disable=traefik --disable=servicelb --write-kubeconfig-mode=644' sh -
           networkless() { kubectl get nodes -o jsonpath='{.items[*].status.conditions[?(@.type=="Ready")].message}' | grep -q NetworkReady=false; }
-          for attempt in $(seq 60); do networkless && break; sleep 2; done
-          networkless
+          restarts() { systemctl show k3s -P NRestarts; }
+          settled() { r=$(restarts) && networkless && sleep 10 && networkless && test "$(restarts)" = "$r"; }
+          attempt=0
+          until settled; do test $((attempt += 1)) -lt 60; sleep 2; done
       - run: sh infra/install.sh
       - name: k3s pulls through registries.yaml from a registry at a fixed ClusterIP, as documentation/self-hosting.md sets it up
         run: |
@@ -252,4 +254,4 @@ jobs:
           kubectl get nodes -o jsonpath='{range .items[*].status.conditions[*]}{.type}={.status} {.message}{"\n"}{end}' || true
           ls -la /etc/cni/net.d /opt/cni/bin || true
           sudo journalctl -u k3s --no-pager | grep -i cni | tail -40
-          sudo journalctl -u k3s --no-pager | grep -E 'level=fatal|panic|systemd\[' | tail -40
+          sudo journalctl -u k3s --no-pager | grep -E 'level=fatal|panic|Shutdown request|systemd\[' | tail -40

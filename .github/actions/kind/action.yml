@@ -1,0 +1,17 @@
+name: kind
+description: Installs kind v0.31.0 and kubectl v1.35.0, checked against pinned digests
+runs:
+  using: composite
+  steps:
+    - shell: sh
+      run: |
+        mkdir -p "$RUNNER_TEMP/kind"
+        cd "$RUNNER_TEMP/kind"
+        curl --fail --silent --show-error --location --retry 5 --output kind https://github.com/kubernetes-sigs/kind/releases/download/v0.31.0/kind-linux-amd64
+        curl --fail --silent --show-error --location --retry 5 --output kubectl https://dl.k8s.io/release/v1.35.0/bin/linux/amd64/kubectl
+        sha256sum --check --strict <<EOF
+        eb244cbafcc157dff60cf68693c14c9a75c4e6e6fedaf9cd71c58117cb93e3fa  kind
+        a2e984a18a0c063279d692533031c1eff93a262afcc0afdc517375432d060989  kubectl
+        EOF
+        chmod +x kind kubectl
+        echo "$RUNNER_TEMP/kind" >> "$GITHUB_PATH"

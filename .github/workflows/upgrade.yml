@@ -63,9 +63,7 @@ jobs:
       - uses: azure/setup-helm@v5
         with:
           version: v4.3.0
-      - uses: helm/kind-action@v1
-        with:
-          install_only: true
+      - uses: ./.github/actions/kind
       - run: sh e2e/upgrade.sh
       - name: diagnostics
         if: failure()

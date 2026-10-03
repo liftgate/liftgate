@@ -44,9 +44,7 @@ jobs:
       - uses: azure/setup-helm@v5
         with:
           version: v4.3.0
-      - uses: helm/kind-action@v1
-        with:
-          install_only: true
+      - uses: ./.github/actions/kind
       - name: cluster
         run: sh e2e/cluster.sh
       - name: checks

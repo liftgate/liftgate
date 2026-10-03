@@ -160,7 +160,8 @@ jobs:
       - uses: azure/setup-helm@v5
         with:
           version: v4.3.0
-      - uses: helm/kind-action@v1
+      - uses: ./.github/actions/kind
+      - run: kind create cluster --wait 60s
       - name: install.sh refuses a cluster with another CNI and changes nothing
         run: |
           kubectl wait nodes --all --for=condition=Ready --timeout=2m

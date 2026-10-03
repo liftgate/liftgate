@@ -19,9 +19,11 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
 import java.util.Base64
+import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -32,7 +34,7 @@ import kotlin.test.assertTrue
 class BuildJobsTest {
     private val service = testService.copy(rootDir = "/apps/api", buildStrategy = BuildStrategy.DOCKERFILE, dockerfilePath = "docker/Dockerfile")
     private val scope = ServiceScope(service, testEnvironment, testProject, testOrg)
-    private val image = BuildJobs.imageRef("registry.test", scope, testBuild.commitSha)
+    private val image = BuildJobs.imageRef("registry.test", scope, testBuild)
     private val cache = BuildJobs.imageRef("registry.test", scope, "cache")
     private val spec = BuildJobSpec(testBuild, service, testProject, "ghs_token", image, cache, "ghcr.io/liftgate/build-image:latest", "liftgate-build", emptyMap(), false)
     private val job = BuildJobs.job(spec)
@@ -43,8 +45,9 @@ class BuildJobsTest {
     private val owner = JobBuilder(job).editMetadata().withUid("job-uid").endMetadata().build()
 
     @Test
-    fun `image refs are registry, org, project, environment, service and a tag without slashes`() {
-        assertEquals("registry.test/acme/shop/production/api:abc123", image)
+    fun `image refs are registry, org, project, environment, service and a tag of the commit and build without slashes`() {
+        assertEquals("registry.test/acme/shop/production/api:abc123-${testBuild.id}", image)
+        assertNotEquals(image, BuildJobs.imageRef("registry.test", scope, testBuild.copy(id = UUID.randomUUID())))
         assertEquals("registry.test/acme/shop/production/api:cache", cache)
         assertEquals("registry.test/acme/shop/production/api:feature-login", BuildJobs.imageRef("registry.test", scope, "feature/login"))
     }
@@ -52,7 +55,7 @@ class BuildJobsTest {
     @Test
     fun `production and preview builds of one service and sha get different image refs and caches`() {
         val preview = scope.copy(environment = testEnvironment.copy(slug = "preview", kind = EnvironmentKind.PREVIEW))
-        assertEquals("registry.test/acme/shop/preview/api:abc123", BuildJobs.imageRef("registry.test", preview, testBuild.commitSha))
+        assertEquals("registry.test/acme/shop/preview/api:abc123-${testBuild.id}", BuildJobs.imageRef("registry.test", preview, testBuild))
         assertEquals("registry.test/acme/shop/preview/api:cache", BuildJobs.imageRef("registry.test", preview, "cache"))
     }
 

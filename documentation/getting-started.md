@@ -161,6 +161,11 @@ replaced, releases that build again with the settings and variables it ran with.
 offered once the build's image has been deleted; [Plans and limits](plans-and-limits.md) says which
 images stay.
 
+Every build has its own image, so a rollback or a redeploy runs exactly the image that build produced,
+even after the same commit was built again. Builds made by Liftgate 0.3.0-alpha.3 or older are released
+from their commit's tag instead, so they run the image of the last build of that commit those versions
+made.
+
 ## Logs
 
 The Logs tab follows the output of the service's running pods, starting with the last 500 lines of each.

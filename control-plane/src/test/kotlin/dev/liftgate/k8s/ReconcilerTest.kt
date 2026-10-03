@@ -136,6 +136,20 @@ class ReconcilerTest {
     }
 
     @Test
+    fun `release pins the pod to the digest its build recorded, and a build without one pulls its tag on every start`() = runBlocking {
+        val digest = "sha256:" + "b".repeat(64)
+        acceptAll()
+        Reconciler(app, client).release(testDeployment.id)
+        every { app.builds } returns mockk<Builds> { coEvery { byId(testBuild.id) } returns testBuild.copy(imageDigest = digest) }
+        Reconciler(app, client).release(testDeployment.id)
+
+        val (legacy, pinned) = sent().filter { it.method == "PATCH" && it.path.startsWith(deploymentPath) }.map { it.utf8Body }
+        listOf("\"image\":\"${testBuild.imageRef}\"", "\"imagePullPolicy\":\"Always\"").forEach { assertTrue(it in legacy, it) }
+        assertTrue("\"image\":\"registry.test/acme/shop-api@$digest\"" in pinned, pinned)
+        assertTrue("imagePullPolicy" !in pinned, pinned)
+    }
+
+    @Test
     fun `release binds the log reader role, and not the database reader, to the api account inside the environment namespace`() = runBlocking {
         every { app.config } returns testConfig(
             mapOf("LIFTGATE_LOG_READER_ROLE" to "liftgate-log-reader", "LIFTGATE_DATABASE_READER_ROLE" to "liftgate-database-reader", "LIFTGATE_LOG_READER_ACCOUNT" to "liftgate-api"),

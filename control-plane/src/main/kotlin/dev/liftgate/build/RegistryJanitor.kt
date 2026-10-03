@@ -14,7 +14,6 @@ import dev.liftgate.deploy.BuildStatus
 import dev.liftgate.deploy.live
 import dev.liftgate.deploy.toBuild
 import dev.liftgate.http.json
-import dev.liftgate.http.shaPattern
 import dev.liftgate.org.toOrganization
 import dev.liftgate.project.toEnvironment
 import dev.liftgate.project.toProject
@@ -62,6 +61,7 @@ import kotlin.time.Duration.Companion.days
 
 private const val KEPT_BUILDS = 10
 private val building = listOf(BuildStatus.QUEUED, BuildStatus.RUNNING).map { it.sql }
+private val builtTag = Regex("[0-9a-f]{40}(-[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12})?")
 internal val manifestTypes = listOf(
     "application/vnd.oci.image.index.v1+json",
     "application/vnd.oci.image.manifest.v1+json",
@@ -117,8 +117,8 @@ class RegistryJanitor(private val app: App, private val kube: KubernetesClient) 
     private fun JdbcTransaction.images(): Pair<Set<String>, List<Build>> {
         val services = (ServicesTable innerJoin Environments innerJoin Projects innerJoin Organizations).selectAll()
             .associate { it[ServicesTable.id] to ServiceScope(it.toService(), it.toEnvironment(), it.toProject(), it.toOrganization()) }
-        val inFlight = BuildsTable.select(BuildsTable.serviceId, BuildsTable.commitSha).where { BuildsTable.status inList building }
-            .mapNotNull { row -> services[row[BuildsTable.serviceId]]?.let { BuildJobs.imageRef(registry, it, row[BuildsTable.commitSha]) } }
+        val inFlight = BuildsTable.selectAll().where { BuildsTable.status inList building }.map { it.toBuild() }
+            .flatMap { build -> services[build.serviceId]?.let { listOf(BuildJobs.imageRef(registry, it, build), BuildJobs.imageRef(registry, it, build.commitSha)) }.orEmpty() }
         val succeeded = BuildsTable.selectAll()
             .where { (BuildsTable.status eq BuildStatus.SUCCEEDED.sql) and (BuildsTable.imagePruned eq false) and BuildsTable.imageRef.isNotNull() }
             .orderBy(BuildsTable.createdAt, SortOrder.DESC)
@@ -142,7 +142,7 @@ class RegistryJanitor(private val app: App, private val kube: KubernetesClient) 
 
     private fun JdbcTransaction.prune(repositories: Set<String>, listed: Map<String, String?>): Set<String> {
         val (kept, candidates) = images()
-        val keep = kept + listed.keys.filterNot { key -> key.substringAfterLast(':').let { it == "cache" || shaPattern.matches(it) } }
+        val keep = kept + listed.keys.filterNot { key -> key.substringAfterLast(':').let { it == "cache" || builtTag.matches(it) } }
         val doomed = listed.filterKeys { it !in keep }.values.filterNotNull().toSet() - keep.mapNotNull { listed[it] }.toSet()
         val gone = candidates.filter { build -> build.imageRef?.let { it.startsWith("$registry/") && listed[it].let { digest -> digest == null || digest in doomed } } == true }
         BuildsTable.update({ BuildsTable.id inList gone.map { it.id } }) { it[imagePruned] = true }

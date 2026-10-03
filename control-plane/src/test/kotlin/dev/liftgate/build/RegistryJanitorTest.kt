@@ -113,8 +113,8 @@ class RegistryJanitorTest {
         return projects.environments(projects.create(org.id, project, project, "$slug/$project", 42).id).single().id
     }
 
-    private suspend fun succeed(buildId: UUID, image: String): Deployment =
-        assertNotNull(builds.markSucceeded(buildId, image)).also { deployments.transition(it.id, DeploymentStatus.RUNNING) }
+    private suspend fun succeed(buildId: UUID, image: String, digest: String? = null): Deployment =
+        assertNotNull(builds.markSucceeded(buildId, image, digest)).also { deployments.transition(it.id, DeploymentStatus.RUNNING) }
 
     private suspend fun release(serviceId: UUID, image: String) = succeed(builds.request(serviceId, image.substringAfterLast(':'), null, "main").id, image)
 
@@ -171,6 +171,21 @@ class RegistryJanitorTest {
         assertEquals(0, janitor(config).runOnce())
         assertTrue(requests.none { it.method == HttpMethod.Delete })
         assertEquals(0L, orphans())
+    }
+
+    @Test
+    fun `two builds of one commit keep their own tags and images, in-flight builds keep both tag forms, and stray build tags go`() = runBlocking {
+        val api = services.create(environment(), ServiceSpec("api", "API", ServiceKind.WEB)).id
+        val rebuilt = (1..2).map { builds.request(api, sha(1), null, "main").let { build -> succeed(build.id, "registry.test/acme/shop/production/api:${sha(1)}-${build.id}", "sha256:d0$it") } }
+        val building = builds.request(api, sha(2), null, "main")
+        registry["acme/shop/production/api"] = (rebuilt.mapIndexed { i, deployment -> "${sha(1)}-${deployment.buildId}" to "sha256:d0${i + 1}" } +
+            listOf("${sha(2)}-${building.id}" to "sha256:d03", sha(2) to "sha256:d04", "${sha(3)}-${UUID.randomUUID()}" to "sha256:dstray", "cache" to "sha256:dcache")).toMap().toMutableMap()
+
+        assertEquals(1, janitor(testConfig().copy(registry = "registry.test")).runOnce())
+
+        assertEquals(listOf("acme/shop/production/api/manifests/sha256:dstray"), requests.filter { it.method == HttpMethod.Delete }.map { it.url.encodedPath.removePrefix("/v2/") })
+        assertEquals(emptySet(), pruned())
+        assertEquals(rebuilt[0].buildId, deployments.rollback(rebuilt[0].id).buildId)
     }
 
     @Test
@@ -235,19 +250,23 @@ class RegistryJanitorTest {
         val environment = environment("store")
         val api = services.create(environment, ServiceSpec("api", "API", ServiceKind.WEB)).id
         val old = services.create(environment, ServiceSpec("old", "Old", ServiceKind.WORKER)).id
-        suspend fun deploy(serviceId: UUID, repository: String, n: Int): Deployment {
-            val build = builds.request(serviceId, sha(n), null, "main").also { builds.markRunning(it.id) }
+        suspend fun deploy(serviceId: UUID, repository: String, n: Int, commit: Int? = null): Deployment {
+            val build = builds.request(serviceId, sha(commit ?: n), null, "main").also { builds.markRunning(it.id) }
+            val tag = commit?.let { "${sha(it)}-${build.id}" } ?: sha(n)
             val token = requireNotNull(tokens.token(BuildJobs.name(build.id), tokens.issue(build.id), listOf("repository:$repository:pull,push")))
             listOf(LAYER, image(n), cache(n)).forEach { upload(repository, token, it) }
-            manifest(repository, sha(n), token, "application/vnd.docker.distribution.manifest.v2+json", """{"schemaVersion":2,"mediaType":"application/vnd.docker.distribution.manifest.v2+json","config":${descriptor("application/vnd.docker.container.image.v1+json", image(n))},"layers":[${descriptor("application/vnd.docker.image.rootfs.diff.tar.gzip", LAYER)}]}""")
+            val pushed = """{"schemaVersion":2,"mediaType":"application/vnd.docker.distribution.manifest.v2+json","config":${descriptor("application/vnd.docker.container.image.v1+json", image(n))},"layers":[${descriptor("application/vnd.docker.image.rootfs.diff.tar.gzip", LAYER)}]}"""
+            manifest(repository, tag, token, "application/vnd.docker.distribution.manifest.v2+json", pushed)
             manifest(repository, "cache", token, "application/vnd.oci.image.index.v1+json", """{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[${descriptor("application/vnd.oci.image.layer.v1.tar+gzip", LAYER)},${descriptor("application/vnd.buildkit.cacheconfig.v0", cache(n))}]}""")
-            return succeed(build.id, "${TestRegistry.ADDRESS}/$repository:${sha(n)}")
+            return succeed(build.id, "${TestRegistry.ADDRESS}/$repository:$tag", digest(pushed).takeIf { commit != null })
         }
         val released = (1..30).map { deploy(api, "acme/store/production/api", it) }
         deployments.transition(deployments.rollback(released[0].id).id, DeploymentStatus.RUNNING)
         deployments.transition(deployments.rollback(released[2].id).id, DeploymentStatus.RUNNING)
         (31..32).forEach { deploy(old, "acme/store/production/old", it) }
         services.delete(old)
+        val web = services.create(environment, ServiceSpec("web", "Web", ServiceKind.WEB)).id
+        val rebuilt = (50..51).map { deploy(web, "acme/store/production/web", it, commit = 50) }
         val server = embeddedServer(Netty, port = 0) {
             liftgate(mockk<App> {
                 every { config } returns TestRegistry.config
@@ -275,9 +294,10 @@ class RegistryJanitorTest {
         }
 
         assertEquals(listOf(22, 0), deleted)
-        val pull = requireNotNull(tokens.token("pull", "pull-password", listOf("repository:acme/store/production/api:pull", "repository:acme/store/production/old:pull")))
+        val pull = requireNotNull(tokens.token("pull", "pull-password", listOf("api", "old", "web").map { "repository:acme/store/production/$it:pull" }))
         assertEquals((21..30).map(::sha).toSet() + sha(3) + "cache", tags("acme/store/production/api", pull))
         assertEquals(emptySet(), tags("acme/store/production/old", pull))
+        assertEquals(rebuilt.map { "${sha(50)}-${it.buildId}" }.toSet() + "cache", tags("acme/store/production/web", pull))
         assertEquals(((1..20) - 3).map(::sha).toSet(), pruned())
         assertPruned(released[0])
         assertEquals(0L, orphans())
@@ -294,7 +314,12 @@ class RegistryJanitorTest {
 
         val gc = TestRegistry.container.execInContainer("env", "REGISTRY_STORAGE_MAINTENANCE_READONLY={\"enabled\":true}", "registry", "garbage-collect", "--delete-untagged", "/etc/docker/registry/config.yml")
         assertEquals(0, gc.exitCode, gc.stderr)
-        listOf(image(3), image(30), cache(30), LAYER, image(41)).forEach { assertTrue(stored(it), it) }
+        listOf(image(3), image(30), cache(30), LAYER, image(41), image(50), image(51)).forEach { assertTrue(stored(it), it) }
+        rebuilt.forEach {
+            val pinned = requireNotNull(builds.byId(it.buildId)?.imageDigest)
+            assertEquals(200, TestRegistry.send("GET", "/v2/acme/store/production/web/manifests/$pinned", pull).statusCode(), pinned)
+        }
+        assertEquals(rebuilt[0].buildId, deployments.rollback(rebuilt[0].id).buildId)
         listOf(image(1), image(20), cache(29), image(31), image(40)).forEach { assertFalse(stored(it), it) }
         assertEquals(404 to 200, fetch(indexed) to fetch(single))
     }

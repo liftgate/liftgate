@@ -43,6 +43,7 @@ data class Build(
     val finishedAt: Instant?,
     val createdAt: Instant,
     val imagePruned: Boolean = false,
+    val imageDigest: String? = null,
 )
 
 /**

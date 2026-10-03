@@ -66,7 +66,8 @@ class BuilderTest {
     lateinit var server: KubernetesMockServer
 
     private val queued = testBuild.copy(status = BuildStatus.QUEUED, imageRef = null)
-    private val image = "registry.liftgate.internal/acme/shop/production/api:abc123"
+    private val image = "registry.liftgate.internal/acme/shop/production/api:abc123-${queued.id}"
+    private val digest = "sha256:" + "d".repeat(64)
     private var permission = HttpStatusCode.OK to """{"permission":"write"}"""
     private val github = GitHubApp(
         GitHubConfig("1", TestKeys.privateKeyPem),
@@ -81,7 +82,7 @@ class BuilderTest {
     )
     private val builds = mockk<Builds>(relaxUnitFun = true) {
         coEvery { byId(queued.id) } returns queued
-        coEvery { markSucceeded(queued.id, any()) } returns testDeployment
+        coEvery { markSucceeded(queued.id, any(), any()) } returns testDeployment
     }
     private val registryTokens = mockk<RegistryTokens>(relaxUnitFun = true) { coEvery { issue(queued.id) } returns "registry-password" }
     private val admission = mockk<BuildAdmission> { coEvery { admit(any(), any()) } returns null }
@@ -108,16 +109,18 @@ class BuilderTest {
 
     private fun secret() = client.secrets().inNamespace("liftgate-build").withName(BuildJobs.name(queued.id)).get()
 
-    private fun finishedPod() = PodBuilder()
+    private fun finishedPod(message: String?) = PodBuilder()
         .withNewMetadata().withName("build-pod").withNamespace("liftgate-build").addToLabels(BUILD_LABEL, queued.id.toString()).endMetadata()
-        .withNewStatus().withPhase("Succeeded").endStatus()
+        .withNewStatus().withPhase("Succeeded")
+        .addNewContainerStatus().withName("build").withNewState().withNewTerminated().withExitCode(0).withMessage(message).endTerminated().endState().endContainerStatus()
+        .endStatus()
         .build()
 
-    private fun build(status: JobStatus) = runBlocking {
+    private fun build(status: JobStatus, message: String? = "$digest\n") = runBlocking {
         val building = async(Dispatchers.Default) { Builder(app, client).build(queued.id) }
         job().waitUntilCondition({ it != null }, 10, TimeUnit.SECONDS)
+        client.resource(finishedPod(message)).create()
         job().editStatus { JobBuilder(it).withStatus(status).build() }
-        client.resource(finishedPod()).create()
         building.await()
     }
 
@@ -125,10 +128,10 @@ class BuilderTest {
         .count { it.method == "POST" && it.path.orEmpty().substringBefore('?').endsWith("/namespaces/liftgate-build/jobs") }
 
     @Test
-    fun `a succeeded job releases the image and is deleted`() {
+    fun `a succeeded job releases the image under the build's own tag with the digest it pushed and is deleted`() {
         build(JobStatusBuilder().withSucceeded(1).build())
         coVerify(exactly = 1) { admission.admit(queued, testOrg.id) }
-        coVerify(exactly = 1) { builds.markSucceeded(queued.id, image) }
+        coVerify(exactly = 1) { builds.markSucceeded(queued.id, image, digest) }
         coVerify(exactly = 0) { builds.markFailed(any(), any()) }
         coVerify(exactly = 1) { registryTokens.revoke(queued.id) }
         verify(exactly = 1) { logs.end(queued.id, null) }
@@ -140,7 +143,7 @@ class BuilderTest {
     fun `a failed job fails the build and is kept for inspection`() {
         build(JobStatusBuilder().withFailed(1).build())
         coVerify(exactly = 1) { builds.markFailed(queued.id, "the build job failed") }
-        coVerify(exactly = 0) { builds.markSucceeded(any(), any()) }
+        coVerify(exactly = 0) { builds.markSucceeded(any(), any(), any()) }
         verify(exactly = 1) { logs.end(queued.id, "the build job failed") }
         coVerify(exactly = 0) { registryTokens.issue(any()) }
         assertNotNull(job().get())
@@ -156,7 +159,7 @@ class BuilderTest {
             assertNull(job().get())
         }
         coVerify(exactly = 2) { builds.markFailed(queued.id, "the GitHub account that imported acme/shop no longer has write access; re-import it") }
-        coVerify(exactly = 0) { builds.markSucceeded(any(), any()) }
+        coVerify(exactly = 0) { builds.markSucceeded(any(), any(), any()) }
     }
 
     @Test
@@ -167,17 +170,17 @@ class BuilderTest {
         }
         permission = HttpStatusCode.NotFound to """{"message":"Not Found"}"""
         build(JobStatusBuilder().withSucceeded(1).build())
-        coVerify(exactly = 1) { builds.markSucceeded(queued.id, image) }
+        coVerify(exactly = 1) { builds.markSucceeded(queued.id, image, digest) }
     }
 
     @Test
     fun `a failed success write reattaches to the finished job instead of building again`() {
         every { app.config } returns testConfig(mapOf("LIFTGATE_REGISTRY_AUTH" to "token"))
-        coEvery { builds.markSucceeded(queued.id, image) } throws IllegalStateException("database unavailable") andThen testDeployment
+        coEvery { builds.markSucceeded(queued.id, image, digest) } throws IllegalStateException("database unavailable") andThen testDeployment
         assertFailsWith<IllegalStateException> { build(JobStatusBuilder().withSucceeded(1).build()) }
         assertNotNull(job().get())
         runBlocking { Builder(app, client).build(queued.id) }
-        coVerify(exactly = 2) { builds.markSucceeded(queued.id, image) }
+        coVerify(exactly = 2) { builds.markSucceeded(queued.id, image, digest) }
         coVerify(exactly = 1) { registryTokens.issue(queued.id) }
         assertEquals(1, jobCreations())
         assertNull(job().get())
@@ -185,12 +188,18 @@ class BuilderTest {
     }
 
     @Test
-    fun `a job the previous release started is adopted and the image it pushed is recorded`() {
+    fun `a job the previous release started is adopted and the image it pushed is recorded without a digest`() {
         val previous = "registry.liftgate.internal/acme/shop-api:abc123"
         val spec = BuildJobSpec(queued, testService, testProject, "ghs_token", previous, "registry.liftgate.internal/acme/shop-api:cache", "build-image", "liftgate-build", emptyMap(), false)
         client.resource(BuildJobs.job(spec)).create()
-        build(JobStatusBuilder().withSucceeded(1).build())
-        coVerify(exactly = 1) { builds.markSucceeded(queued.id, previous) }
+        build(JobStatusBuilder().withSucceeded(1).build(), message = null)
+        coVerify(exactly = 1) { builds.markSucceeded(queued.id, previous, null) }
+    }
+
+    @Test
+    fun `a termination message that is not a digest records no digest`() {
+        build(JobStatusBuilder().withSucceeded(1).build(), message = "$digest@registry.example.com/other")
+        coVerify(exactly = 1) { builds.markSucceeded(queued.id, image, null) }
     }
 
     @Test
@@ -214,7 +223,7 @@ class BuilderTest {
         }
         build(JobStatusBuilder().withFailed(1).build())
         val env = job().get().spec.template.spec.containers.single().env.associate { it.name to it.value }
-        assertEquals("registry.liftgate.internal/acme/shop/preview/api:abc123", env["IMAGE"])
+        assertEquals("registry.liftgate.internal/acme/shop/preview/api:abc123-${queued.id}", env["IMAGE"])
         assertEquals("registry.liftgate.internal/acme/shop/preview/api:cache", env["CACHE"])
         assertEquals("registry.liftgate.internal/acme/shop/production/api:cache", env["PRODUCTION_CACHE"])
     }

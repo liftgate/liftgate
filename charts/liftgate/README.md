@@ -831,10 +831,12 @@ Once a day the builder deletes the images Liftgate no longer needs from the repo
 pushed to. It keeps the images of pending, releasing and running deployments and of queued and
 running builds, the newest 10 successful builds of each service, and each service's `cache`.
 It also keeps the image of each service's newest deployment that reached running, which still
-serves while a rollback rolls out or after a rollout failed. It only deletes `cache` and
-40-character commit sha tags, the tags builds push, and never a manifest that a tag it keeps
-also points at; the repositories of deleted services lose all of them. Rolling back to a pruned
-build answers 409 `image_pruned`. With `registryAuth: token` the builder logs in as `janitor`;
+serves while a rollback rolls out or after a rollout failed. It only deletes `cache` and the
+tags builds push, `<sha>-<build id>` and the plain commit sha of older releases, and never a
+manifest that a tag it keeps also points at; the repositories of deleted services lose all of them.
+Pods run their build's image by digest, or by tag for builds from 0.3.0-alpha.3 or older, and no
+other build pushes a build's tag, so garbage collection keeps every image the builder keeps. Rolling back to a pruned build answers 409
+`image_pruned`. With `registryAuth: token` the builder logs in as `janitor`;
 with `shared` it logs in with `build.registryCredentials`, which must be allowed to delete.
 
 The registry must accept deletes (`storage.delete.enabled` in Distribution), and deleting frees

@@ -101,6 +101,16 @@ class ResourcesTest {
     }
 
     @Test
+    fun `a recorded digest pins the build's image, and a build without one pulls its tag on every start`() {
+        val digest = "sha256:" + "a".repeat(64)
+        val pinned = release.copy(build = testBuild.copy(imageRef = "registry.test:5000/acme/shop/production/api:abc123-${testBuild.id}", imageDigest = digest))
+        val container = Resources.deployment(pinned, null).spec.template.spec.containers.single()
+        assertEquals("registry.test:5000/acme/shop/production/api@$digest" to null, container.image to container.imagePullPolicy)
+        val legacy = Resources.deployment(release, null).spec.template.spec.containers.single()
+        assertEquals(testBuild.imageRef to "Always", legacy.image to legacy.imagePullPolicy)
+    }
+
+    @Test
     fun `a health check path gets readiness, startup and liveness http probes on it`() {
         val container = Resources.deployment(testRelease(testService.copy(healthCheckPath = "/healthz")), null).spec.template.spec.containers.single()
         listOf(container.readinessProbe to (2 to 3), container.startupProbe to (5 to 60), container.livenessProbe to (10 to 6)).forEach { (probe, timing) ->

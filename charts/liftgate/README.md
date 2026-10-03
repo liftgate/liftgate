@@ -834,8 +834,8 @@ It also keeps the image of each service's newest deployment that reached running
 serves while a rollback rolls out or after a rollout failed. It only deletes `cache` and the
 tags builds push, `<sha>-<build id>` and the plain commit sha of older releases, and never a
 manifest that a tag it keeps also points at; the repositories of deleted services lose all of them.
-Pods run their build's image by digest, and no other build pushes that build's tag, so garbage
-collection keeps every image the builder keeps. Rolling back to a pruned build answers 409
+Pods run their build's image by digest, or by tag for builds from 0.3.0-alpha.3 or older, and no
+other build pushes a build's tag, so garbage collection keeps every image the builder keeps. Rolling back to a pruned build answers 409
 `image_pruned`. With `registryAuth: token` the builder logs in as `janitor`;
 with `shared` it logs in with `build.registryCredentials`, which must be allowed to delete.
 

@@ -124,8 +124,9 @@ certificate and restart the registry again.
 ## Image retention
 
 Every build pushes its own `:<sha>-<build id>` tag and replaces `:cache`, so the registry grows with
-every deploy. A deployment runs its build's image by digest, and since no other build pushes that
-tag, garbage collection keeps the image for as long as the janitor keeps the tag. Once a day, and
+every deploy. A deployment runs its build's image by the digest the build recorded, or by tag with
+`imagePullPolicy: Always` for builds from 0.3.0-alpha.3 or older. No other build pushes a build's
+tag, so garbage collection keeps the image for as long as the janitor keeps the tag. Once a day, and
 whenever a builder pod takes the `liftgate-registry-janitor` lease, the builder prunes the
 repositories Liftgate pushed to. It keeps:
 

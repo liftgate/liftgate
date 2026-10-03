@@ -22,7 +22,7 @@ numbered outside `10.0.0.0/8`, the range Cilium gives pods.
 ## Why token auth
 
 Without authentication, or with one login that every build shares, any build can read, and overwrite,
-every tenant's `:<sha>` and `:cache` tags, which the next build of that tenant imports.
+every tenant's image and `:cache` tags, which the next build of that tenant imports.
 
 [`config.yml`](config.yml) turns on token auth with the control plane as the token service
 (`registryAuth: token` in the chart), binds to the private address only, and enables deletes for image
@@ -123,9 +123,11 @@ certificate and restart the registry again.
 
 ## Image retention
 
-Every build pushes a `:<sha>` tag and replaces `:cache`, so the registry grows with every
-deploy. Once a day, and whenever a builder pod takes the `liftgate-registry-janitor` lease, the
-builder prunes the repositories Liftgate pushed to. It keeps:
+Every build pushes its own `:<sha>-<build id>` tag and replaces `:cache`, so the registry grows with
+every deploy. A deployment runs its build's image by digest, and since no other build pushes that
+tag, garbage collection keeps the image for as long as the janitor keeps the tag. Once a day, and
+whenever a builder pod takes the `liftgate-registry-janitor` lease, the builder prunes the
+repositories Liftgate pushed to. It keeps:
 
 - the images of pending, releasing and running deployments;
 - the image of each service's newest deployment that reached running, because the pods of the
@@ -134,7 +136,8 @@ builder prunes the repositories Liftgate pushed to. It keeps:
 - the newest 10 successful builds of each service;
 - each service's `:cache`.
 
-Every other `:cache` or 40-character commit sha tag, the only tags builds push, is deleted with
+Every other `:cache` tag and build tag, `:<sha>-<build id>` or the plain `:<sha>` of older
+releases, is deleted with
 `HEAD` for its `Docker-Content-Digest` and then `DELETE /v2/<repository>/manifests/<digest>`, and
 its build is marked pruned, so a rollback to it answers 409 `image_pruned` and the dashboard
 hides the button. Other tags stay, and so does every tag that shares its manifest with one that

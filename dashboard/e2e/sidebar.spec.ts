@@ -36,6 +36,7 @@ test("the organization and project switchers open with Enter, move with the arro
     await expect(items.first()).toBeFocused();
     await page.keyboard.press("ArrowDown");
     await expect(items.nth(1)).toBeFocused();
+    await expect(items.nth(1)).toHaveCSS("outline", "rgb(207, 67, 252) solid 2px");
     await page.keyboard.press("End");
     await expect(items.last()).toBeFocused();
     await page.keyboard.press("ArrowDown");
@@ -50,7 +51,7 @@ test("the organization and project switchers open with Enter, move with the arro
   await expect(nav).toBeVisible();
 });
 
-test("below 1024 px the sidebar is a drawer that keeps focus and closes on Escape and on navigation", async ({ page }) => {
+test("below 1024 px the sidebar is a drawer that keeps focus and closes on Escape, on a tap beside it and on navigation", async ({ page }) => {
   test.skip((page.viewportSize()?.width ?? 1440) >= 1024, "the sidebar is always open from 1024 px");
   await page.goto(servicePath);
   await settled(page);
@@ -67,6 +68,9 @@ test("below 1024 px the sidebar is a drawer that keeps focus and closes on Escap
   await page.keyboard.press("Escape");
   await expect(drawer).toBeHidden();
   await expect(menu).toBeFocused();
+  await menu.click();
+  await page.mouse.click(340, 400);
+  await expect(drawer).toBeHidden();
   await menu.click();
   await drawer.getByRole("link", { name: "Overview" }).click();
   await page.waitForURL("/acme/shop");

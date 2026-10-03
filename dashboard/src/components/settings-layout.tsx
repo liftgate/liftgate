@@ -6,7 +6,7 @@ import { Skeleton } from "./ui/skeleton";
 
 export type SettingsSection = { id: string; label: string; href: string };
 
-export const navItemClasses = "flex h-8 items-center gap-2 whitespace-nowrap rounded-md px-2 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-accent";
+export const navItemClasses = "flex h-8 items-center gap-2 whitespace-nowrap rounded-md px-2 text-sm transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent";
 
 export function NavItem({ href, current, icon, children }: { href: string; current?: boolean; icon?: IconName; children: ReactNode }) {
   return (

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
 const itemClasses =
-  "flex h-8 w-full shrink-0 items-center gap-2 rounded-md px-2 text-left text-sm text-graphite-200 outline-none hover:bg-graphite-800 hover:text-white focus-visible:bg-graphite-800 focus-visible:text-white";
+  "flex h-8 w-full shrink-0 items-center gap-2 rounded-md px-2 text-left text-sm text-graphite-200 hover:bg-graphite-800 hover:text-white focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent";
 
 export function Menu({
   label,

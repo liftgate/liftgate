@@ -30,7 +30,13 @@ export function Dialog({
     if (!open && element.open) element.close();
   }, [open]);
   return (
-    <dialog ref={ref} onClose={onClose} aria-label={placement === "left" ? title : undefined} className={`border-graphite-700 bg-graphite-900 p-0 text-white backdrop:bg-black/60 ${placements[placement]}`}>
+    <dialog
+      ref={ref}
+      onClose={onClose}
+      onClick={(e) => placement === "left" && e.target === e.currentTarget && onClose()}
+      aria-label={placement === "left" ? title : undefined}
+      className={`border-graphite-700 bg-graphite-900 p-0 text-white backdrop:bg-black/60 ${placements[placement]}`}
+    >
       {open &&
         (placement === "left" ? (
           children

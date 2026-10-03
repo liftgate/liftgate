@@ -9,7 +9,6 @@ import io.ktor.server.websocket.webSocket
 import io.ktor.websocket.CloseReason
 import io.ktor.websocket.close
 import io.ktor.websocket.send
-import kotlinx.coroutines.channels.consumeEach
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -48,7 +47,7 @@ private suspend fun DefaultWebSocketServerSession.relay(sockets: ConcurrentHashM
             flow.collect { send(it) }
             close(CloseReason(CloseReason.Codes.NORMAL, "end of log"))
         }
-        incoming.consumeEach { }
+        while (incoming.receiveCatching().isSuccess) {}
         relay.cancel()
     } finally {
         sockets.computeIfPresent(user) { _, open -> (open - 1).takeIf { it > 0 } }

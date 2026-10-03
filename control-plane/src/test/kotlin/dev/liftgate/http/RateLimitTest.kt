@@ -1,5 +1,9 @@
 package dev.liftgate.http
 
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import dev.liftgate.App
 import dev.liftgate.auth.Access
 import dev.liftgate.auth.Passkeys
@@ -44,6 +48,7 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flow
 import org.junit.jupiter.api.AfterAll
+import org.slf4j.LoggerFactory
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -183,10 +188,20 @@ class RateLimitTest {
     }
 
     @Test
-    fun `a log socket frame over the cap closes the socket as too big`() = testApplication {
-        application { liftgate(app()) }
-        val socket = createClient { install(WebSockets) }.webSocketSession("/api/v1/logs/services/${testService.id}") { session() }
-        socket.send(Frame.Binary(true, ByteArray(WEBSOCKET_FRAME_LIMIT.toInt() + 1)))
-        assertEquals(CloseReason.Codes.TOO_BIG.code, socket.closeReason.await()?.code)
+    fun `a log socket frame over the cap closes the socket as too big and logs no error`() {
+        val log = LoggerFactory.getLogger("io.ktor.test") as Logger
+        val events = ListAppender<ILoggingEvent>().apply { start() }
+        log.addAppender(events)
+        try {
+            testApplication {
+                application { liftgate(app()) }
+                val socket = createClient { install(WebSockets) }.webSocketSession("/api/v1/logs/services/${testService.id}") { session() }
+                socket.send(Frame.Binary(true, ByteArray(WEBSOCKET_FRAME_LIMIT.toInt() + 1)))
+                assertEquals(CloseReason.Codes.TOO_BIG.code, socket.closeReason.await()?.code)
+            }
+        } finally {
+            log.detachAppender(events)
+        }
+        assertEquals(emptyList(), events.list.filter { it.level == Level.ERROR }.map { it.formattedMessage })
     }
 }

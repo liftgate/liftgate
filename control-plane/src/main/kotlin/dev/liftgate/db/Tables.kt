@@ -336,6 +336,7 @@ object Builds : Table("builds") {
     val createdAt = createdAtColumn()
     val registrySecretHash = text("registry_secret_hash").nullable()
     val imagePruned = bool("image_pruned").default(false)
+    val imageDigest = text("image_digest").nullable()
     override val primaryKey = PrimaryKey(id)
 
     init {

@@ -31,14 +31,19 @@ build() {
     php* | named-user) ;;
     *) set -- --add-host registry-1.docker.io:127.0.0.1 "$@" ;;
   esac
+  : > "$work/$name.digest"
+  chmod 666 "$work/$name.digest"
   if ! docker run --rm --network "$run" --security-opt seccomp=unconfined --security-opt apparmor=unconfined \
-    --volume "$fixtures/$fixture:/workspace/src:ro" \
+    --volume "$fixtures/$fixture:/workspace/src:ro" --volume "$work/$name.digest:/dev/termination-log" \
     --env LIFTGATE_ROOT_DIR=/ --env LIFTGATE_DOCKERFILE_PATH=Dockerfile --env LIFTGATE_REGISTRY_INSECURE=true \
     --env "IMAGE=registry:5000/test/$name:latest" --env "CACHE=registry:5000/test/$name:cache" \
     "$@" "$image" > "$work/$name.log" 2>&1; then
     cat "$work/$name.log"
     exit 1
   fi
+  expect "the digest the $name build reported" "$(cat "$work/$name.digest")" "$(curl --silent --show-error --fail --head \
+    --header 'Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
+    "http://$registry/v2/test/$name/manifests/latest" | tr -d '\r' | awk -F ': ' 'tolower($1) == "docker-content-digest" { print $2 }')"
   docker pull --quiet "$registry/test/$name:latest" > /dev/null
   docker history --no-trunc "$registry/test/$name:latest" > "$work/$name.history"
   docker image inspect "$registry/test/$name:latest" >> "$work/$name.history"

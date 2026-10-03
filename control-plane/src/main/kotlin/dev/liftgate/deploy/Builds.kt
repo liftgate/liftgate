@@ -49,6 +49,7 @@ fun ResultRow.toBuild() = Build(
     this[BuildsTable.finishedAt]?.toInstant(),
     this[BuildsTable.createdAt].toInstant(),
     this[BuildsTable.imagePruned],
+    this[BuildsTable.imageDigest],
 )
 
 /**
@@ -89,12 +90,13 @@ class Builds(private val db: Db) {
         }
     }
 
-    suspend fun markSucceeded(id: UUID, imageRef: String): Deployment? = db.tx {
+    suspend fun markSucceeded(id: UUID, imageRef: String, imageDigest: String? = null): Deployment? = db.tx {
         val build = find(id) ?: notFound("build")
         Services.select(Services.id).where { Services.id eq build.serviceId }.forUpdate().toList()
         val finished = BuildsTable.update({ unfinished(id) }) {
             it[status] = BuildStatus.SUCCEEDED.sql
             it[BuildsTable.imageRef] = imageRef
+            it[BuildsTable.imageDigest] = imageDigest
             it[finishedAt] = now()
         } == 0
         if (finished) return@tx null

@@ -105,8 +105,11 @@ if [ -n "${PRODUCTION_CACHE:-}" ]; then
   set -- "$@" --import-cache "type=registry,ref=$PRODUCTION_CACHE$insecure"
 fi
 
-exec buildctl-daemonless.sh build "$@" \
+metadata=$(mktemp)
+buildctl-daemonless.sh build "$@" \
   --local "context=$context" \
   --output "type=image,name=$IMAGE,push=true$insecure" \
   --export-cache "type=registry,ref=$CACHE,mode=max$insecure" \
-  --import-cache "type=registry,ref=$CACHE$insecure"
+  --import-cache "type=registry,ref=$CACHE$insecure" \
+  --metadata-file "$metadata"
+jq -r '."containerimage.digest"' "$metadata" > /dev/termination-log

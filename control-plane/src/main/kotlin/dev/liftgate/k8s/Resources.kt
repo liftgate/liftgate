@@ -369,7 +369,8 @@ object Resources {
         val requests = limits + ("cpu" to Quantity("${(r.service.cpuMillis * r.plan.cpuRequestRatio).roundToInt().coerceAtLeast(1)}m"))
         return ContainerBuilder()
             .withName("app")
-            .withImage(r.build.imageRef)
+            .withImage(r.build.imageRef?.let { ref -> r.build.imageDigest?.let { "${ref.substringBeforeLast(':')}@$it" } ?: ref })
+            .withImagePullPolicy("Always".takeIf { r.build.imageDigest == null })
             .withCommand(r.service.startCommand?.let { listOf("/bin/sh", "-c", it) })
             .addNewEnvFrom().withNewSecretRef().withName(r.secretName()).endSecretRef().endEnvFrom()
             .withEnv(

@@ -68,6 +68,8 @@ object BuildJobs {
 
     fun imageRef(registry: String, scope: ServiceScope, sha: String) = "$registry/${repository(scope)}:${sha.replace('/', '-')}"
 
+    fun imageRef(registry: String, scope: ServiceScope, build: Build) = imageRef(registry, scope, "${build.commitSha}-${build.id}")
+
     fun imageRef(job: Job): String = job.spec.template.spec.containers.single().env.single { it.name == "IMAGE" }.value
 
     fun job(spec: BuildJobSpec): Job {

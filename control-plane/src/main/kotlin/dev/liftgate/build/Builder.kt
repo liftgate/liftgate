@@ -27,6 +27,7 @@ private const val WAIT_MINUTES = 35L
 private const val CONCURRENT_BUILDS = 4
 private const val POD_WAIT_MINUTES = 10L
 private val logDrain = 10.seconds
+private val digestPattern = Regex("sha256:[0-9a-f]{64}")
 const val BUILD_CONSUMER = "builder-build-requested"
 
 /**
@@ -43,11 +44,11 @@ class Builder(private val app: App, private val kube: KubernetesClient) {
         val github = app.github ?: return fail(buildId, "the GitHub App is not configured")
         val config = app.config
         val project = scope.project
-        val image = BuildJobs.imageRef(config.registry, scope, build.commitSha)
+        val image = BuildJobs.imageRef(config.registry, scope, build)
         val cache = BuildJobs.imageRef(config.registry, scope, "cache")
         val jobs = kube.batch().v1().jobs().inNamespace(config.buildNamespace)
         val sample = Timer.start()
-        var pushed: String? = null
+        var pushed: Pair<String, String?>? = null
         val failure = try {
             val token = github.installationToken(project.installationId, project.repoFullName.substringAfter('/'))
             if (project.importedByLogin?.let { github.canPush(token, project.repoFullName, it) } == false) {
@@ -68,7 +69,8 @@ class Builder(private val app: App, private val kube: KubernetesClient) {
             e.message ?: "the build could not be run"
         }
         if (failure == null) {
-            app.builds.markSucceeded(buildId, checkNotNull(pushed))
+            val (ref, digest) = checkNotNull(pushed)
+            app.builds.markSucceeded(buildId, ref, digest)
             runCatching { jobs.withName(BuildJobs.name(buildId)).delete() }
         } else {
             app.builds.markFailed(buildId, failure)
@@ -85,7 +87,7 @@ class Builder(private val app: App, private val kube: KubernetesClient) {
         app.nats.logs.end(buildId, reason)
     }
 
-    private suspend fun run(job: ScalableResource<KubeJob>, spec: BuildJobSpec): String? = coroutineScope {
+    private suspend fun run(job: ScalableResource<KubeJob>, spec: BuildJobSpec): Pair<String, String?>? = coroutineScope {
         val buildId = spec.build.id
         val owner = runInterruptible(Dispatchers.IO) { job.get() ?: job.create() }
         if (runInterruptible(Dispatchers.IO) { kube.secrets().inNamespace(spec.namespace).withName(BuildJobs.name(buildId)).get() } == null) {
@@ -96,8 +98,12 @@ class Builder(private val app: App, private val kube: KubernetesClient) {
         val finished = runInterruptible(Dispatchers.IO) { job.waitUntilCondition({ it?.status?.run { (succeeded ?: 0) > 0 || (failed ?: 0) > 0 } == true }, WAIT_MINUTES, TimeUnit.MINUTES) }
         withTimeoutOrNull(logDrain) { logs.join() }
         logs.cancel()
-        BuildJobs.imageRef(owner).takeIf { (finished.status.succeeded ?: 0) > 0 }
+        BuildJobs.imageRef(owner).takeIf { (finished.status.succeeded ?: 0) > 0 }?.let { it to runInterruptible(Dispatchers.IO) { digest(buildId) } }
     }
+
+    private fun digest(buildId: UUID) = kube.pods().inNamespace(app.config.buildNamespace).withLabel(BUILD_LABEL, buildId.toString()).list().items
+        .filter { it.status?.phase == "Succeeded" }
+        .firstNotNullOfOrNull { pod -> pod.status.containerStatuses?.find { it.name == "build" }?.state?.terminated?.message?.trim()?.takeIf { digestPattern.matches(it) } }
 
     private fun stream(buildId: UUID) = runCatching {
         val pods = kube.pods().inNamespace(app.config.buildNamespace)

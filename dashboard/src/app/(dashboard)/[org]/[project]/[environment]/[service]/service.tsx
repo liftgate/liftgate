@@ -91,7 +91,7 @@ export function ServiceView({ org, projectSlug, environmentSlug, serviceSlug }: 
                 </a>
               )}
               {admin && (
-                <div role="group" aria-label="Deploy" className="flex">
+                <div role="group" aria-label="Deploy" className="flex max-sm:ml-auto">
                   <Button
                     variant="primary"
                     pending={redeploy.pending || (deploy.pending && !choosing)}

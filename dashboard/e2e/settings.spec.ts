@@ -1,5 +1,5 @@
 import type { EnvVar } from "../src/lib/types";
-import { asOperator, build, deployment, environment, expect, openNav, org, project, Reply, service, servicePath, settled, test, type Api } from "./fixtures";
+import { asOperator, build, deployment, environment, expect, openNav, org, platformDomain, project, Reply, service, servicePath, settled, test, type Api } from "./fixtures";
 
 const patch = `PATCH /services/${service.id}`;
 const settings = `${servicePath}?tab=settings`;
@@ -110,6 +110,15 @@ test("deploying a branch from the header opens its build in the deployments tab"
   expect(api.sent(`POST /services/${service.id}/deploy`).map((call) => call.body)).toEqual([{ ref: "release/1.2" }]);
 });
 
+test("the deploy menu of a failed service opens inside the screen", async ({ page, api }) => {
+  api.on("GET /orgs/acme/projects/shop/tree", { project, environments: [environment], services: [{ ...service, current: { ...service.current, status: "failed" } }] });
+  await page.goto(servicePath);
+  await page.getByRole("button", { name: "More deploy options" }).click();
+  const menu = (await page.getByRole("menu", { name: "Deploy options" }).locator("..").boundingBox())!;
+  expect(menu.x).toBeGreaterThanOrEqual(0);
+  expect(menu.x + menu.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+});
+
 test("the old builds link opens the deployments tab with that build's log, next to builds that never deployed", async ({ page, api }) => {
   const failed = { ...build, id: "build-2", commitSha: "9c1e7b3d5a6f8e9c0b1a2d3e4f5a6b7c8d9e4f2a", status: "failed", error: "could not determine how to build the app", createdAt: new Date().toISOString() };
   api.on(`GET /services/${service.id}/builds`, [failed, build]);
@@ -166,6 +175,18 @@ test("only owners see delete organization, and it waits for the slug", async ({ 
   await settled(page);
   await expect(page.getByRole("heading", { name: "Plan and usage" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Delete organization" })).toHaveCount(0);
+});
+
+test("copy buttons stay inside their card's padding", async ({ page, api }) => {
+  const custom = { ...platformDomain, id: "domain-custom", hostname: "shop.example.com", kind: "custom", certificateStatus: "pending", dnsRecords: [{ type: "CNAME", name: "shop.example.com", value: platformDomain.hostname }] };
+  api.on(`GET /services/${service.id}/domains`, [platformDomain, custom]);
+  for (const [path, count] of [["/acme/settings", 1], [`${servicePath}?tab=domains`, 3]] as const) {
+    await page.goto(path);
+    const copy = page.getByRole("button", { name: "Copy", exact: true });
+    await expect(copy).toHaveCount(count);
+    const gaps = await copy.evaluateAll((buttons) => buttons.map((b) => b.closest("section")!.getBoundingClientRect().right - b.getBoundingClientRect().right));
+    expect(gaps.filter((gap) => gap < 24), path).toEqual([]);
+  }
 });
 
 const raw = ["web", "worker", "cron", "static", "production", "preview", "owner", "admin", "member", "auto", "dockerfile", "pending", "active", "suspended", "free", "unlimited", "default"];

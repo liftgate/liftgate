@@ -24,7 +24,7 @@ export function Settings({ org }: { org: string }) {
       <PageHeader title="General" />
       <Card>
         <CardHeader title="Organization" />
-        <div className="grid gap-4 p-6 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 p-6 sm:grid-cols-2">
           <Loaded query={query} skeleton={<Skeleton className="h-14 sm:col-span-2" />}>
             {(organization) => (
               <>

@@ -144,7 +144,7 @@ export function DomainsTab({ service, admin }: { service: Service; admin: boolea
                 </p>
               </div>
               {domain.dnsRecords.map((record) => (
-                <div key={`${record.type} ${record.name}`} className="grid gap-4 md:grid-cols-2">
+                <div key={`${record.type} ${record.name}`} className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <CopyField label={`${record.type} name`} value={record.name} />
                   <CopyField label={record.type === "CNAME" ? "CNAME target" : `${record.type} value`} value={record.value} />
                 </div>

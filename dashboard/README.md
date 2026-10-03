@@ -8,17 +8,19 @@ The web UI for the Liftgate control plane: Next.js 16 (App Router), React 19, Ty
 |---|---|
 | `/login` | Sign in with GitHub, Google, GitLab, Bitbucket, a passkey or an emailed code |
 | `/login/sso` | SAML sign-in: finds the organization by email domain |
-| `/account` | Profile, sign-in methods, passkeys, git connections |
+| `/account` | Profile, Sign-in methods (identities and passkeys) and Git connections; `?section=` picks `sign-in` or `git` |
 | `/` | The landing page with `LIFTGATE_LANDING=true`, otherwise a redirect to `/dashboard` |
-| `/dashboard` | Redirects to the first organization, or creates one; `?installed=1`, the GitHub App's setup URL, opens the new project dialog |
+| `/dashboard` | Redirects to the last organization visited, else the first, or creates one; `?installed=1`, the GitHub App's setup URL, opens the import screen |
 | `/dashboard/operator` | The operator console, for the accounts in `operators` only: pending accounts, all accounts and organizations, with approve, suspend, unsuspend and plan changes; `?view=` picks `pending`, `users` or `orgs` |
 | `/[org]` | Projects; `?new=project` opens the new project dialog with the repository picker |
+| `/[org]/settings` | General: name, slug, plan and usage, and Delete organization for owners, beside the settings sub-nav |
 | `/[org]/settings/sso` | SAML connection, owners only |
 | `/[org]/settings/members` | Members and roles: owners change roles and remove, admins invite, anyone leaves |
 | `/[org]/settings/audit` | The organization's audit log, admins only |
 | `/account/invitations/[token]` | Accept an invitation to an organization |
 | `/[org]/[project]` | Environments and their services; `?new=service` opens the configure and deploy step |
-| `/[org]/[project]/[environment]/[service]` | Deployments, runtime logs, builds with live logs, environment variables, domains, settings; `?tab=` picks the tab and `?tab=builds&build=<id>` opens that build's log |
+| `/[org]/[project]/settings` | Environments, pull request previews and, for admins, Delete project |
+| `/[org]/[project]/[environment]/[service]` | Deployments with each build's log, runtime logs, metrics, variables, domains, settings; `?tab=` picks the tab, `?tab=settings&section=` picks `general`, `build`, `runtime` or `resources`, and `?tab=builds&build=<id>` opens Deployments with that build's log |
 | `/[org]/[project]/[service]` | Redirects to the service in the production environment |
 
 With terms configured on the control plane, an account that has not accepted them sees them in place of every page except `/login` and `/account` until it accepts.

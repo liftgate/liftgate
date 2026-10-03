@@ -440,7 +440,7 @@ the first admin there. SAML users who join an organization through a verified em
 active while that organization has an active owner and is not suspended.
 
 The accounts in `operators` run the operator console at `<dashboardUrl>/dashboard/operator`, linked
-from the header and the account page. It lists pending accounts first, then every account and every
+from the sidebar and the account page. It lists pending accounts first, then every account and every
 organization, and approves, suspends and unsuspends them and changes plans, with the same effects and
 emails as the admin commands below; each change's `audit_log` row names the operator. An entry is a
 GitHub login (`github:dean`), matched against the GitHub account connected to the Liftgate account,

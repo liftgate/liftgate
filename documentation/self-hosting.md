@@ -273,7 +273,7 @@ Open `https://liftgate.example.com` and choose Continue with GitHub. Because `gi
 is in `signup.allow`, your account is active at once. Create an organization; you are its owner.
 
 Everyone else who signs in waits for approval, because the chart's sign-up mode is `approval`. With
-`github:your-github-login` also in `operators`, the header shows Operator, which opens the operator
+`github:your-github-login` also in `operators`, the sidebar shows Operator, which opens the operator
 console at `https://liftgate.example.com/dashboard/operator`. Its Pending tab lists the accounts that
 wait; approve them there. The Users and Organizations tabs suspend and unsuspend accounts and
 organizations and move organizations between plans. When `email.smtpUrl` and `email.from` are set,

@@ -3,6 +3,7 @@ package dev.liftgate.db
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import dev.liftgate.config.Config
+import dev.liftgate.config.Role
 import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -12,6 +13,7 @@ import org.jetbrains.exposed.v1.jdbc.JdbcTransaction
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
+import kotlin.time.Duration.Companion.minutes
 
 fun now(): OffsetDateTime = OffsetDateTime.now(ZoneOffset.UTC)
 
@@ -31,6 +33,7 @@ class Db(config: Config, metrics: MeterRegistry? = null) : AutoCloseable {
         maximumPoolSize = config.databasePoolSize
         minimumIdle = 2
         metricRegistry = metrics
+        if (config.role == Role.MIGRATE) initializationFailTimeout = 5.minutes.inWholeMilliseconds
     })
     private val database = Database.connect(dataSource)
 

@@ -682,10 +682,12 @@ nats:
 
 ## Control plane permissions
 
-Every control plane pod first runs the `migrate` init container (`LIFTGATE_ROLE=migrate`), which
-applies pending database migrations with a 10 second `lock_timeout` and exits, so a long
-migration never trips a probe. Each role serves `/healthz`, which fails when a message consumer has
-not polled NATS for two minutes, and `/readyz`, which checks PostgreSQL and, for `api`, Hazelcast.
+Every control plane pod first runs the `migrate` init container (`LIFTGATE_ROLE=migrate`). It
+waits up to 5 minutes for PostgreSQL to accept connections, so a fresh install does not restart it
+while the database starts, then applies pending database migrations with a 10 second
+`lock_timeout` and exits, so a long migration never trips a probe. Each role serves `/healthz`,
+which fails when a message consumer has not polled NATS for two minutes, and `/readyz`, which
+checks PostgreSQL and, for `api`, Hazelcast.
 A pod starts serving only after it has reached NATS, and a later NATS restart leaves it ready
 while its NATS client reconnects. On shutdown a pod reports unready for 5 seconds before it stops
 serving.

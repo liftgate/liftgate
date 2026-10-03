@@ -134,6 +134,18 @@ test("a live deployment with finished builds stops polling and leaves an older f
   expect(api.sent(`GET /services/${service.id}/deployments`)).toHaveLength(polled);
 });
 
+test("a build deployed twice offers its log only on the newest deployment", async ({ page, api }) => {
+  api.on(`GET /services/${service.id}/deployments`, [{ ...deployment, id: "deployment-2", createdAt: new Date().toISOString() }, { ...deployment, status: "superseded" }]);
+  await page.goto(servicePath);
+  const older = page.getByRole("row", { name: /superseded/i });
+  await expect(older.getByRole("button", { name: "Roll back to this" })).toBeVisible();
+  await expect(older.getByRole("button", { name: /logs/i })).toHaveCount(0);
+  await page.getByRole("button", { name: "Logs", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Hide logs" })).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByRole("region", { name: "Build 4f2a9c1 output" })).toBeVisible();
+  await expect(page.getByRole("row").nth(3)).toContainText(/superseded/i);
+});
+
 test("only owners see delete organization, and it waits for the slug", async ({ page, api }) => {
   api.on("DELETE /orgs/acme", () => {
     api.on("GET /orgs", []);

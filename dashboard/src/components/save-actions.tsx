@@ -29,10 +29,7 @@ export function SaveActions({ serviceId, pending, saved: done, onApplied }: { se
     if (done?.apply === "rebuild") {
       await api(`/services/${serviceId}/deploy`, { method: "POST", body: { ref: sha } });
       setApplied(`Saved. Rebuilding ${shortSha(sha)}.`);
-    } else {
-      await api(`/services/${serviceId}/redeploy`, { method: "POST" });
-      setApplied("Saved. Redeploying without a rebuild.");
-    }
+    } else setApplied(await saved(serviceId));
     onApplied?.();
   });
   return (

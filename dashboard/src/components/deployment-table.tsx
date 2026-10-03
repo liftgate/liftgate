@@ -58,7 +58,7 @@ export function DeploymentTable({
                       Roll back to this
                     </Button>
                   )}
-                  {build && onToggle && (
+                  {build && onToggle && rows.find((other) => other.build?.id === build.id) === row && (
                     <Button variant="ghost" aria-expanded={row === open} onClick={() => onToggle(build.id)}>
                       {row === open ? "Hide logs" : "Logs"}
                     </Button>

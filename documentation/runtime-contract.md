@@ -87,7 +87,7 @@ Kubernetes retries a failing run up to 2 times. A run that takes longer than the
 
 ## Environment
 
-Every variable on the Environment variables tab reaches the container as an environment variable,
+Every variable on the Variables tab reaches the container as an environment variable,
 secret ones included. Liftgate adds only `PORT`. Pods get no Kubernetes service links and no service
 account token. A variable change reaches running pods with the next deployment: Redeploy after saving
 the tab, a push, or a deploy from the dashboard.

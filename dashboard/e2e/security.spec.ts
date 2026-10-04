@@ -1,9 +1,11 @@
 import { createServer } from "node:http";
-import { build, expect, service, servicePath, settled, test } from "./fixtures";
+import { build, expect, service, servicePath, settled, test, user } from "./fixtures";
+
+const session = { cookie: `liftgate_session=${user.login}` };
 
 test("pages and assets carry the security headers", async ({ request }) => {
   for (const path of ["/", "/login", "/acme", "/og.jpg"]) {
-    const headers = (await request.get(path)).headers();
+    const headers = (await request.get(path, { headers: session })).headers();
     expect(headers["content-security-policy"], path).toContain("frame-ancestors 'none'");
     expect(headers["content-security-policy"], path).toContain("base-uri 'self'");
     expect(headers["content-security-policy"], path).toContain("connect-src 'self'");
@@ -15,7 +17,7 @@ test("pages and assets carry the security headers", async ({ request }) => {
 });
 
 test("pages leave compression on, and the landing page is served gzipped", async ({ request }) => {
-  const headers = { accept: "text/html", "accept-encoding": "gzip" };
+  const headers = { accept: "text/html", "accept-encoding": "gzip", ...session };
   for (const path of ["/", "/login", "/acme"]) {
     expect((await request.get(path, { headers })).headers()["cache-control"], path).not.toContain("no-transform");
   }

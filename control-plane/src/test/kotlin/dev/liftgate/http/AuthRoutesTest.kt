@@ -129,12 +129,12 @@ class AuthRoutesTest {
         coEvery { gitConnections.store(user.id, "dean", any()) } just Runs
         application { liftgate(app) }
         val browser = browser()
-        val login = browser.get("/api/v1/auth/github/login?next=/acme")
+        val login = browser.get("/api/v1/auth/github/login?next=%2Fnew%3Forg%3Dacme%26repo%3Dacme%2Fshop")
         assertEquals(HttpStatusCode.Found, login.status)
         val authorize = Url(login.headers[HttpHeaders.Location]!!)
         val callback = browser.get("/api/v1/auth/github/callback?code=c&state=${authorize.parameters["state"]}")
         assertEquals(HttpStatusCode.Found, callback.status)
-        assertEquals("http://localhost:3000/acme", callback.headers[HttpHeaders.Location])
+        assertEquals("http://localhost:3000/new?org=acme&repo=acme/shop", callback.headers[HttpHeaders.Location])
         assertEquals(authorize.parameters["code_challenge"], pkceChallenge(verifier!!))
         assertTrue(callback.headers.getAll(HttpHeaders.SetCookie).orEmpty().any { it.startsWith("$SESSION_COOKIE=session-1") })
         coVerify { gitConnections.store(user.id, "dean", OAuthTokens("ghu_token", null, null)) }

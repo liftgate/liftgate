@@ -4,4 +4,6 @@ export const ogImage = { url: "/og.jpg", width: 1200, height: 630, alt: "The Lif
 
 export const landingOn = (flag: string | undefined) => flag === "true";
 
-export const landingFor = (flag: string | undefined, has: (name: string) => boolean) => (landingOn(flag) ? { signedIn: sessionCookies.some(has) } : undefined);
+export const hasSession = (has: (name: string) => boolean) => sessionCookies.some(has);
+
+export const landingFor = (flag: string | undefined, has: (name: string) => boolean) => (landingOn(flag) ? { signedIn: hasSession(has) } : undefined);

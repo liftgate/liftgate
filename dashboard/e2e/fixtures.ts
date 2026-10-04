@@ -312,6 +312,7 @@ export class Api {
   }
 
   async attach() {
+    await this.session(user.login);
     await this.page.route("**/api/v1/**", async (route) => {
       const request = route.request();
       const { pathname, search } = new URL(request.url());

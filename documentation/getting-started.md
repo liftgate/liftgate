@@ -136,6 +136,8 @@ is set. Paste .env and Import file add many variables at once, and Check reposit
 the repository's example env files that the service does not have yet. Save keeps the change for the
 next deployment. While the service runs, Save then offers Redeploy, which applies the change at once
 without building, or Rebuild and deploy when a public build-time variable such as `NEXT_PUBLIC_` changed.
+Rebuild and deploy builds the running commit again; while another build is in progress, it asks you to
+try again once that build finishes.
 
 Builds see the variables too:
 

@@ -287,6 +287,7 @@ export class Api {
       "GET /orgs/acme/projects/shop/tree": tree,
       [`GET /projects/${project.id}/previews`]: { missing: [], pullRequests: [] },
       [`GET /projects/${project.id}/detect`]: projectDetection,
+      [`GET /services/${service.id}`]: service,
       [`GET /services/${service.id}/deployments`]: [deployment],
       [`GET /services/${service.id}/builds`]: [build],
       [`GET /services/${service.id}/env`]: storedEnv,

@@ -20,6 +20,25 @@ test("the build card saves only its fields and offers to rebuild the running com
   expect(api.sent(`POST /services/${service.id}/deploy`).map((call) => call.body)).toEqual([{ ref: build.commitSha }]);
 });
 
+test("rebuild and deploy waits out a build in progress, then rebuilds the commit running by then", async ({ page, api }) => {
+  patched(api);
+  const newer = { ...build, id: "build-2", commitSha: "9c1e7b3d5a6f8e9c0b1a2d3e4f5a6b7c8d9e4f2a", status: "running", createdAt: new Date().toISOString() };
+  api.on(`GET /services/${service.id}/builds`, [newer, build]);
+  api.on(`POST /services/${service.id}/deploy`, new Reply(201, { ...newer, id: "build-3", status: "queued" }));
+  await page.goto(`${settings}&section=build`);
+  await page.getByLabel("Build command").fill("pnpm build:web");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  const rebuild = page.getByRole("button", { name: "Rebuild and deploy" });
+  await rebuild.click();
+  await expect(page.getByText("A build is already in progress. Try again when it finishes.")).toBeVisible();
+  expect(api.sent(`POST /services/${service.id}/deploy`)).toHaveLength(0);
+  api.on(`GET /services/${service.id}/builds`, [{ ...newer, status: "succeeded" }, build]);
+  api.on(`GET /services/${service.id}`, { ...service, current: { ...service.current, commitSha: newer.commitSha } });
+  await rebuild.click();
+  await expect(page.getByText("Saved. Rebuilding 9c1e7b3.")).toBeVisible();
+  expect(api.sent(`POST /services/${service.id}/deploy`).map((call) => call.body)).toEqual([{ ref: newer.commitSha }]);
+});
+
 test("a new port applies with a redeploy and no rebuild", async ({ page, api }) => {
   patched(api);
   api.on(`POST /services/${service.id}/redeploy`, new Reply(201, deployment));

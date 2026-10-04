@@ -90,6 +90,8 @@ export const platformHost = (labels: { service: string; environment: string; pro
 
 export const currentDeployment = <T extends { status: string }>(newestFirst: T[]) => newestFirst.find((d) => d.status === "running") ?? newestFirst[0];
 
+export const building = (build: Build) => build.status === "queued" || build.status === "running";
+
 export const canRollBack = (deployment: Deployment, build?: Build) => ["superseded", "rolled_back"].includes(deployment.status) && !!build && !build.imagePruned;
 
 export const planName = (plan: string) => plan.charAt(0).toUpperCase() + plan.slice(1);

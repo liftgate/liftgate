@@ -29,6 +29,7 @@ class Cache(config: Config) : AutoCloseable {
         setClusterName(config.hazelcastCluster)
         setProperty("hazelcast.logging.type", "slf4j")
         setProperty("hazelcast.phone.home.enabled", "false")
+        setProperty("hazelcast.shutdownhook.enabled", "false")
         networkConfig.join.apply {
             autoDetectionConfig.setEnabled(false)
             multicastConfig.setEnabled(false)

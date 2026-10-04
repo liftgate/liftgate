@@ -130,7 +130,7 @@ environments cannot reach each other over the network.
 
 ## Variables
 
-The Environment variables tab holds the service's variables. Tick Secret for a value nobody should read
+The Variables tab holds the service's variables. Tick Secret for a value nobody should read
 back: the dashboard and the API never show it again, and members of the organization see only that it
 is set. Paste .env and Import file add many variables at once, and Check repository lists the names in
 the repository's example env files that the service does not have yet. Save keeps the change for the

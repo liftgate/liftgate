@@ -44,15 +44,13 @@ test("the console is not offered to anyone but operators", async ({ page, api })
 });
 
 test("the console is a plain 404 page without operator copy for anyone but an operator", async ({ request }) => {
-  const get = (session?: string) => request.get("/dashboard/operator", { headers: session ? { cookie: `liftgate_session=${session}` } : {} });
-  for (const session of [undefined, "member"]) {
-    const response = await get(session);
-    expect(response.status(), session).toBe(404);
-    const html = await response.text();
-    expect(html).toContain("<title>Page not found · Liftgate</title>");
-    expect(html).not.toContain("Operator");
-    expect(html).not.toContain("Approve new accounts");
-  }
+  const get = (session: string) => request.get("/dashboard/operator", { headers: { cookie: `liftgate_session=${session}` } });
+  const response = await get("member");
+  expect(response.status()).toBe(404);
+  const html = await response.text();
+  expect(html).toContain("<title>Page not found · Liftgate</title>");
+  expect(html).not.toContain("Operator");
+  expect(html).not.toContain("Approve new accounts");
   const console = await get("operator");
   expect(console.status()).toBe(200);
   expect(await console.text()).toContain("Approve new accounts");

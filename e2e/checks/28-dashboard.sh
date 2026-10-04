@@ -24,13 +24,21 @@ expect() {
   exit 1
 }
 
-expect /e2e 200 ""
-expect /e2e/hello 200 ""
-expect /no-such-page-zz9 404 ""
-expect /legal/terms 404 ""
+signin() {
+  expect "$1" 307 ""
+  login="$(get "$1" "" --output /dev/null --write-out '%{redirect_url}')"
+  test "$login" = "https://liftgate.test/login?next=$2" || { echo "FAIL: https://liftgate.test$1 signed out redirects to $login"; exit 1; }
+  echo "https://liftgate.test$1 signed out redirects to $login"
+}
+
+signin /e2e %2Fe2e
+signin /no-such-page-zz9 %2Fno-such-page-zz9
+signin "/new?org=e2e" %2Fnew%3Forg%3De2e
 expect /e2e 200 "$token"
+expect /e2e/hello 200 "$token"
 expect /e2e-b 200 "$token"
 expect /no-such-page-zz9 404 "$token"
+expect /legal/terms 404 "$token"
 
 for path in /login /api/v1/me; do
   headers="$(get $path "" --output /dev/null --dump-header - | tr -d '\r')"

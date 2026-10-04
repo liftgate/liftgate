@@ -120,4 +120,8 @@ spec:
               path: /healthz
               port: http
             periodSeconds: 20
+          lifecycle:
+            preStop:
+              sleep:
+                seconds: 5
 {{- end }}

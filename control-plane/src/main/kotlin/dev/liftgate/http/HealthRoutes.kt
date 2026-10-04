@@ -20,7 +20,7 @@ fun Route.healthRoutes(app: App) {
     }
     get("/readyz") {
         app.db.tx { exec("select 1") { it.next() } }
-        if (!app.stopping && (!app.runs(Role.API) || app.cache.running)) call.respondText("ok")
+        if (!app.runs(Role.API) || app.cache.running) call.respondText("ok")
         else call.respondText("not ready", status = HttpStatusCode.ServiceUnavailable)
     }
     get("/metrics") { call.respondText(app.metrics.scrape()) }

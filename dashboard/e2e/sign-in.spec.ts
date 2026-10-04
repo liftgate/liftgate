@@ -1,4 +1,4 @@
-import { expect, providers, Reply, test, user } from "./fixtures";
+import { expect, providers, Reply, servicePath, test, user } from "./fixtures";
 
 const only = (methods: Partial<typeof providers>) => ({ ...providers, oauth: [], passkey: false, email: false, sso: false, ...methods });
 
@@ -76,4 +76,38 @@ test("a passkey added on the account page signs in", async ({ page, api }) => {
   await page.getByRole("button", { name: "Continue with passkey" }).click();
   await page.waitForURL("/acme");
   expect((api.sent("POST /auth/passkey/verify").at(-1)?.body as { credential: { id: string } }).credential.id).toBe(created);
+});
+
+test("a signed-out visit is sent to sign-in by the server with its query, before anything calls the API", async ({ page, api, request, baseURL }) => {
+  await api.signOut();
+  const errors: string[] = [];
+  page.on("console", (message) => message.type() === "error" && errors.push(message.text()));
+  for (const path of ["/new?org=acme&project=shop", "/dashboard", `${servicePath}?tab=logs`, "/dashboard/operator"]) {
+    const login = `/login?${new URLSearchParams({ next: path })}`;
+    const redirect = await request.get(path, { maxRedirects: 0 });
+    expect(redirect.status(), path).toBe(307);
+    expect(redirect.headers().location, path).toBe(login);
+    const response = await page.goto(path);
+    expect(response?.request().redirectedFrom()?.url()).toBe(new URL(path, baseURL).href);
+    await expect(page).toHaveURL(login);
+    await expect(page.getByRole("link", { name: "Continue with GitHub" })).toHaveAttribute("href", `/api/v1/auth/github/login?${new URLSearchParams({ next: path, intent: "signin" })}`);
+  }
+  expect(api.calls.filter((call) => !call.path.startsWith("/auth/"))).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test("an expired session returns to the page and its query after signing in again", async ({ page, api }) => {
+  let signedIn = false;
+  api.on("GET /me", () => (signedIn ? user : new Reply(401, { error: "unauthorized", message: "sign in first" })));
+  api.on("GET /auth/providers", only({ email: true }));
+  api.on("POST /auth/email/start", undefined);
+  api.on("POST /auth/email/verify", () => {
+    signedIn = true;
+  });
+  await page.goto("/new?org=acme&repo=acme/shop");
+  await expect(page).toHaveURL("/login?next=%2Fnew%3Forg%3Dacme%26repo%3Dacme%2Fshop");
+  await page.getByLabel("Email").fill(user.email!);
+  await page.getByRole("button", { name: "Continue with email" }).click();
+  await page.getByLabel("Verification code").fill("123456");
+  await page.waitForURL("/new?org=acme&repo=acme/shop");
 });

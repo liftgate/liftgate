@@ -28,7 +28,7 @@ export async function api<T>(path: string, init: { method?: Method; body?: unkno
     throw new ApiError(0, "unreachable", "The Liftgate API is unreachable. Check that the control plane is running.");
   }
   if (res.status === 401 && typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
-    window.location.replace(`/login?next=${encodeURIComponent(window.location.pathname)}`);
+    window.location.replace(`/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`);
   }
   const text = await res.text();
   if (!res.ok) throw toError(res.status, text);

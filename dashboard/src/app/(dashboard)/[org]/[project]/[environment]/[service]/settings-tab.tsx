@@ -38,7 +38,6 @@ export function SettingsTab({ org, service, section, projectHref, onChanged }: {
   const card = { service, onChanged };
   const cleared: (keyof ServiceSpec)[] = kind === "cron" ? ["port", "healthCheckPath"] : servesHttp(kind) || service.port ? [] : ["healthCheckPath"];
   const dir = service.rootDir.replace(/^\/+|\/+$/g, "");
-  const dockerfile = service.buildStrategy === "dockerfile" || service.framework === "dockerfile";
   const of = (used: number, limit: number | null, unit: string) => `${used}${unit}${limit === null ? "" : ` of ${limit}${unit}`}`;
   const volume = service.volume ? ", domains and the files on its volume" : " and domains";
   return (
@@ -65,7 +64,7 @@ export function SettingsTab({ org, service, section, projectHref, onChanged }: {
           {...card}
           key="build"
           title="Build"
-          description={dockerfile ? `Dockerfile at ./${dir ? `${dir}/` : ""}${service.dockerfilePath}` : [stackName(service.framework), "Railpack"].filter(Boolean).join(" · ")}
+          description={service.buildStrategy === "dockerfile" ? `Dockerfile at ./${dir ? `${dir}/` : ""}${service.dockerfilePath}` : stackName(service.framework)}
           fields={["rootDir", "buildCommand", "dockerfilePath", "watchPaths", "buildStrategy"]}
         >
           {(errorAt) => <BuildFields initial={service} dockerfile errorAt={errorAt} />}

@@ -30,13 +30,35 @@ test("rebuild and deploy waits out a build in progress, then rebuilds the commit
   await page.getByRole("button", { name: "Save", exact: true }).click();
   const rebuild = page.getByRole("button", { name: "Rebuild and deploy" });
   await rebuild.click();
-  await expect(page.getByText("A build is already in progress. Try again when it finishes.")).toBeVisible();
+  await expect(page.getByText("Another build or release is in progress. Try again when it finishes.")).toBeVisible();
   expect(api.sent(`POST /services/${service.id}/deploy`)).toHaveLength(0);
   api.on(`GET /services/${service.id}/builds`, [{ ...newer, status: "succeeded" }, build]);
   api.on(`GET /services/${service.id}`, { ...service, current: { ...service.current, commitSha: newer.commitSha } });
   await rebuild.click();
   await expect(page.getByText("Saved. Rebuilding 9c1e7b3.")).toBeVisible();
   expect(api.sent(`POST /services/${service.id}/deploy`).map((call) => call.body)).toEqual([{ ref: newer.commitSha }]);
+});
+
+test("rebuild and deploy holds off while a newer release is still going out", async ({ page, api }) => {
+  patched(api);
+  api.on(`GET /services/${service.id}/deployments`, [{ ...deployment, id: "deployment-2", buildId: "build-2", status: "releasing", createdAt: new Date().toISOString() }, deployment]);
+  await page.goto(`${settings}&section=build`);
+  await page.getByLabel("Build command").fill("pnpm build:web");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await page.getByRole("button", { name: "Rebuild and deploy" }).click();
+  await expect(page.getByText("Another build or release is in progress. Try again when it finishes.")).toBeVisible();
+  expect(api.sent(`POST /services/${service.id}/deploy`)).toHaveLength(0);
+});
+
+test("the build card names the Dockerfile only for a service set to build from it", async ({ page, api }) => {
+  for (const [overrides, header] of [
+    [{ framework: "next" }, "Next.js"],
+    [{ framework: "next", buildStrategy: "dockerfile", rootDir: "/apps/web" }, "Dockerfile at ./apps/web/Dockerfile"],
+  ] as const) {
+    api.on("GET /orgs/acme/projects/shop/tree", { project, environments: [environment], services: [{ ...service, ...overrides }] });
+    await page.goto(`${settings}&section=build`);
+    await expect(page.getByRole("tabpanel").getByText(header, { exact: true })).toBeVisible();
+  }
 });
 
 test("a new port applies with a redeploy and no rebuild", async ({ page, api }) => {

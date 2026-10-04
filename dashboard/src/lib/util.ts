@@ -92,6 +92,8 @@ export const currentDeployment = <T extends { status: string }>(newestFirst: T[]
 
 export const building = (build: Build) => build.status === "queued" || build.status === "running";
 
+export const releasing = (deployment: Deployment) => deployment.status === "pending" || deployment.status === "releasing";
+
 export const canRollBack = (deployment: Deployment, build?: Build) => ["superseded", "rolled_back"].includes(deployment.status) && !!build && !build.imagePruned;
 
 export const planName = (plan: string) => plan.charAt(0).toUpperCase() + plan.slice(1);

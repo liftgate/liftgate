@@ -4,15 +4,13 @@ import { useState } from "react";
 import { api } from "@/lib/api";
 import { useAction, useApi, usePolling } from "@/lib/hooks";
 import type { Build, Deployment, Environment, Service } from "@/lib/types";
-import { building, duration, history, shortSha } from "@/lib/util";
+import { building, duration, history, releasing, shortSha } from "@/lib/util";
 import { DeploymentTable } from "@/components/deployment-table";
 import { Loaded } from "@/components/loaded";
 import { LogViewer } from "@/components/log-viewer";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FormError } from "@/components/ui/input";
 import { TableSkeleton } from "@/components/ui/skeleton";
-
-const releasing = (deployment: Deployment) => deployment.status === "pending" || deployment.status === "releasing";
 
 export function DeploymentsTab({
   service,

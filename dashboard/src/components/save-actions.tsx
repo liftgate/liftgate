@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { useAction, useOnChange } from "@/lib/hooks";
-import type { Build, CurrentDeployment, Service } from "@/lib/types";
-import { building, shortSha, type Apply } from "@/lib/util";
+import type { Build, CurrentDeployment, Deployment, Service } from "@/lib/types";
+import { building, releasing, shortSha, type Apply } from "@/lib/util";
 import { Button } from "./ui/button";
 import { FormError } from "./ui/input";
 
@@ -25,8 +25,12 @@ export function SaveActions({ serviceId, pending, saved: done, onApplied }: { se
   useOnChange(() => setApplied(undefined), done);
   const apply = useAction(async () => {
     if (done?.apply === "rebuild") {
-      const [{ current }, builds] = await Promise.all([api<Service>(`/services/${serviceId}`), api<Build[]>(`/services/${serviceId}/builds`)]);
-      if (builds.some(building)) throw new Error("A build is already in progress. Try again when it finishes.");
+      const [{ current }, builds, deployments] = await Promise.all([
+        api<Service>(`/services/${serviceId}`),
+        api<Build[]>(`/services/${serviceId}/builds`),
+        api<Deployment[]>(`/services/${serviceId}/deployments`),
+      ]);
+      if (builds.some(building) || deployments.some(releasing)) throw new Error("Another build or release is in progress. Try again when it finishes.");
       if (!current) return;
       await api(`/services/${serviceId}/deploy`, { method: "POST", body: { ref: current.commitSha } });
       setApplied(`Saved. Rebuilding ${shortSha(current.commitSha)}.`);

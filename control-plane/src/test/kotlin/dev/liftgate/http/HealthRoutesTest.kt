@@ -39,7 +39,6 @@ class HealthRoutesTest {
     private val app = mockk<App>().also {
         every { it.db } returns db
         every { it.nats } returns nats
-        every { it.stopping } returns false
         every { it.runs(any()) } returns false
         every { it.metrics } returns PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
         every { it.config } returns testConfig()
@@ -78,12 +77,9 @@ class HealthRoutesTest {
     }
 
     @Test
-    fun `readyz fails while stopping or without hazelcast where the api runs`() = testApplication {
+    fun `readyz fails without hazelcast where the api runs`() = testApplication {
         application { liftgate(app) }
         suspend fun status() = client.get("/readyz").status
-        every { app.stopping } returns true
-        assertEquals(HttpStatusCode.ServiceUnavailable, status())
-        every { app.stopping } returns false
         val cache = mockk<Cache> { every { running } returns false }
         every { app.runs(Role.API) } returns true
         every { app.cache } returns cache

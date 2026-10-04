@@ -77,8 +77,6 @@ import java.util.concurrent.CountDownLatch
 import kotlin.system.exitProcess
 import kotlin.time.Duration.Companion.seconds
 
-private const val DRAIN_MILLIS = 5_000L
-
 /**
  * @author Dean
  * @date 9/17/2026
@@ -129,14 +127,11 @@ class App(val config: Config) : AutoCloseable {
     private val stopped = CountDownLatch(1)
     private var server: EmbeddedServer<*, *>? = null
 
-    @Volatile
-    var stopping = false
-        private set
-
     fun runs(role: Role) = config.role == Role.ALL || config.role == role
 
     fun start() {
         nats.ensureStream()
+        System.setProperty("io.ktor.server.engine.ShutdownHook", "false")
         server = httpServer(this).start(wait = false)
         if (runs(Role.API)) {
             val relay = OutboxRelay(db, nats)
@@ -168,8 +163,6 @@ class App(val config: Config) : AutoCloseable {
     }
 
     override fun close() {
-        stopping = true
-        Thread.sleep(DRAIN_MILLIS)
         server?.stop(1000, 5000)
         runBlocking { withTimeoutOrNull(10.seconds) { scope.coroutineContext.job.cancelAndJoin() } }
         http.close()

@@ -62,6 +62,10 @@ spec:
               path: /login
               port: http
             periodSeconds: 20
+          lifecycle:
+            preStop:
+              sleep:
+                seconds: 5
           resources:
             {{- toYaml .Values.dashboard.resources | nindent 12 }}
           securityContext:

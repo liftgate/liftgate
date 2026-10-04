@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
-import { BuildsCard, BuildTable } from "@/components/build-table";
 import { DeploymentTable } from "@/components/deployment-table";
 import type { Build, Deployment } from "@/lib/types";
+import { history } from "@/lib/util";
 import { BuildLogPreview } from "./build-log-preview";
 import { buildLog } from "./demo";
 import { Section } from "./section";
@@ -12,12 +12,10 @@ export function HowItWorks({ builds, deployments }: { builds: Build[]; deploymen
     {
       title: "Push",
       body: "The GitHub App tells Liftgate about the push. Every service in an environment that tracks the branch gets a build.",
-      caption: "The Builds tab of an example service, with a build running.",
+      caption: "The Deployments tab of an example service, with a build running.",
       figure: (
-        <div inert className="max-md:[&_:is(th,td):nth-child(n+3)]:hidden">
-          <BuildsCard>
-            <BuildTable builds={builds} selected={builds[0].id} />
-          </BuildsCard>
+        <div inert className="max-md:[&_:is(th,td):nth-child(n+3)]:hidden md:rounded-lg md:border md:border-graphite-700 md:bg-graphite-950 md:p-6">
+          <DeploymentTable rows={history(builds, [])} replicas={1} selected={builds[0].id} />
         </div>
       ),
     },
@@ -33,7 +31,7 @@ export function HowItWorks({ builds, deployments }: { builds: Build[]; deploymen
       caption: "The Deployments tab once the build is released.",
       figure: (
         <div inert className="max-md:[&_:is(th,td):not(:first-child,:last-child)]:hidden md:rounded-lg md:border md:border-graphite-700 md:bg-graphite-950 md:p-6">
-          <DeploymentTable deployments={deployments} builds={builds} replicas={1} />
+          <DeploymentTable rows={history(builds, deployments)} replicas={1} />
         </div>
       ),
     },

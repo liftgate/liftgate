@@ -1,81 +1,29 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
-import { useParams, usePathname, useRouter } from "next/navigation";
-import { api } from "@/lib/api";
-import { useAction, useApi } from "@/lib/hooks";
-import type { OperatorSummary, Organization, User } from "@/lib/types";
-import { CreateOrgForm } from "./create-org-form";
+import type { ReactNode } from "react";
+import { usePathname } from "next/navigation";
+import { useApi, useSignOut } from "@/lib/hooks";
+import type { User } from "@/lib/types";
 import { Mark } from "./mark";
-import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { Dialog } from "./ui/dialog";
-import { Select } from "./ui/select";
 
 export function Nav({ actions }: { actions?: ReactNode }) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const onLogin = pathname.startsWith("/login");
-  const { org, project, environment, service } = useParams<{ org?: string; project?: string; environment?: string; service?: string }>();
+  const onLogin = usePathname().startsWith("/login");
   const inApp = !onLogin && !actions;
   const me = useApi<User>(inApp && "/me");
-  const orgs = useApi<Organization[]>(inApp && "/orgs");
-  const summary = useApi<OperatorSummary>(inApp && me.data?.operator && "/operator/summary");
-  const [creating, setCreating] = useState(false);
-  const signOut = useAction(async () => {
-    await api("/auth/logout", { method: "POST" });
-    window.location.replace("/login");
-  });
-  const suspended = orgs.data?.find((o) => o.slug === org && o.suspendedAt);
-  const segments = [org, project, service && `${environment}/${service}`].filter((s): s is string => !!s);
-  const crumbs = segments.map((label, i) => ({ label, href: `/${segments.slice(0, i + 1).join("/")}` }));
-  const parent = crumbs.findLast((crumb) => crumb.href !== pathname);
+  const signOut = useSignOut();
   return (
     <header className="border-b border-graphite-700 bg-graphite-900">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-6 sm:gap-6">
         <nav className="flex min-w-0 items-center gap-2 text-sm">
           <Link href={inApp ? "/dashboard" : "/"} className="flex shrink-0 items-center gap-2 font-semibold">
             <Mark />
-            <span className={crumbs.length ? "max-sm:sr-only" : undefined}>Liftgate</span>
+            Liftgate
           </Link>
-          {crumbs.map((crumb) => (
-            <span key={crumb.href} className={`flex min-w-0 items-center gap-2 ${crumb === parent ? "" : "max-sm:hidden"}`}>
-              <span className="text-graphite-600">/</span>
-              <Link href={crumb.href} className="min-w-0 truncate text-graphite-200 hover:text-white">
-                {crumb.label}
-              </Link>
-            </span>
-          ))}
         </nav>
         {!onLogin && (
           <div className="flex items-center gap-2 sm:gap-4">
-            {org && orgs.data && (
-              <Select
-                aria-label="Organization"
-                value={org}
-                onChange={(e) => (e.target.value ? router.push(`/${e.target.value}`) : setCreating(true))}
-                className="max-w-24 sm:max-w-40"
-              >
-                {orgs.data.map((o) => (
-                  <option key={o.slug} value={o.slug}>
-                    {o.name}
-                  </option>
-                ))}
-                <option value="">New organization…</option>
-              </Select>
-            )}
-            {me.data?.operator && (
-              <Link href="/dashboard/operator" className="flex items-center gap-2 text-sm text-graphite-400 hover:text-white max-sm:hidden">
-                Operator
-                {!!summary.data?.pending && (
-                  <Badge tone="warning">
-                    {summary.data.pending}
-                    <span className="sr-only"> pending</span>
-                  </Badge>
-                )}
-              </Link>
-            )}
             {me.data && (
               <Link href="/account" className="text-sm text-graphite-400 hover:text-white">
                 {me.data.login}
@@ -89,24 +37,6 @@ export function Nav({ actions }: { actions?: ReactNode }) {
           </div>
         )}
       </div>
-      {suspended && (
-        <div role="status" className="border-t border-danger/40 bg-danger/10">
-          <p className="mx-auto max-w-6xl px-6 py-2 text-sm text-danger">
-            {suspended.name} is suspended{suspended.suspendedReason && ` for ${suspended.suspendedReason}`}. Its apps are stopped and changes are
-            blocked until the operator lifts the suspension.
-          </p>
-        </div>
-      )}
-      <Dialog open={creating} title="New organization" onClose={() => setCreating(false)}>
-        <CreateOrgForm
-          prefill={me.data?.name ?? me.data?.login}
-          onCreated={() => {
-            setCreating(false);
-            orgs.reload();
-          }}
-          onCancel={() => setCreating(false)}
-        />
-      </Dialog>
     </header>
   );
 }

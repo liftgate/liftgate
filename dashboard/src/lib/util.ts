@@ -1,4 +1,4 @@
-import type { Build, Deployment, DetectedVariable, EnvVar, ProjectTree, ServiceKind, ServiceSpec, Usage } from "./types";
+import type { Build, CurrentDeployment, Deployment, DetectedVariable, EnvironmentKind, EnvVar, OrgRole, ProjectTree, ServiceKind, ServiceSpec, Usage } from "./types";
 
 export function timeAgo(iso: string) {
   const seconds = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
@@ -90,11 +90,19 @@ export const platformHost = (labels: { service: string; environment: string; pro
 
 export const currentDeployment = <T extends { status: string }>(newestFirst: T[]) => newestFirst.find((d) => d.status === "running") ?? newestFirst[0];
 
+export const building = (build: Build) => build.status === "queued" || build.status === "running";
+
+export const releasing = (deployment: Deployment) => deployment.status === "pending" || deployment.status === "releasing";
+
 export const canRollBack = (deployment: Deployment, build?: Build) => ["superseded", "rolled_back"].includes(deployment.status) && !!build && !build.imagePruned;
 
 export const planName = (plan: string) => plan.charAt(0).toUpperCase() + plan.slice(1);
 
 export const kindLabels: Record<ServiceKind, string> = { web: "Web service", static: "Static site", worker: "Worker", cron: "Cron job" };
+
+export const environmentKindLabels: Record<EnvironmentKind, string> = { production: "Production", preview: "Preview" };
+
+export const roleLabels: Record<OrgRole, string> = { owner: "Owner", admin: "Admin", member: "Member" };
 
 const buildTimePrefixes = ["NEXT_PUBLIC_", "VITE_", "PUBLIC_", "NUXT_PUBLIC_", "REACT_APP_", "EXPO_PUBLIC_", "GATSBY_", "VUE_APP_"];
 const secretWords = /(^|_)(SECRET|TOKEN|PASSWORD|PASSWD|PWD|PASS|PRIVATE|KEY|APIKEY|CREDENTIALS?|AUTH|SALT|SIGNING|DSN|WEBHOOK|COOKIE|SESSION)(_|$)/;
@@ -139,4 +147,35 @@ export const fitPlan = (wanted: number, usage: Usage) => {
     if (fitted.cpuMillis >= 250 && fitted.memoryMb >= 256) return fitted;
   }
   return { count: 0, cpuMillis: 500, memoryMb: 512 };
+};
+
+export type HistoryRow = { key: string; build?: Build; deployment?: Deployment };
+
+const newest = (row: HistoryRow) => Date.parse(row.deployment?.createdAt ?? row.build?.createdAt ?? "");
+
+export const history = (builds: Build[], deployments: Deployment[]): HistoryRow[] =>
+  [
+    ...deployments.map((deployment) => ({ key: deployment.id, deployment, build: builds.find((b) => b.id === deployment.buildId) })),
+    ...builds.filter((build) => !deployments.some((d) => d.buildId === build.id)).map((build) => ({ key: build.id, build })),
+  ].sort((a, b) => newest(b) - newest(a));
+
+export type Apply = "rebuild" | "redeploy";
+
+type Applied = Partial<ServiceSpec> & { env?: EnvVar[] };
+
+const rebuildFields = ["rootDir", "buildCommand", "dockerfilePath", "buildStrategy", "startCommand"] as const;
+
+const changedNames = (before: EnvVar[], after: EnvVar[]) =>
+  [...new Set([...before, ...after].map((v) => v.name))].filter((name) => {
+    const was = before.find((v) => v.name === name);
+    const is = after.find((v) => v.name === name);
+    return !was || !is || was.secret !== is.secret || (is.value !== null && is.value !== was.value);
+  });
+
+export const applyAction = (current: Pick<CurrentDeployment, "status"> | null | undefined, before: Applied, after: Applied): Apply | undefined => {
+  if (!current) return undefined;
+  const changed = (Object.keys(after) as (keyof Applied)[]).filter((key) => key !== "env" && JSON.stringify(before[key] ?? null) !== JSON.stringify(after[key] ?? null));
+  const names = changedNames(before.env ?? [], after.env ?? []);
+  if (changed.some((key) => (rebuildFields as readonly string[]).includes(key)) || names.some((name) => classifyVariable(name).buildTime)) return "rebuild";
+  return (changed.length || names.length) && ["pending", "releasing", "running"].includes(current.status) ? "redeploy" : undefined;
 };

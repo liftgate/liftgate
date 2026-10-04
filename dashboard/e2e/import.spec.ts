@@ -39,7 +39,7 @@ test("a new user goes from sign-in to a streaming build in four clicks without t
   expect((await page.getByRole("textbox").count()) - (await variables.getByRole("textbox").count())).toBe(1);
   await page.getByRole("button", { name: "Deploy", exact: true }).click();
 
-  await page.waitForURL("/acme/shop/production/shop?tab=builds&build=build-2");
+  await page.waitForURL("/acme/shop/production/shop?tab=deployments&build=build-2");
   await expect(page.getByRole("region", { name: /Build 4f2a9c1 output/ })).toContainText("Listening on port 8080");
   expect(api.sent("POST /orgs")[0].body).toEqual({ slug: "ada-lovelace", name: "Ada Lovelace" });
   expect(api.sent("POST /orgs/acme/projects")[0].body).toEqual({ slug: "shop", name: "shop", repoFullName: "acme/shop" });
@@ -78,7 +78,7 @@ test("pasting a .env fills matching rows, adds the rest and never stores the val
   expect(kept).not.toContain("checkout");
 
   await page.getByRole("button", { name: "Deploy", exact: true }).click();
-  await page.waitForURL(/tab=builds/);
+  await page.waitForURL(/tab=deployments/);
   expect((api.sent(posts)[0].body as { env: unknown }).env).toEqual([
     { name: "DATABASE_URL", value: "postgres://shop:hunter2@db.example.com/shop", secret: true },
     { name: "LOG_LEVEL", value: "debug", secret: false },

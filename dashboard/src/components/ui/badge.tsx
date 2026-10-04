@@ -36,7 +36,8 @@ const statusTones: Record<string, Tone> = {
   suspended: "danger",
 };
 
+export const statusTone = (status: string): Tone => statusTones[status.toLowerCase()] ?? "neutral";
+
 export function StatusBadge({ status }: { status: string }) {
-  const key = status.toLowerCase();
-  return <Badge tone={statusTones[key] ?? "neutral"}>{key.replace("_", " ")}</Badge>;
+  return <Badge tone={statusTone(status)}>{status.toLowerCase().replace("_", " ")}</Badge>;
 }

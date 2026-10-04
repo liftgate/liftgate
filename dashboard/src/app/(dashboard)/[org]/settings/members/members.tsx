@@ -4,7 +4,7 @@ import { useState } from "react";
 import { api } from "@/lib/api";
 import { useAction, useApi, useRole } from "@/lib/hooks";
 import type { CreatedInvitation, Member, OrgRole, User } from "@/lib/types";
-import { formValues } from "@/lib/util";
+import { formValues, roleLabels } from "@/lib/util";
 import { Loaded } from "@/components/loaded";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -55,7 +55,7 @@ export function Members({ org }: { org: string }) {
     <div className="flex flex-col gap-8">
       <PageHeader
         title="Members"
-        description="Owners manage members, SSO and the organization. Admins deploy and manage projects, tokens and invitations. Members have read access."
+        description="Owners manage the organization, admins deploy and invite, and members can read."
         actions={
           admin && (
             <Button variant="primary" onClick={() => setInviting(true)}>
@@ -92,14 +92,14 @@ export function Members({ org }: { org: string }) {
                         >
                           {roles.map((role) => (
                             <option key={role} value={role}>
-                              {role}
+                              {roleLabels[role]}
                             </option>
                           ))}
                         </Select>
                         {saving && <Spinner />}
                       </span>
                     ) : (
-                      <Badge>{member.role}</Badge>
+                      <Badge>{roleLabels[member.role]}</Badge>
                     )}
                   </Cell>
                   <Cell className="text-right">
@@ -143,7 +143,7 @@ export function Members({ org }: { org: string }) {
                   .filter((role) => owner || role !== "owner")
                   .map((role) => (
                     <option key={role} value={role}>
-                      {role}
+                      {roleLabels[role]}
                     </option>
                   ))}
               </Select>

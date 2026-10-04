@@ -273,7 +273,7 @@ Open `https://liftgate.example.com` and choose Continue with GitHub. Because `gi
 is in `signup.allow`, your account is active at once. Create an organization; you are its owner.
 
 Everyone else who signs in waits for approval, because the chart's sign-up mode is `approval`. With
-`github:your-github-login` also in `operators`, the header shows Operator, which opens the operator
+`github:your-github-login` also in `operators`, the sidebar shows Operator, which opens the operator
 console at `https://liftgate.example.com/dashboard/operator`. Its Pending tab lists the accounts that
 wait; approve them there. The Users and Organizations tabs suspend and unsuspend accounts and
 organizations and move organizations between plans. When `email.smtpUrl` and `email.from` are set,
@@ -351,8 +351,8 @@ Once a day the control plane deletes the images Liftgate no longer needs; Image 
 [chart README](../charts/liftgate/README.md#image-retention) lists the ones it keeps. Their disk is freed
 by the registry's garbage collection, which runs each time the registry starts, and the CronJob
 `liftgate-registry-gc` restarts it every Sunday at 04:30 UTC. While it collects, apps keep pulling and
-pushes are refused, so a build that pushes then fails; start it again with Deploy on the Builds tab. The
-images live in the volume `data-liftgate-registry-0`, whose size k3s does not enforce:
+pushes are refused, so a build that pushes then fails; start it again from the deploy menu in the service
+header. The images live in the volume `data-liftgate-registry-0`, whose size k3s does not enforce:
 
 ```sh
 kubectl -n liftgate-system exec liftgate-registry-0 -c registry -- du -sh /var/lib/registry
@@ -683,9 +683,9 @@ From 0.2.0 to 0.3.0-alpha.1:
 
 From 0.3.0-alpha.1 to the release after it:
 
-- Apps that write under their working directory or `HOME` need a new build: push, or use Deploy on the
-  Builds tab. Redeploy and rollback reuse the old image, which keeps the old ownership, as
-  [User and file system](runtime-contract.md#user-and-file-system) describes.
+- Apps that write under their working directory or `HOME` need a new build: push, or use Deploy latest
+  commit in the service header. Redeploy and rollback reuse the old image, which keeps the old
+  ownership, as [User and file system](runtime-contract.md#user-and-file-system) describes.
 - Images built from a Dockerfile gain one layer, and their image `User` becomes `1000:1000`.
 - The new ownership needs no values and no migrations.
 
@@ -731,9 +731,9 @@ like this:
 
 Builds after the upgrade push to the in-cluster registry. Images of earlier builds stay in the old
 registry: apps keep running from them, a rollback to one of those builds pulls it from there, and the
-control plane no longer deletes any of them. Build each service again, with a push or Deploy on the
-Builds tab, to move it. Keep the old registry and its entries in `registries.yaml` until no deployment
-you may roll back to uses it.
+control plane no longer deletes any of them. Build each service again, with a push or Deploy latest
+commit in the service header, to move it. Keep the old registry and its entries in `registries.yaml`
+until no deployment you may roll back to uses it.
 
 ## Uninstalling
 

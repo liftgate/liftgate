@@ -1,5 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
-import { asOperator, expect, org, test, user } from "./fixtures";
+import { asOperator, expect, openNav, org, test, user } from "./fixtures";
 
 const entries = [
   { path: "/dashboard", heading: "Projects", landing: `/${org.slug}` },
@@ -31,7 +31,8 @@ test("the account page stays open before the terms are accepted", async ({ page,
   api.on("GET /me", { ...user, termsPending: true });
   await page.goto(`/${org.slug}`);
   await expect(page.getByRole("button", { name: "Accept" })).toBeVisible();
-  await page.getByRole("link", { name: user.login }).click();
+  await (await openNav(page)).getByRole("button", { name: /Account: ada/ }).click();
+  await page.getByRole("menuitem", { name: "Account settings" }).click();
   await expect(page.getByRole("heading", { name: "Account", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Accept" })).toHaveCount(0);
 });

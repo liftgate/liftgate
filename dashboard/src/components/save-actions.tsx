@@ -1,13 +1,16 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
 import { api, ApiError } from "@/lib/api";
-import { Button, type ButtonVariant } from "./ui/button";
+import { useAction, useOnChange } from "@/lib/hooks";
+import type { Build, CurrentDeployment, Deployment, Service } from "@/lib/types";
+import { building, releasing, shortSha, type Apply } from "@/lib/util";
+import { Button } from "./ui/button";
+import { FormError } from "./ui/input";
 
-export const redeployRequested = (e: FormEvent<HTMLFormElement>) => ((e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null)?.value === "redeploy";
+export type Saved = { current: CurrentDeployment | null; apply?: Apply };
 
-export async function saved(serviceId: string, redeploy: boolean) {
-  if (!redeploy) return "Saved. Applies on the next deploy.";
+export async function saved(serviceId: string) {
   try {
     await api(`/services/${serviceId}/redeploy`, { method: "POST" });
     return "Saved. Redeploying without a rebuild.";
@@ -17,20 +20,39 @@ export async function saved(serviceId: string, redeploy: boolean) {
   }
 }
 
-export function SaveActions({ pending, status }: { pending: boolean; status?: string }) {
-  const [clicked, setClicked] = useState<string>();
-  const action = (value: string, label: string, variant?: ButtonVariant) => (
-    <Button type="submit" value={value} variant={variant} disabled={pending} pending={pending && clicked === value} onClick={() => setClicked(value)}>
-      {label}
-    </Button>
-  );
+export function SaveActions({ serviceId, pending, saved: done, onApplied }: { serviceId: string; pending: boolean; saved?: Saved; onApplied?: () => void }) {
+  const [applied, setApplied] = useState<string>();
+  useOnChange(() => setApplied(undefined), done);
+  const apply = useAction(async () => {
+    if (done?.apply === "rebuild") {
+      const [{ current }, builds, deployments] = await Promise.all([
+        api<Service>(`/services/${serviceId}`),
+        api<Build[]>(`/services/${serviceId}/builds`),
+        api<Deployment[]>(`/services/${serviceId}/deployments`),
+      ]);
+      if (builds.some(building) || deployments.some(releasing)) throw new Error("Another build or release is in progress. Try again when it finishes.");
+      if (!current) return;
+      await api(`/services/${serviceId}/deploy`, { method: "POST", body: { ref: current.commitSha } });
+      setApplied(`Saved. Rebuilding ${shortSha(current.commitSha)}.`);
+    } else setApplied(await saved(serviceId));
+    onApplied?.();
+  });
   return (
-    <div className="flex flex-wrap items-center justify-end gap-2">
-      <span role="status" className="text-sm text-graphite-400">
-        {status}
-      </span>
-      {action("save", "Save")}
-      {action("redeploy", "Save and redeploy", "primary")}
+    <div className="flex flex-col items-end gap-2">
+      <FormError message={apply.error} />
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <span role="status" className="text-sm text-graphite-400">
+          {applied ?? (done && (done.current ? "Saved." : "Saved. Applies on the first deploy."))}
+        </span>
+        {done?.apply && !applied && (
+          <Button pending={apply.pending} onClick={() => apply.run()}>
+            {done.apply === "rebuild" ? "Rebuild and deploy" : "Redeploy"}
+          </Button>
+        )}
+        <Button type="submit" variant="primary" pending={pending}>
+          Save
+        </Button>
+      </div>
     </div>
   );
 }

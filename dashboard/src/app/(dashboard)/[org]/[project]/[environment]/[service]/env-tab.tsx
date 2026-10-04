@@ -8,7 +8,19 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { Cell, Row, Table } from "@/components/ui/table";
 
-export function EnvTab({ service, environment, projectHref, admin }: { service: Service; environment: Environment; projectHref: string; admin: boolean }) {
+export function EnvTab({
+  service,
+  environment,
+  projectHref,
+  admin,
+  onChanged,
+}: {
+  service: Service;
+  environment: Environment;
+  projectHref: string;
+  admin: boolean;
+  onChanged: () => void;
+}) {
   const vars = useApi<EnvVar[]>(`/services/${service.id}/env`);
   const storage = useApi<AuthProviders>("/auth/providers").data?.storage;
   return (
@@ -16,10 +28,11 @@ export function EnvTab({ service, environment, projectHref, admin }: { service: 
       {(initial) =>
         admin ? (
           <EnvEditor
-            serviceId={service.id}
+            service={service}
             initial={initial}
             repository={{ projectId: environment.projectId, branch: environment.branch, rootDir: service.rootDir, buildCommand: service.buildCommand, dockerfilePath: service.dockerfilePath }}
             databaseHref={storage ? projectHref : undefined}
+            onChanged={onChanged}
           />
         ) : initial.length === 0 ? (
           <EmptyState title="No variables" description="An admin of this organization sets the variables." />

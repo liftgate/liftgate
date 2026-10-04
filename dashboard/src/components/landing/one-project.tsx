@@ -24,11 +24,11 @@ export function OneProject({ services }: { services: Service[] }) {
         </div>
         <div inert className="lg:col-span-7 lg:col-start-6 lg:row-start-2 lg:-mt-12">
           <Card className="lg:shadow-2xl">
-            <CardHeader title="Service settings" description="Save keeps changes for the next deploy. Save and redeploy applies them now without a rebuild." />
+            <CardHeader title="Service settings" />
             <div className="grid grid-cols-2 gap-4 p-6">
-              <Field label="Kind">
+              <Field label="Runs as">
                 <Select defaultValue="cron">
-                  <option value="cron">cron</option>
+                  <option value="cron">Cron job</option>
                 </Select>
               </Field>
               <Field label="Root directory">

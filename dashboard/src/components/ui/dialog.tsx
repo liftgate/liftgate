@@ -4,7 +4,24 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button, type ButtonVariant } from "./button";
 import { Field, FormError, Input } from "./input";
 
-export function Dialog({ open, title, onClose, children }: { open: boolean; title: string; onClose: () => void; children: ReactNode }) {
+const placements = {
+  center: "inset-x-4 m-auto w-auto max-w-lg rounded-lg border shadow-2xl",
+  left: "my-0 mr-auto ml-0 h-dvh max-h-none w-72 border-r",
+};
+
+export function Dialog({
+  open,
+  title,
+  placement = "center",
+  onClose,
+  children,
+}: {
+  open: boolean;
+  title: string;
+  placement?: keyof typeof placements;
+  onClose: () => void;
+  children: ReactNode;
+}) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const element = ref.current;
@@ -16,14 +33,19 @@ export function Dialog({ open, title, onClose, children }: { open: boolean; titl
     <dialog
       ref={ref}
       onClose={onClose}
-      className="inset-x-4 m-auto w-auto max-w-lg rounded-lg border border-graphite-700 bg-graphite-900 p-0 text-white shadow-2xl backdrop:bg-black/60"
+      onClick={(e) => placement === "left" && e.target === e.currentTarget && onClose()}
+      aria-label={placement === "left" ? title : undefined}
+      className={`border-graphite-700 bg-graphite-900 p-0 text-white backdrop:bg-black/60 ${placements[placement]}`}
     >
-      {open && (
-        <div className="flex flex-col gap-6 p-6">
-          <h2 className="text-base font-semibold">{title}</h2>
-          {children}
-        </div>
-      )}
+      {open &&
+        (placement === "left" ? (
+          children
+        ) : (
+          <div className="flex flex-col gap-6 p-6">
+            <h2 className="text-base font-semibold">{title}</h2>
+            {children}
+          </div>
+        ))}
     </dialog>
   );
 }

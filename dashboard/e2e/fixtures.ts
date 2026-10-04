@@ -287,6 +287,7 @@ export class Api {
       "GET /orgs/acme/projects/shop/tree": tree,
       [`GET /projects/${project.id}/previews`]: { missing: [], pullRequests: [] },
       [`GET /projects/${project.id}/detect`]: projectDetection,
+      [`GET /services/${service.id}`]: service,
       [`GET /services/${service.id}/deployments`]: [deployment],
       [`GET /services/${service.id}/builds`]: [build],
       [`GET /services/${service.id}/env`]: storedEnv,
@@ -374,4 +375,9 @@ export const asOperator = (api: Api) => {
   api.on("GET /operator/users", [waiting]);
   api.on("GET /operator/orgs", [{ org, members: 2, projects: 1, services: 1, createdAt: ago(9000) }] satisfies OperatorOrg[]);
   return api.session("operator");
+};
+
+export const openNav = async (page: Page) => {
+  if ((page.viewportSize()?.width ?? 1440) < 1024) await page.getByRole("button", { name: "Open menu" }).click();
+  return page.getByRole("navigation", { name: "Main" });
 };

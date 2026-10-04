@@ -1,9 +1,9 @@
 "use client";
 
 import { useId, useRef, useState } from "react";
-import { stackIcon } from "@/lib/stacks";
 import type { Detection, DetectedService, ServiceKind } from "@/lib/types";
 import { formValues, kindLabels, servesHttp } from "@/lib/util";
+import { StackIcon } from "./icons";
 import { BuildFields, GeneralFields, ResourceFields, RuntimeFields } from "./service-form";
 import { Button } from "./ui/button";
 import { FormError } from "./ui/input";
@@ -61,7 +61,6 @@ export function DetectedApp({
   const directory = directoryOf(detected);
   const framework = detected?.framework;
   const dockerfile = detected?.builder === "dockerfile";
-  const icon = stackIcon(framework?.id);
   const name = value("name", prefill.name);
   const title = !detected
     ? "Not detected"
@@ -94,9 +93,7 @@ export function DetectedApp({
           <input type="checkbox" aria-label={`Deploy ${name}`} checked={checked} onChange={(e) => onCheck(e.target.checked)} className="mt-3 size-4 shrink-0 accent-accent" />
         )}
         <span aria-hidden className="flex size-10 shrink-0 items-center justify-center rounded-md bg-graphite-800 text-graphite-200">
-          <svg viewBox="0 0 24 24" className="size-5 fill-current">
-            <path d={icon?.path ?? "M4 4h16v16H4zm2 2v12h12V6z"} />
-          </svg>
+          <StackIcon id={framework?.id} className="size-5" />
         </span>
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <p className="truncate text-base font-medium">{multi ? name : title}</p>

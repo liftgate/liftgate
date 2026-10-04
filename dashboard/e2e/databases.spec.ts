@@ -62,8 +62,7 @@ test("without a storage class databases and volumes explain why instead of offer
   await expect(databases.getByRole("link", { name: "Storage in the self-hosting guide" })).toHaveAttribute("href", /documentation\/self-hosting\.md$/);
   await expect(page.getByRole("button", { name: "Add database" })).toHaveCount(0);
 
-  await page.goto(`${servicePath}?tab=settings`);
-  await page.locator("summary", { hasText: "Resources" }).click();
+  await page.goto(`${servicePath}?tab=settings&section=resources`);
   await expect(page.getByText("Volumes need a storage class that enforces capacity")).toBeVisible();
   await expect(page.getByLabel("Volume path")).toHaveCount(0);
 });

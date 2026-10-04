@@ -63,38 +63,44 @@ export const stacks = [
   { id: "rust", name: "Rust", icon: siRust },
 ];
 
-const icons: Record<string, SimpleIcon> = {
-  ...Object.fromEntries(stacks.map((stack) => [stack.id, stack.icon])),
-  remix: siRemix,
-  "react-router": siReactrouter,
-  "tanstack-start": siTanstack,
-  "create-react-app": siCreatereactapp,
-  vue: siVuedotjs,
-  nestjs: siNestjs,
-  express: siExpress,
-  fastify: siFastify,
-  hono: siHono,
-  koa: siKoa,
-  h3: siH3,
-  "discord-js": siDiscorddotjs,
-  telegraf: siTelegram,
-  php: siPhp,
-  gin: siGin,
-  "spring-boot": siSpringboot,
-  java: siOpenjdk,
-  rack: siRuby,
-  ruby: siRuby,
-  phoenix: siPhoenixframework,
-  elixir: siElixir,
-  python: siPython,
-  fasthtml: siPython,
-  deno: siDeno,
-  dotnet: siDotnet,
-  gleam: siGleam,
-  cpp: siCplusplus,
-  shell: siGnubash,
-  static: siHtml5,
-  dockerfile: siDocker,
-};
+const frameworks: Record<string, { name: string; icon: SimpleIcon }> = Object.fromEntries([
+  ...stacks.map(({ id, name, icon }) => [id, { name, icon }]),
+  ...(
+    [
+      ["remix", "Remix", siRemix],
+      ["react-router", "React Router", siReactrouter],
+      ["tanstack-start", "TanStack Start", siTanstack],
+      ["create-react-app", "Create React App", siCreatereactapp],
+      ["vue", "Vue CLI", siVuedotjs],
+      ["nestjs", "NestJS", siNestjs],
+      ["express", "Express", siExpress],
+      ["fastify", "Fastify", siFastify],
+      ["hono", "Hono", siHono],
+      ["koa", "Koa", siKoa],
+      ["h3", "h3", siH3],
+      ["discord-js", "discord.js", siDiscorddotjs],
+      ["telegraf", "Telegraf", siTelegram],
+      ["php", "PHP", siPhp],
+      ["gin", "Gin", siGin],
+      ["spring-boot", "Spring Boot", siSpringboot],
+      ["java", "Java", siOpenjdk],
+      ["rack", "Rack", siRuby],
+      ["ruby", "Ruby", siRuby],
+      ["phoenix", "Phoenix", siPhoenixframework],
+      ["elixir", "Elixir", siElixir],
+      ["python", "Python", siPython],
+      ["fasthtml", "FastHTML", siPython],
+      ["deno", "Deno", siDeno],
+      ["dotnet", ".NET", siDotnet],
+      ["gleam", "Gleam", siGleam],
+      ["cpp", "C++", siCplusplus],
+      ["shell", "Shell", siGnubash],
+      ["static", "Static site", siHtml5],
+      ["dockerfile", "Dockerfile", siDocker],
+    ] as const
+  ).map(([id, name, icon]) => [id, { name, icon }]),
+]);
 
-export const stackIcon = (id?: string | null) => (id ? icons[id] : undefined);
+export const stackIcon = (id?: string | null) => (id ? frameworks[id]?.icon : undefined);
+
+export const stackName = (id?: string | null) => (id ? frameworks[id]?.name : undefined);

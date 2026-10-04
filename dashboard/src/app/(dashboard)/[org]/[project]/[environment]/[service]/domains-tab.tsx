@@ -57,6 +57,11 @@ export function DomainsTab({ service, admin }: { service: Service; admin: boolea
   );
   return (
     <div className="flex flex-col gap-6">
+      {service.internalHost && (
+        <Card className="p-6">
+          <CopyField label="Private address" value={service.internalHost} hint="Services in this environment reach it on port 80 and on its own port" />
+        </Card>
+      )}
       <Card>
         <CardHeader
           title="Domains"
@@ -139,7 +144,7 @@ export function DomainsTab({ service, admin }: { service: Service; admin: boolea
                 </p>
               </div>
               {domain.dnsRecords.map((record) => (
-                <div key={`${record.type} ${record.name}`} className="grid gap-4 md:grid-cols-2">
+                <div key={`${record.type} ${record.name}`} className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <CopyField label={`${record.type} name`} value={record.name} />
                   <CopyField label={record.type === "CNAME" ? "CNAME target" : `${record.type} value`} value={record.value} />
                 </div>

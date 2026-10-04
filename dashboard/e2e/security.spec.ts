@@ -65,7 +65,7 @@ test("a hidden tab makes no polling requests", async ({ page, api }) => {
   const builds = `GET /services/${service.id}/builds`;
   api.on(builds, [{ ...build, status: "running", finishedAt: null }]);
   await page.clock.install();
-  await page.goto(`${servicePath}?tab=builds`);
+  await page.goto(`${servicePath}?tab=deployments`);
   await settled(page);
   const hide = (hidden: boolean) => page.evaluate((value) => Object.defineProperty(document, "hidden", { configurable: true, get: () => value }), hidden);
   await hide(true);

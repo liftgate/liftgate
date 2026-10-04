@@ -5,6 +5,7 @@ import { useApi } from "@/lib/hooks";
 import type { Organization, User } from "@/lib/types";
 import { CreateOrgForm } from "@/components/create-org-form";
 import { PageHeader } from "@/components/page-header";
+import { lastOrg } from "@/components/sidebar";
 import { Card, CardHeader } from "@/components/ui/card";
 import { ErrorState } from "@/components/ui/empty-state";
 import { PageSkeleton } from "@/components/ui/skeleton";
@@ -24,7 +25,8 @@ export function OrgChooser({ installed }: { installed: boolean }) {
         />
       </Card>
     );
-  if (orgs.data[0]) redirect(installed ? `/new?org=${orgs.data[0].slug}` : `/${orgs.data[0].slug}`);
+  const last = lastOrg(orgs.data);
+  if (last) redirect(installed ? `/new?org=${last.slug}` : `/${last.slug}`);
   return (
     <Card className="mx-auto mt-16 w-full max-w-lg">
       <CardHeader title="Create your organization" description="Projects and members belong to an organization." />

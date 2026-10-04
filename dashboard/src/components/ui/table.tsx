@@ -6,7 +6,7 @@ export function Table({ columns, label, children }: { columns: string[]; label?:
       role={label && "region"}
       aria-label={label}
       tabIndex={label ? 0 : undefined}
-      className="overflow-x-auto rounded-lg border border-graphite-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+      className="@container overflow-x-auto rounded-lg border border-graphite-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
     >
       <table className="w-full text-left text-sm">
         <thead className="bg-graphite-900 text-xs uppercase tracking-wide text-graphite-400">

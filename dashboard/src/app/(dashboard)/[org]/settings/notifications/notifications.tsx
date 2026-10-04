@@ -150,7 +150,7 @@ export function Notifications({ org }: { org: string }) {
       <PageHeader
         title="Notifications"
         description="Post build failures and deployments of every project in this organization to Slack, Discord or your own endpoint."
-        actions={newChannel}
+        actions={!!channels.data?.length && newChannel}
       />
       <Loaded query={channels} skeleton={<TableSkeleton />}>
         {(list) =>

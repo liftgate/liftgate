@@ -1,3 +1,4 @@
+import { StackIcon } from "@/components/icons";
 import { stacks } from "@/lib/stacks";
 import { inlineLink } from "./styles";
 
@@ -12,11 +13,9 @@ export function Stacks() {
         detects these stacks and more. If your repository has one, Liftgate builds the Dockerfile instead.
       </p>
       <ul className="mt-8 grid grid-cols-4 gap-y-8 md:grid-cols-8">
-        {stacks.map(({ name, icon }) => (
+        {stacks.map(({ id, name }) => (
           <li key={name} className="flex flex-col items-center gap-2 text-center text-xs text-graphite-400">
-            <svg viewBox="0 0 24 24" aria-hidden className="size-8 fill-current">
-              <path d={icon.path} />
-            </svg>
+            <StackIcon id={id} className="size-8" />
             {name}
           </li>
         ))}

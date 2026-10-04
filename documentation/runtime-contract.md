@@ -49,7 +49,7 @@ A response with a status from 200 to 399 passes.
 | Liveness | 10 seconds | 6 failures | Kubernetes restarts the container |
 
 Readiness and liveness start once the startup probe has passed. The path must start with `/` and have at
-most 256 characters. Set it under Settings, Build and runtime.
+most 256 characters. Set it under the service's Settings, Runtime.
 
 ## Rollouts and shutdown
 
@@ -89,8 +89,8 @@ Kubernetes retries a failing run up to 2 times. A run that takes longer than the
 
 Every variable on the Environment variables tab reaches the container as an environment variable,
 secret ones included. Liftgate adds only `PORT`. Pods get no Kubernetes service links and no service
-account token. A variable change reaches running pods with the next deployment: Save and redeploy on the
-tab, a push, or a deploy from the dashboard.
+account token. A variable change reaches running pods with the next deployment: Redeploy after saving
+the tab, a push, or a deploy from the dashboard.
 
 ## User and file system
 
@@ -151,8 +151,8 @@ an egress bandwidth limit caps the pod's outgoing traffic, for example to 20 Mbi
 
 ## Private services
 
-A service with a port gets a private address, `<service>.<namespace>.svc.cluster.local`, shown under
-Settings as Private address. Services in the same environment reach it on port 80 and on the service's
+A service with a port gets a private address, `<service>.<namespace>.svc.cluster.local`, shown on the
+Domains tab as Private address. Services in the same environment reach it on port 80 and on the service's
 own port. Give a worker a port if other services need to reach it. Services in other environments and
 the internet cannot reach it.
 

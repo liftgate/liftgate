@@ -4,13 +4,14 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import { api } from "@/lib/api";
-import { useAction, useApi } from "@/lib/hooks";
+import { useAction, useApi, type Query } from "@/lib/hooks";
 import type { AuthProviders, GitConnection, Identity, OAuthProvider, Passkey, User } from "@/lib/types";
 import { formValues, lastUsed, timeAgo } from "@/lib/util";
 import { createPasskey } from "@/lib/webauthn";
 import { Loaded } from "@/components/loaded";
-import { PageHeader } from "@/components/page-header";
+import { DangerZone } from "@/components/danger-zone";
 import { ProviderLabel, ProviderLink, providerNames } from "@/components/provider";
+import { SettingsLayout } from "@/components/settings-layout";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/dialog";
@@ -43,43 +44,63 @@ function useRemoval(reload: () => void) {
   };
 }
 
-export function Account({ error }: { error?: string }) {
+const sections = [
+  { id: "profile", label: "Profile", href: "/account" },
+  { id: "sign-in", label: "Sign-in methods", href: "/account?section=sign-in" },
+  { id: "git", label: "Git connections", href: "/account?section=git" },
+];
+
+export function Account({ section, error }: { section?: string; error?: string }) {
   const me = useApi<User>("/me");
   const providers = useApi<AuthProviders>("/auth/providers");
   const oauth = providers.data?.oauth ?? [];
+  const current = sections.find((s) => s.id === section)?.id ?? "profile";
   return (
-    <div className="flex flex-col gap-8">
-      <PageHeader title="Account" description="Your profile, the ways you sign in, and the git accounts Liftgate can read." />
+    <SettingsLayout title="Account" sections={sections} current={current}>
       <FormError message={error} />
-      <Card>
-        <CardHeader title="Profile" />
-        <div className="p-6">
-          <Loaded query={me} skeleton={<Skeleton className="h-12 w-64" />}>
-            {(user) => (
-              <div className="flex items-center gap-4">
-                {user.avatarUrl && <Image src={user.avatarUrl} alt="" width={48} height={48} unoptimized className="size-12 rounded-full" />}
-                <div className="min-w-0">
-                  <p className="font-medium">{user.name ?? user.login}</p>
-                  <p className="truncate text-sm text-graphite-400">
-                    @{user.login}
-                    {user.email && ` · ${user.email}`}
-                  </p>
-                </div>
-                {user.operator && (
-                  <Link href="/dashboard/operator" className={buttonClasses("secondary", "ml-auto")}>
-                    Operator console
-                  </Link>
-                )}
+      {current === "sign-in" && (
+        <>
+          <SignInMethods oauth={oauth} />
+          <Passkeys />
+        </>
+      )}
+      {current === "git" && <GitConnections github={oauth.includes("github")} />}
+      {current === "profile" && (
+        <>
+          <Profile me={me} />
+          <DeleteAccount login={me.data?.login} />
+        </>
+      )}
+    </SettingsLayout>
+  );
+}
+
+function Profile({ me }: { me: Query<User> }) {
+  return (
+    <Card>
+      <CardHeader title="Profile" />
+      <div className="p-6">
+        <Loaded query={me} skeleton={<Skeleton className="h-12 w-64" />}>
+          {(user) => (
+            <div className="flex items-center gap-4">
+              {user.avatarUrl && <Image src={user.avatarUrl} alt="" width={48} height={48} unoptimized className="size-12 rounded-full" />}
+              <div className="min-w-0">
+                <p className="font-medium">{user.name ?? user.login}</p>
+                <p className="truncate text-sm text-graphite-400">
+                  @{user.login}
+                  {user.email && ` · ${user.email}`}
+                </p>
               </div>
-            )}
-          </Loaded>
-        </div>
-      </Card>
-      <SignInMethods oauth={oauth} />
-      <Passkeys />
-      <GitConnections github={oauth.includes("github")} />
-      <DeleteAccount login={me.data?.login} />
-    </div>
+              {user.operator && (
+                <Link href="/dashboard/operator" className={buttonClasses("secondary", "ml-auto")}>
+                  Operator console
+                </Link>
+              )}
+            </div>
+          )}
+        </Loaded>
+      </div>
+    </Card>
   );
 }
 
@@ -125,7 +146,7 @@ function SignInMethods({ oauth }: { oauth: OAuthProvider[] }) {
         {linkable.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {linkable.map((provider) => (
-              <ProviderLink key={provider} provider={provider} intent="link" next="/account">
+              <ProviderLink key={provider} provider={provider} intent="link" next="/account?section=sign-in">
                 Link {providerNames[provider]}
               </ProviderLink>
             ))}
@@ -212,7 +233,7 @@ function GitConnections({ github }: { github: boolean }) {
                 description={github ? "Connect GitHub to import repositories into projects." : "GitHub is not configured on this Liftgate instance."}
                 action={
                   github && (
-                    <ProviderLink provider="github" intent="connect" next="/account">
+                    <ProviderLink provider="github" intent="connect" next="/account?section=git">
                       Connect GitHub
                     </ProviderLink>
                   )
@@ -251,33 +272,20 @@ function GitConnections({ github }: { github: boolean }) {
 }
 
 function DeleteAccount({ login }: { login?: string }) {
-  const [open, setOpen] = useState(false);
   const remove = useAction(async () => {
     await api("/me", { method: "DELETE" });
     window.location.replace("/login");
   });
   return (
-    <Card>
-      <CardHeader
-        title={<span className="text-danger">Delete account</span>}
-        description="Removes your sign-in methods, passkeys and sessions, and deletes the organizations only you belong to with their projects and apps. This cannot be undone."
-      />
-      <div className="p-6">
-        <Button variant="danger" disabled={!login} onClick={() => setOpen(true)}>
-          Delete account
-        </Button>
-      </div>
-      <ConfirmDialog
-        open={open}
-        title="Delete account"
-        typed={login}
-        pending={remove.pending}
-        error={remove.error}
-        onConfirm={() => remove.run()}
-        onClose={() => setOpen(false)}
-      >
-        Organizations you own with other members have to be deleted first. Everything else goes with your account.
-      </ConfirmDialog>
-    </Card>
+    <DangerZone
+      title="Delete account"
+      description="Removes your sign-in methods and sessions, and the organizations only you belong to with their projects and apps."
+      typed={login}
+      pending={remove.pending}
+      error={remove.error}
+      onConfirm={() => remove.run()}
+    >
+      Organizations you own with other members have to be deleted first. Everything else goes with your account.
+    </DangerZone>
   );
 }

@@ -5,5 +5,6 @@ import { Account } from "./account";
 export const metadata: Metadata = { title: "Account" };
 
 export default async function AccountPage({ searchParams }: PageProps<"/account">) {
-  return <Account error={authError((await searchParams).error)} />;
+  const { section, error } = await searchParams;
+  return <Account section={typeof section === "string" ? section : undefined} error={authError(error)} />;
 }

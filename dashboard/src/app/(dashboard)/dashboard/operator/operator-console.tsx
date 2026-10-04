@@ -5,7 +5,7 @@ import { useState, type ReactNode } from "react";
 import { api } from "@/lib/api";
 import { useAction, useApi, usePages } from "@/lib/hooks";
 import type { OperatorOrg, OperatorSummary, OperatorUser, Organization, User, UserStatus } from "@/lib/types";
-import { timeAgo } from "@/lib/util";
+import { planName, timeAgo } from "@/lib/util";
 import { LoadMore } from "@/components/load-more";
 import { Loaded } from "@/components/loaded";
 import { PageHeader } from "@/components/page-header";
@@ -29,7 +29,7 @@ type Action = { label: string; title: string; path: string; danger?: boolean; re
 
 type Notice = { message: string };
 
-const statuses: UserStatus[] = ["pending", "active", "suspended"];
+const statuses: Record<UserStatus, string> = { pending: "Pending", active: "Active", suspended: "Suspended" };
 
 const name = (text: string) => <span className="font-medium text-white">{text}</span>;
 
@@ -170,9 +170,9 @@ function Accounts({ pending, act }: { pending: boolean; act: (action: Action) =>
         <div className="flex justify-end">
           <Select aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value)}>
             <option value="">All statuses</option>
-            {statuses.map((s) => (
-              <option key={s} value={s}>
-                {s}
+            {Object.entries(statuses).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
               </option>
             ))}
           </Select>
@@ -270,7 +270,7 @@ function Organizations({ plans, act, done }: { plans: string[]; act: (action: Ac
                           >
                             {[...new Set([...plans, org.plan])].map((plan) => (
                               <option key={plan} value={plan}>
-                                {plan}
+                                {planName(plan)}
                               </option>
                             ))}
                           </Select>

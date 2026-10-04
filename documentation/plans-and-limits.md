@@ -1,8 +1,8 @@
 # Plans and limits
 
 Every organization is on a plan, and the plan sets how much the organization may create and run. The
-operator of the installation defines the plans. The Usage card on the organization's projects page shows
-the plan's name and what the organization uses against each limit, and so does
+operator of the installation defines the plans. Plan and usage, in the organization's Settings, General,
+shows the plan's name and what the organization uses against each limit, and so does
 `GET /api/v1/orgs/<org>/usage`.
 
 ## Plan limits
@@ -63,7 +63,7 @@ limits. `free` is meant for shared installations:
 | `egressBandwidth` | `20M` |
 | `udp` | `false` |
 
-An installation may define other plans or change these values, so the Usage card is the source of truth
+An installation may define other plans or change these values, so Plan and usage is the source of truth
 for your organization.
 
 ## Limits on every plan

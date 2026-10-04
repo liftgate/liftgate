@@ -4,7 +4,7 @@ import { useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { useAction, useApi } from "@/lib/hooks";
 import type { OrgRole, SsoConnection, SsoServiceProvider } from "@/lib/types";
-import { formValues } from "@/lib/util";
+import { formValues, roleLabels } from "@/lib/util";
 import { Loaded } from "@/components/loaded";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/ui/badge";
@@ -93,17 +93,19 @@ export function SsoSettings({ org }: { org: string }) {
                 }}
                 className="flex flex-col gap-4 p-6"
               >
-                <Field label="IdP entity ID">
-                  <Input name="idpEntityId" required defaultValue={current?.idpEntityId} className="font-mono" />
-                </Field>
-                <Field label="SSO URL" hint="The identity provider endpoint for the HTTP-Redirect binding">
-                  <Input name="idpSsoUrl" type="url" required defaultValue={current?.idpSsoUrl} placeholder="https://" className="font-mono" />
-                </Field>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field label="IdP entity ID">
+                    <Input name="idpEntityId" required defaultValue={current?.idpEntityId} className="font-mono" />
+                  </Field>
+                  <Field label="SSO URL" hint="The HTTP-Redirect binding endpoint">
+                    <Input name="idpSsoUrl" type="url" required defaultValue={current?.idpSsoUrl} placeholder="https://" className="font-mono" />
+                  </Field>
+                </div>
                 <Field label="Signing certificate" hint="PEM encoded X.509 certificate">
                   <Textarea
                     name="idpCertificate"
                     required
-                    rows={6}
+                    rows={4}
                     defaultValue={current?.idpCertificate}
                     placeholder="-----BEGIN CERTIFICATE-----"
                     className="font-mono text-xs"
@@ -117,7 +119,7 @@ export function SsoSettings({ org }: { org: string }) {
                     <Select name="defaultRole" defaultValue={current?.defaultRole ?? "member"}>
                       {roles.map((role) => (
                         <option key={role} value={role}>
-                          {role}
+                          {roleLabels[role]}
                         </option>
                       ))}
                     </Select>

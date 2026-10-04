@@ -65,7 +65,7 @@ const rules: { title: string; body: string; path: string; lines: [number, number
     textClassName: "xl:w-96 xl:shrink-0",
     visual: (
       <div inert className="px-6 pb-6 xl:min-w-0 xl:flex-1 xl:pt-6 xl:pl-0">
-        <EnvEditor serviceId="demo" initial={envVars} />
+        <EnvEditor service={{ id: "demo", current: null }} initial={envVars} />
       </div>
     ),
   },

@@ -79,7 +79,7 @@ test("a passkey added on the account page signs in", async ({ page, api }) => {
 });
 
 test("a signed-out visit is sent to sign-in by the server with its query, before anything calls the API", async ({ page, api, request, baseURL }) => {
-  await page.context().clearCookies();
+  await api.signOut();
   const errors: string[] = [];
   page.on("console", (message) => message.type() === "error" && errors.push(message.text()));
   for (const path of ["/new?org=acme&project=shop", "/dashboard", `${servicePath}?tab=logs`, "/dashboard/operator"]) {

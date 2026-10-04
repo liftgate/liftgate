@@ -4,7 +4,7 @@ import { asOperator, expect, openNav, servicePath, settled, test, type Api } fro
 const service = "web · production · shop · Liftgate";
 
 const routes: { path: string; title: string; current?: RegExp; parent?: string; setup?: (api: Api) => unknown }[] = [
-  { path: "/", title: "Liftgate: open-source hosting for full-stack apps" },
+  { path: "/", title: "Liftgate: open-source hosting for full-stack apps", setup: (api) => api.signOut() },
   { path: "/login", title: "Sign in · Liftgate" },
   { path: "/login/sso", title: "SAML single sign-on · Liftgate" },
   { path: "/dashboard", title: "Dashboard · Liftgate", setup: (api) => api.on("GET /orgs", []) },

@@ -89,6 +89,6 @@ running "$release"
 
 awk '{ print $2, $3 }' "$codes" | sort | uniq -c
 test -s "$codes"
-[ -n "$drains" ] || echo "the pods of $tag have no preStop hook, so their replacement between $upgrading and $drained may fail requests"
+[ -n "$drains" ] || echo "the pods of $tag have no preStop hook, so a 503 during their replacement between $upgrading and $drained is tolerated"
 echo "non-2xx responses from the api or the dashboard:"
-awk -v from="$upgrading" -v to="$drained" -v strict="${drains:+1}" '$2 !~ /^2/ || $3 !~ /^2/ { print; if (strict || $1 < from || $1 > to) failed = 1 } END { exit failed }' "$codes"
+awk -v from="$upgrading" -v to="$drained" -v strict="${drains:+1}" '$2 !~ /^2/ || $3 !~ /^2/ { print; if (strict || $1 < from || $1 > to || $2 !~ /^(2..|503)$/ || $3 !~ /^(2..|503)$/) failed = 1 } END { exit failed }' "$codes"

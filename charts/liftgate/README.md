@@ -689,8 +689,8 @@ while the database starts, then applies pending database migrations with a 10 se
 which fails when a message consumer has not polled NATS for two minutes, and `/readyz`, which
 checks PostgreSQL and, for `api`, Hazelcast.
 A pod starts serving only after it has reached NATS, and a later NATS restart leaves it ready
-while its NATS client reconnects. On shutdown a pod reports unready for 5 seconds before it stops
-serving.
+while its NATS client reconnects. When a pod stops, it keeps serving for 5 more seconds, which gives
+the gateway time to stop sending it requests, and then its process gets `SIGTERM`.
 
 The `ha` profile gives each role its own ServiceAccount and Secret:
 

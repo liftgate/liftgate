@@ -311,6 +311,10 @@ export class Api {
     return this.page.context().addCookies([{ name: "liftgate_session", value, domain: "localhost", path: "/" }]);
   }
 
+  signOut() {
+    return this.page.context().clearCookies();
+  }
+
   async attach() {
     await this.session(user.login);
     await this.page.route("**/api/v1/**", async (route) => {
